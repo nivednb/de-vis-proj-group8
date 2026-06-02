@@ -15,6 +15,18 @@ public class PtMeOHReactorController : MonoBehaviour
     public TextMeshProUGUI statusText;
     public GameObject sinteringWarningPanel; // UI Overlay panel for high-temp risk
 
+    [Header("Nicole's Live Material Balance UI")]
+    [Tooltip("Total fixed input feed rate for simulation prototype in kg/h")]
+    public float baseInputFeed = 100.0f; 
+    public TextMeshProUGUI inputMassText;
+    public TextMeshProUGUI outputMassText;
+    
+    [Header("Visual Balance Fill Bars (Assign UI Images with Filled Type)")]
+    public Image inputFeedBar;      // Visual bar showing raw inputs entering
+    public Image methanolProductBar; // Visual bar expanding with higher yield
+    public Image waterByproductBar;  // Visual bar expanding with water creation
+    public Image recycleGasBar;     // Visual bar shrinking as yield increases
+
     [Header("Simulation Settings")]
     [Tooltip("Scaling factor to normalize peak yield around 15-25%")]
     public float K = 21.5f; 
@@ -47,8 +59,27 @@ public class PtMeOHReactorController : MonoBehaviour
         // Calculate Final Single-Pass Yield (Y)
         float yield = K * pressureFactor * ratioFactor * tempFactor * velocityFactor;
         yield = Mathf.Clamp(yield, 0f, 100f);
+        float yieldFraction = yield / 100f;
 
-        // 3. Evaluate safety operational thresholds
+        // 3. Nicole's Comparative Input vs. Output Logic Prototype
+        float totalInputMass = baseInputFeed;
+        
+        // Output splitting equations based on process flow sheets
+        float methanolOutputMass = totalInputMass * yieldFraction; 
+        float waterOutputMass = methanolOutputMass * 0.56f; // Stoichiometric mass ratio of H2O to MeOH (CO2 + 3H2 -> CH3OH + H2O)
+        float unreactedRecycleMass = totalInputMass * (1f - yieldFraction);
+
+        // Update Balance UI text fields dynamically
+        if (inputMassText != null) inputMassText.text = $"Total Plant Input: {totalInputMass:F1} kg/h";
+        if (outputMassText != null) outputMassText.text = $"Total Liquid Output: {methanolOutputMass:F1} kg/h MeOH";
+
+        // Update visual Fill Amount metrics (Ranges from 0.0 empty to 1.0 full)
+        if (inputFeedBar != null) inputFeedBar.fillAmount = 1.0f; // Inputs stay constant
+        if (methanolProductBar != null) methanolProductBar.fillAmount = methanolOutputMass / totalInputMass;
+        if (waterByproductBar != null) waterByproductBar.fillAmount = waterOutputMass / totalInputMass;
+        if (recycleGasBar != null) recycleGasBar.fillAmount = unreactedRecycleMass / totalInputMass;
+
+        // 4. Evaluate safety operational thresholds
         string currentStatus = "Operational Equilibrium Secure";
         bool isSintering = false;
         Color feedbackColor = Color.cyan;
@@ -75,7 +106,7 @@ public class PtMeOHReactorController : MonoBehaviour
             feedbackColor = Color.blue;
         }
 
-        // 4. Send metrics out to UI Components
+        // 5. Send metrics out to UI Components
         yieldText.text = $"Est. Methanol Yield: {yield:F2}%";
         statusText.text = $"Status: {currentStatus}";
         
@@ -84,7 +115,7 @@ public class PtMeOHReactorController : MonoBehaviour
             sinteringWarningPanel.SetActive(isSintering);
         }
 
-        // 5. Dynamic 3D shader color adjustments for visual feedback
+        // 6. Dynamic 3D shader color adjustments for visual feedback
         if (reactorMeshRenderer != null)
         {
             if (isSintering)
