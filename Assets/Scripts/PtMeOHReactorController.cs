@@ -15,7 +15,7 @@ public class PtMeOHReactorController : MonoBehaviour
     public TextMeshProUGUI statusText;
     public GameObject sinteringWarningPanel; // UI Overlay panel for high-temp risk
 
-    [Header("Nicole's Live Material Balance UI")]
+    [Header("Live Material Balance UI")]
     [Tooltip("Total fixed input feed rate for simulation prototype in kg/h")]
     public float baseInputFeed = 100.0f; 
     public TextMeshProUGUI inputMassText;
@@ -61,7 +61,7 @@ public class PtMeOHReactorController : MonoBehaviour
         yield = Mathf.Clamp(yield, 0f, 100f);
         float yieldFraction = yield / 100f;
 
-        // 3. Nicole's Comparative Input vs. Output Logic Prototype
+        // Comparative Input vs. Output Logic Prototype
         float totalInputMass = baseInputFeed;
         
         // Output splitting equations based on process flow sheets
