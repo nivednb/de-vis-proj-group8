@@ -4,12 +4,28 @@ An interactive educational Unity visualization of a **Power-to-Methanol (PtMeOH)
 
 ---
 
+## Progress screenshots
+
+### Current Unity full-plant view
+
+![Unity full plant game view](docs/images/unity-full-plant-game-view.png)
+
+### Target visual direction
+
+The intended final direction is a more polished ICODOS-style industrial dashboard, with labelled process equipment, stream colors, live KPIs, and process navigation.
+
+![Target UI reference](docs/images/target-ui-reference-icodos.jpeg)
+
+More images are documented in [docs/progress-screenshots.md](docs/progress-screenshots.md).
+
+---
+
 ## Tech stack
 
-- Unity `6000.4.7f1` — primary simulation engine
-- Blender — 3D asset creation/export
-- C# — interaction, UI, camera, and flow logic
-- Git — version control
+- Unity `6000.4.7f1` - primary simulation engine
+- Blender - 3D asset creation/export
+- C# - interaction, UI, camera, and flow logic
+- Git - version control
 
 ---
 
@@ -17,14 +33,14 @@ An interactive educational Unity visualization of a **Power-to-Methanol (PtMeOH)
 
 ```text
 Assets/
-├── Scenes/              # Unity scenes
-├── Scripts_N/           # Added flow/waypoint scripts for full-plant visualization
-├── Prefabs_N/           # Flow particle prefab(s)
-├── Settings/            # URP settings
-├── *.fbx                # Plant equipment models
-├── Mat_*.mat            # Stream/material colors
-├── PipeFlow.shader      # Pipe-flow shader prototype
-└── TextMesh Pro/        # TMP UI assets
+|-- Scenes/              # Unity scenes
+|-- Scripts_N/           # Added flow/waypoint scripts for full-plant visualization
+|-- Prefabs_N/           # Flow particle prefab(s)
+|-- Settings/            # URP settings
+|-- *.fbx                # Plant equipment models
+|-- Mat_*.mat            # Stream/material colors
+|-- PipeFlow.shader      # Pipe-flow shader prototype
+`-- TextMesh Pro/        # TMP UI assets
 
 Packages/
 ProjectSettings/
@@ -33,9 +49,9 @@ README.md
 
 ## Branch status
 
-- `nived` — Unity 6 full-plant progress branch.
-- `chaitanya` — teammate full-plant branch used as the visual base.
-- `main` — original starter branch.
+- `nived-unity6-progress` - Nived's Unity 6 full-plant progress branch.
+- `chaitanya` - teammate full-plant branch used as the visual base.
+- `main` - original starter branch.
 
 ## Current progress
 
@@ -61,4 +77,3 @@ README.md
 ## Notes
 
 Unity-generated folders such as `Library/`, `Temp/`, `Logs/`, `UserSettings/`, `.vs/`, and `obj/` are intentionally excluded from Git.
-
