@@ -6,9 +6,11 @@
 [Bb]uilds/
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
+Assets/_Recovery/
 
-# Visual Studio / Rider generated files
+# Visual Studio / Rider / local IDE files
 .vs/
+.vscode/
 .idea/
 *.csproj
 *.sln
@@ -17,28 +19,22 @@
 *.pidb
 *.booproj
 *.svd
-*.pdb
-*.mdb
-*.opendb
-*.VC.db
+*.tmp
 
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Jupyter / Python
-.ipynb_checkpoints/
-__pycache__/
-*.pyc
-*.ipynb
+# Unity crash/debug output
+sysinfo.txt
+*.stackdump
 
-# Blender backup files
-*.blend1
-*.blend2
-*.blend@
-
-# Archives
+# Large local archives / exported builds
 *.zip
+*.7z
 *.rar
-*.7z.vsconfig
-project_file_list.txt
+*.exe
+*.app
+*.apk
+*.aab
