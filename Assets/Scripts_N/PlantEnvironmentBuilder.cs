@@ -30,6 +30,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [SerializeField] private bool createRoadsAndMarkings = true;
     [SerializeField] private bool createUtilityZone = true;
     [SerializeField] private bool createStorageContainment = true;
+    [SerializeField] private bool createIndustrialBackground = true;
 
     private Material concreteMaterial;
     private Material asphaltMaterial;
@@ -75,7 +76,10 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         Vector3 center = plantBounds.center;
         float siteWidth = Mathf.Max(minimumSiteWidth, plantBounds.size.x + sitePadding * 2f);
         float siteDepth = Mathf.Max(minimumSiteDepth, plantBounds.size.z + sitePadding * 2f);
-        float baseY = plantBounds.min.y + environmentYOffset;
+        // Keep the generated site at floor level. Some runtime objects such as flow
+        // lines and UI helpers have high renderer bounds, which previously caused a
+        // giant slab to be generated through the middle of the plant.
+        float baseY = Mathf.Min(plantBounds.min.y + environmentYOffset, -0.12f);
 
         GameObject root = new GameObject(EnvironmentRootName);
 
@@ -104,6 +108,11 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         if (createStorageContainment)
         {
             CreateStorageContainment(root.transform, center, siteWidth, siteDepth, baseY);
+        }
+
+        if (createIndustrialBackground)
+        {
+            CreateIndustrialBackground(root.transform, center, siteWidth, siteDepth, baseY);
         }
 
         CreateSiteSign(root.transform, center, siteWidth, siteDepth, baseY);
@@ -167,7 +176,14 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         {
             string objectName = current.name;
             if (objectName.Contains(EnvironmentRootName) ||
+                objectName.Contains("Generated Whole Plant Flow") ||
+                objectName.Contains("Generated Interactive Module") ||
+                objectName.Contains("Generated Reactor Detail") ||
+                objectName.Contains("Generated Plant Process") ||
+                objectName.Contains("Plant Environment Builder") ||
                 objectName.Contains("FlowParticle") ||
+                objectName.Contains("Flow_") ||
+                objectName.Contains("ThinGuide_") ||
                 objectName.Contains("Particle") ||
                 objectName.Contains("Label") ||
                 objectName.Contains("TMP") ||
@@ -202,6 +218,58 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         CreateCube("Separation Storage Equipment Pad", root,
             new Vector3(center.x + siteWidth * 0.36f, padY, center.z),
             new Vector3(siteWidth * 0.24f, 0.08f, siteDepth * 0.58f), concreteMaterial);
+    }
+
+    private void CreateIndustrialBackground(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)
+    {
+        float rearZ = center.z + siteDepth * 0.58f;
+        float farZ = center.z + siteDepth * 0.78f;
+        float leftX = center.x - siteWidth * 0.42f;
+        float rightX = center.x + siteWidth * 0.42f;
+
+        CreateCube("Background Process Hall", root,
+            new Vector3(leftX + 7f, baseY + 3.2f, rearZ),
+            new Vector3(12f, 6.4f, 5.5f), controlRoomMaterial);
+        CreateCube("Background Process Hall Roof", root,
+            new Vector3(leftX + 7f, baseY + 6.55f, rearZ),
+            new Vector3(12.8f, 0.28f, 6.1f), steelMaterial);
+
+        CreateCube("Background Pipe Bridge A", root,
+            new Vector3(center.x, baseY + 6.2f, rearZ - 1.8f),
+            new Vector3(siteWidth * 0.74f, 0.28f, 0.28f), steelMaterial);
+        CreateCube("Background Pipe Bridge B", root,
+            new Vector3(center.x, baseY + 5.55f, rearZ - 2.35f),
+            new Vector3(siteWidth * 0.68f, 0.22f, 0.22f), steelMaterial);
+
+        CreateHorizontalCylinder("Background Steam Header", root,
+            new Vector3(center.x, baseY + 6.65f, rearZ - 1.2f),
+            0.12f, siteWidth * 0.7f, pipeBlueMaterial, true);
+        CreateHorizontalCylinder("Background Utility Header", root,
+            new Vector3(center.x, baseY + 5.95f, rearZ - 2.7f),
+            0.1f, siteWidth * 0.62f, pipeGreenMaterial, true);
+
+        for (int i = 0; i < 5; i++)
+        {
+            float x = Mathf.Lerp(leftX + 18f, rightX - 10f, i / 4f);
+            float height = i % 2 == 0 ? 8.5f : 6.8f;
+            CreateCylinder("Background Utility Vessel", root,
+                new Vector3(x, baseY + height * 0.5f, farZ),
+                0.85f, height, steelMaterial, Quaternion.identity);
+            CreateCube("Background Vessel Platform", root,
+                new Vector3(x, baseY + height * 0.68f, farZ),
+                new Vector3(2.4f, 0.16f, 2.4f), safetyYellowMaterial);
+        }
+
+        for (int i = 0; i < 4; i++)
+        {
+            float x = rightX - 2.5f - i * 2.2f;
+            CreateCylinder("Background Vent Stack", root,
+                new Vector3(x, baseY + 5.2f, rearZ + 2.8f),
+                0.2f, 10.4f, steelMaterial, Quaternion.identity);
+            CreateCylinder("Background Stack Cap", root,
+                new Vector3(x, baseY + 10.65f, rearZ + 2.8f),
+                0.32f, 0.35f, hazardMaterial, Quaternion.identity);
+        }
     }
 
     private void CreateRoadsAndSafetyMarkings(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)

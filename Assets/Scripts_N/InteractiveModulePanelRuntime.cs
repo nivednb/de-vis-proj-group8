@@ -13,9 +13,9 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 {
     private const string RuntimeRootName = "Generated Interactive Module Panels";
 
-    [SerializeField] private Vector2 buttonSize = new Vector2(44f, 32f);
-    [SerializeField] private Vector2 panelSize = new Vector2(430f, 310f);
-    [SerializeField] private Vector2 panelOffset = new Vector2(245f, -160f);
+    [SerializeField] private Vector2 buttonSize = new Vector2(40f, 28f);
+    [SerializeField] private Vector2 panelSize = new Vector2(390f, 300f);
+    [SerializeField] private Vector2 panelOffset = new Vector2(230f, -150f);
 
     private Canvas canvas;
     private Camera mainCamera;
@@ -61,7 +61,13 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             }
 
             anchor.ButtonRect.position = screen;
-            anchor.PanelRect.position = screen + new Vector3(panelOffset.x, panelOffset.y, 0f);
+            Vector3 unclampedPanelPosition = screen + new Vector3(panelOffset.x, panelOffset.y, 0f);
+            float halfWidth = panelSize.x * 0.5f;
+            float halfHeight = panelSize.y * 0.5f;
+            anchor.PanelRect.position = new Vector3(
+                Mathf.Clamp(unclampedPanelPosition.x, halfWidth + 8f, Screen.width - halfWidth - 8f),
+                Mathf.Clamp(unclampedPanelPosition.y, halfHeight + 8f, Screen.height - halfHeight - 8f),
+                0f);
 
             if (anchor.PanelRoot.activeSelf && anchor.LiveText != null)
             {
@@ -177,11 +183,11 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         Button close = CreateSmallButton(root.transform, "X", new Vector2(-18f, -18f), new Vector2(30f, 30f));
         close.onClick.AddListener(() => root.SetActive(false));
 
-        liveText = CreateText("Live Values", root.transform, "", 13, TextAnchor.UpperLeft, Color.white);
-        liveText.rectTransform.anchorMin = new Vector2(0f, 0f);
+        liveText = CreateText("Live Values", root.transform, "", 12, TextAnchor.UpperLeft, Color.white);
+        liveText.rectTransform.anchorMin = new Vector2(0f, 1f);
         liveText.rectTransform.anchorMax = new Vector2(1f, 1f);
-        liveText.rectTransform.offsetMin = new Vector2(14f, 112f);
-        liveText.rectTransform.offsetMax = new Vector2(-14f, -52f);
+        liveText.rectTransform.offsetMin = new Vector2(14f, -118f);
+        liveText.rectTransform.offsetMax = new Vector2(-14f, -46f);
 
         CreateControls(root.transform, id);
         return root;
@@ -192,40 +198,40 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         switch (id)
         {
             case "electrolyzer":
-                CreateSlider(parent, "Plant load", 0f, 100f, 100f, 0, "%", v => Simulator()?.SetTimelinePercent(v), -64f);
-                CreateSlider(parent, "Power", 0f, 100f, 75f, 0, "%", v => Simulator()?.SetElectrolyzerPower(v), -99f);
-                CreateSlider(parent, "Water feed", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetWaterFeed(v), -134f);
+                CreateSlider(parent, "Plant load", 0f, 100f, 100f, 0, "%", v => Simulator()?.SetTimelinePercent(v), -136f);
+                CreateSlider(parent, "Power", 0f, 100f, 75f, 0, "%", v => Simulator()?.SetElectrolyzerPower(v), -168f);
+                CreateSlider(parent, "Water feed", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetWaterFeed(v), -200f);
                 break;
             case "absorber":
-                CreateSlider(parent, "Amine flow", 10f, 100f, 65f, 0, "%", v => Simulator()?.SetAmineFlow(v), -64f);
-                CreateSlider(parent, "Flue gas", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetFlueGasFlow(v), -99f);
+                CreateSlider(parent, "Amine flow", 10f, 100f, 65f, 0, "%", v => Simulator()?.SetAmineFlow(v), -136f);
+                CreateSlider(parent, "Flue gas", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetFlueGasFlow(v), -168f);
                 break;
             case "desorber":
-                CreateSlider(parent, "Steam flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetRegeneratorSteam(v), -64f);
-                CreateSlider(parent, "Regen temp", 80f, 130f, 105f, 0, " C", v => Simulator()?.SetRegeneratorTemperature(v), -99f);
+                CreateSlider(parent, "Steam flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetRegeneratorSteam(v), -136f);
+                CreateSlider(parent, "Regen temp", 80f, 130f, 105f, 0, " C", v => Simulator()?.SetRegeneratorTemperature(v), -168f);
                 break;
             case "compressor":
-                CreateSlider(parent, "Comp. ratio", 1f, 6f, 3f, 1, "", v => Simulator()?.SetCompressionRatio(v), -64f);
-                CreateSlider(parent, "Outlet press.", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -99f);
+                CreateSlider(parent, "Comp. ratio", 1f, 6f, 3f, 1, "", v => Simulator()?.SetCompressionRatio(v), -136f);
+                CreateSlider(parent, "Outlet press.", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -168f);
                 break;
             case "reactor":
-                CreateSlider(parent, "Temp", 200f, 300f, 250f, 0, " C", v => Simulator()?.SetReactorTemperature(v), -58f);
-                CreateSlider(parent, "Pressure", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -91f);
-                CreateSlider(parent, "H2/CO2", 1f, 6f, 3f, 1, "", v => Simulator()?.SetH2Co2Ratio(v), -124f);
-                CreateSlider(parent, "GHSV", 1000f, 20000f, 8000f, 0, " h-1", v => Simulator()?.SetGHSV(v), -157f);
-                CreateSlider(parent, "Feed flow", 20f, 130f, 100f, 0, "%", v => Simulator()?.SetReactorFeedFlow(v), -190f);
+                CreateSlider(parent, "Temp", 200f, 300f, 250f, 0, " C", v => Simulator()?.SetReactorTemperature(v), -126f);
+                CreateSlider(parent, "Pressure", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -158f);
+                CreateSlider(parent, "H2/CO2", 1f, 6f, 3f, 1, "", v => Simulator()?.SetH2Co2Ratio(v), -190f);
+                CreateSlider(parent, "GHSV", 1000f, 20000f, 8000f, 0, " h-1", v => Simulator()?.SetGHSV(v), -222f);
+                CreateSlider(parent, "Feed flow", 20f, 130f, 100f, 0, "%", v => Simulator()?.SetReactorFeedFlow(v), -254f);
                 break;
             case "condenser":
-                CreateSlider(parent, "Cooling flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetCoolingWaterFlow(v), -64f);
-                CreateSlider(parent, "Cooling temp", 5f, 45f, 24f, 0, " C", v => Simulator()?.SetCoolingWaterTemperature(v), -99f);
+                CreateSlider(parent, "Cooling flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetCoolingWaterFlow(v), -136f);
+                CreateSlider(parent, "Cooling temp", 5f, 45f, 24f, 0, " C", v => Simulator()?.SetCoolingWaterTemperature(v), -168f);
                 break;
             case "separator":
-                CreateSlider(parent, "Recycle ratio", 0f, 100f, 65f, 0, "%", v => Simulator()?.SetRecycleRatio(v), -64f);
-                CreateSlider(parent, "Sep. temp", 20f, 65f, 34f, 0, " C", v => Simulator()?.SetSeparatorTemperature(v), -99f);
+                CreateSlider(parent, "Recycle ratio", 0f, 100f, 65f, 0, "%", v => Simulator()?.SetRecycleRatio(v), -136f);
+                CreateSlider(parent, "Sep. temp", 20f, 65f, 34f, 0, " C", v => Simulator()?.SetSeparatorTemperature(v), -168f);
                 break;
             case "distillation":
-                CreateSlider(parent, "Reflux ratio", 0.5f, 5f, 2.2f, 1, "", v => Simulator()?.SetRefluxRatio(v), -64f);
-                CreateSlider(parent, "Reboiler temp", 70f, 115f, 92f, 0, " C", v => Simulator()?.SetDistillationReboilerTemperature(v), -99f);
+                CreateSlider(parent, "Reflux ratio", 0.5f, 5f, 2.2f, 1, "", v => Simulator()?.SetRefluxRatio(v), -136f);
+                CreateSlider(parent, "Reboiler temp", 70f, 115f, 92f, 0, " C", v => Simulator()?.SetDistillationReboilerTemperature(v), -168f);
                 break;
             case "storage":
                 Button reset = CreateWideButton(parent, "Reset stored methanol", new Vector2(0f, 50f), new Vector2(235f, 30f));
@@ -249,8 +255,8 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         sliderRect.anchorMin = new Vector2(0f, 1f);
         sliderRect.anchorMax = new Vector2(0f, 1f);
         sliderRect.pivot = new Vector2(0f, 0.5f);
-        sliderRect.anchoredPosition = new Vector2(122f, y);
-        sliderRect.sizeDelta = new Vector2(190f, 18f);
+        sliderRect.anchoredPosition = new Vector2(118f, y);
+        sliderRect.sizeDelta = new Vector2(172f, 18f);
 
         Slider slider = sliderObject.AddComponent<Slider>();
         slider.minValue = min;
@@ -271,8 +277,8 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         valueText.rectTransform.anchorMin = new Vector2(0f, 1f);
         valueText.rectTransform.anchorMax = new Vector2(0f, 1f);
         valueText.rectTransform.pivot = new Vector2(0f, 0.5f);
-        valueText.rectTransform.anchoredPosition = new Vector2(322f, y);
-        valueText.rectTransform.sizeDelta = new Vector2(92f, 22f);
+        valueText.rectTransform.anchoredPosition = new Vector2(296f, y);
+        valueText.rectTransform.sizeDelta = new Vector2(78f, 22f);
 
         slider.onValueChanged.AddListener(v =>
         {
@@ -297,7 +303,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             case "compressor":
                 return $"Compression ratio: {s.compressionRatio:F1}\nOutlet pressure: {s.reactorPressureBar:F0} bar\nSyngas to reactor: {s.syngasFeedKgH:F0} kg/h\nHigh pressure improves conversion but implies higher power.";
             case "reactor":
-                return $"Reactor yield: {s.reactorYieldPercent:F1}%\nMethanol formed: {s.methanolProductionKgH:F0} kg/h\nTemp: {s.reactorTemperatureC:F0} C  Pressure: {s.reactorPressureBar:F0} bar\nRatio: {s.h2Co2Ratio:F1}  GHSV: {s.ghsv:F0} h-1";
+                return $"Status: {BuildReactorStatus(s)}\nYield: {s.reactorYieldPercent:F1}%  Methanol: {s.methanolProductionKgH:F0} kg/h\nTemp: {s.reactorTemperatureC:F0} C  Pressure: {s.reactorPressureBar:F0} bar\nRatio: {s.h2Co2Ratio:F1}  GHSV: {s.ghsv:F0} h-1";
             case "condenser":
                 return $"Cooling water: {s.coolingWaterFlowPercent:F0}% at {s.coolingWaterTemperatureC:F0} C\nCondensation recovery: {s.condenserRecoveryPercent:F0}%\nRecovered liquid methanol: {s.methanolProductionKgH:F0} kg/h";
             case "separator":
@@ -314,6 +320,15 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     private PlantProcessSimulator Simulator()
     {
         return PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance : FindFirstObjectByType<PlantProcessSimulator>();
+    }
+
+    private string BuildReactorStatus(PlantProcessSimulator.ProcessSnapshot s)
+    {
+        if (s.reactorTemperatureC > 270f) return "Catalyst sintering risk";
+        if (s.reactorPressureBar < 60f && s.plantLoadPercent > 5f) return "Low conversion pressure";
+        if (s.h2Co2Ratio < 2.5f) return "Hydrogen deficiency";
+        if (s.ghsv > 9500f) return "Low residence time";
+        return "Normal";
     }
 
     private Transform FindTarget(string[] names)

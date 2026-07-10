@@ -322,10 +322,6 @@ public class PlantProcessSimulator : MonoBehaviour
         float co2Input = designCO2InputKgH * plantRamp * flueGasFactor;
         float co2Captured = co2Input * captureEfficiency;
 
-        float compressionFactor = Mathf.InverseLerp(1f, 6f, manualCompressionRatio);
-        float pressureFromCompressor = Mathf.Lerp(40f, 100f, compressionFactor);
-        pressure = Mathf.Max(pressure, pressureFromCompressor);
-
         float reactorFeedFactor = Mathf.Clamp01(manualReactorFeedFlow / 100f);
         float syngasFeed = (h2Input + co2Captured) * reactorFeedFactor;
 
