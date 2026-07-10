@@ -16,8 +16,10 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
     public float pipeAlpha = 0.28f;
     public bool makePipesTransparent = true;
     public bool showThinGuideLines = true;
+    public bool scaleFlowWithProcessQuantities = true;
 
     private readonly List<RouteRuntime> routes = new List<RouteRuntime>();
+    private readonly Dictionary<string, RouteRuntime> routeMap = new Dictionary<string, RouteRuntime>();
     private readonly Dictionary<string, Transform> nameMap = new Dictionary<string, Transform>();
     private readonly List<Material> runtimeMaterials = new List<Material>();
 
@@ -40,8 +42,42 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
 
     private void Update()
     {
+        if (scaleFlowWithProcessQuantities && PlantProcessSimulator.Instance != null)
+        {
+            ApplyProcessQuantities(PlantProcessSimulator.Instance.Current);
+        }
+
         float dt = Time.deltaTime * globalSpeed;
         foreach (var r in routes) r.Update(dt);
+    }
+
+    private void ApplyProcessQuantities(PlantProcessSimulator.ProcessSnapshot snapshot)
+    {
+        float h2 = Mathf.InverseLerp(0f, 215f, snapshot.h2InputKgH);
+        float captured = Mathf.InverseLerp(0f, 1510f, snapshot.co2CapturedKgH);
+        float syngas = Mathf.InverseLerp(0f, 1725f, snapshot.syngasFeedKgH);
+        float methanol = Mathf.InverseLerp(0f, 1250f, snapshot.methanolProductionKgH);
+        float recycle = Mathf.InverseLerp(0f, 450f, snapshot.recycleGasKgH);
+
+        SetRouteIntensity("H2: electrolyzer to tank", h2);
+        SetRouteIntensity("Absorber to Desorber CO2 rich", captured);
+        SetRouteIntensity("Desorber to Absorber lean amine", captured);
+        SetRouteIntensity("CO2 tank to compressor", captured);
+        SetRouteIntensity("Flash recycle to compressor", recycle);
+        SetRouteIntensity("Compressor to reactor feed", syngas);
+        SetRouteIntensity("Reactor to condenser hot product", methanol);
+        SetRouteIntensity("Condenser to flash separator", methanol);
+        SetRouteIntensity("Flash separator to distillation", methanol);
+        SetRouteIntensity("Distillation to methanol tank", methanol);
+        SetRouteIntensity("Purge / inerts", recycle * 0.45f);
+    }
+
+    private void SetRouteIntensity(string routeName, float intensity)
+    {
+        if (routeMap.TryGetValue(routeName, out RouteRuntime route))
+        {
+            route.SetIntensity(intensity);
+        }
     }
 
     private void BuildNameMap()
@@ -148,6 +184,7 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
         Material mat = CreateUnlitMaterial("FlowMat_" + routeName, color);
         RouteRuntime runtime = new RouteRuntime(parent.transform, points, mat, particleCount, speed, particleSize);
         routes.Add(runtime);
+        routeMap[routeName] = runtime;
 
         if (showThinGuideLines) CreateGuideLine(parent.transform, routeName, points, color);
     }
@@ -285,12 +322,15 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
         private readonly float[] segmentLengths;
         private readonly float totalLength;
         private readonly float speed;
+        private readonly float baseParticleSize;
+        private float intensity = 1f;
 
         public RouteRuntime(Transform parent, List<Vector3> points, Material mat, int particleCount, float speed, float particleSize)
         {
             this.parent = parent;
             this.points = points;
             this.speed = speed;
+            this.baseParticleSize = particleSize;
 
             segmentLengths = new float[points.Count - 1];
             float len = 0f;
@@ -319,11 +359,31 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
 
         public void Update(float dt)
         {
+            float effectiveSpeed = Mathf.Lerp(0.15f, 1.75f, intensity) * speed;
             for (int i = 0; i < particles.Count; i++)
             {
-                distances[i] += speed * dt;
+                distances[i] += effectiveSpeed * dt;
                 while (distances[i] > totalLength) distances[i] -= totalLength;
                 particles[i].position = GetPositionAtDistance(distances[i]);
+            }
+        }
+
+        public void SetIntensity(float value)
+        {
+            intensity = Mathf.Clamp01(value);
+            float visibleFraction = Mathf.Lerp(0.18f, 1f, intensity);
+            int visibleCount = Mathf.Max(1, Mathf.RoundToInt(particles.Count * visibleFraction));
+            float scale = Mathf.Lerp(baseParticleSize * 0.55f, baseParticleSize * 1.55f, intensity);
+
+            for (int i = 0; i < particles.Count; i++)
+            {
+                bool active = i < visibleCount;
+                if (particles[i].gameObject.activeSelf != active)
+                {
+                    particles[i].gameObject.SetActive(active);
+                }
+
+                particles[i].localScale = Vector3.one * scale;
             }
         }
 
