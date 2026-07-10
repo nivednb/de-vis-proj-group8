@@ -57,6 +57,11 @@ README.md
 
 - Full plant equipment scene in Unity 6.
 - Added support structures, storage tank, mixing point, and corrected route layout.
+- Added lightweight industrial plant environment generator:
+  - concrete plant slab, service roads, and safety walkways
+  - perimeter fencing and pipe rack details
+  - control/utility zone and storage containment area
+  - runtime generation from Unity primitives to avoid heavy imported assets
 - Orbit camera with module focus/navigation.
 - Added `Scripts_N` flow visualization layer:
   - `AutoWholePlantFlowRuntime`
@@ -64,6 +69,19 @@ README.md
   - `FlowFollower`
   - `PipeWaypointGenerator`
 - Early moving flow-dot visualization along named process routes.
+
+## Plant environment feedback update
+
+The feedback about making the complete plant model feel more like a real plant site is handled through
+`Assets/Scripts_N/PlantEnvironmentBuilder.cs`.
+
+It builds a surrounding industrial environment using lightweight Unity primitives, so the model gains context
+without requiring large external asset packs. In Play Mode, the environment is generated automatically. In the
+Unity Editor, it can also be generated manually from:
+
+```text
+Tools > Nived > Build Plant Environment
+```
 
 ## Open in Unity
 
