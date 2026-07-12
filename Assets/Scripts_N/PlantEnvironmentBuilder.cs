@@ -209,7 +209,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
 
     private void CreateGroundAndPads(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)
     {
-        CreateCube("Site Grass Apron", root, center + Vector3.down * 0.18f,
+        CreateCube("Site Grass Apron", root, new Vector3(center.x, baseY - 0.18f, center.z),
             new Vector3(siteWidth + 18f, groundThickness, siteDepth + 16f), grassMaterial);
 
         CreateCube("Main Concrete Plant Slab", root, new Vector3(center.x, baseY, center.z),
