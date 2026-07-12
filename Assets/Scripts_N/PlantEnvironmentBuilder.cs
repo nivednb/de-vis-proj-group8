@@ -307,6 +307,146 @@ public class PlantEnvironmentBuilder : MonoBehaviour
                 new Vector3(x, baseY + 10.65f, rearZ + 2.8f),
                 0.32f, 0.35f, hazardMaterial, Quaternion.identity);
         }
+
+        CreateRefineryTankFarm(root, center, siteWidth, siteDepth, baseY);
+        CreateDensePipeCorridors(root, center, siteWidth, siteDepth, baseY);
+        CreateScaffoldAndServiceFrames(root, center, siteWidth, siteDepth, baseY);
+    }
+
+    private void CreateRefineryTankFarm(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)
+    {
+        float rearZ = center.z + siteDepth * 0.67f;
+        float frontZ = center.z - siteDepth * 0.42f;
+        float leftX = center.x - siteWidth * 0.43f;
+        float rightX = center.x + siteWidth * 0.43f;
+
+        for (int i = 0; i < 4; i++)
+        {
+            float x = leftX + 3.2f + i * 3.4f;
+            float radius = i % 2 == 0 ? 0.9f : 0.72f;
+            float height = i % 2 == 0 ? 4.4f : 3.5f;
+            CreateCylinder("Left Background Storage Tank", root,
+                new Vector3(x, baseY + height * 0.5f, rearZ - 2.2f),
+                radius, height, steelMaterial, Quaternion.identity);
+            CreateCylinder("Left Background Tank Roof", root,
+                new Vector3(x, baseY + height + 0.12f, rearZ - 2.2f),
+                radius * 1.03f, 0.24f, hazardMaterial, Quaternion.identity);
+            CreateCube("Left Tank Bund Wall", root,
+                new Vector3(x, baseY + 0.25f, rearZ - 0.95f),
+                new Vector3(2.2f, 0.5f, 0.16f), concreteMaterial);
+        }
+
+        for (int i = 0; i < 5; i++)
+        {
+            float x = rightX - 2.8f - i * 2.5f;
+            float height = 3.2f + (i % 3) * 0.7f;
+            CreateCylinder("Right Background Vertical Vessel", root,
+                new Vector3(x, baseY + height * 0.5f, frontZ),
+                0.55f, height, steelMaterial, Quaternion.identity);
+            CreateHorizontalCylinder("Right Vessel Connection Header", root,
+                new Vector3(x, baseY + height * 0.72f, frontZ + 1.05f),
+                0.07f, 2.0f, pipeBlueMaterial, false);
+        }
+    }
+
+    private void CreateDensePipeCorridors(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)
+    {
+        float rearZ = center.z + siteDepth * 0.53f;
+        float frontZ = center.z - siteDepth * 0.31f;
+        float leftX = center.x - siteWidth * 0.44f;
+        float rightX = center.x + siteWidth * 0.44f;
+        float pipeLength = siteWidth * 0.82f;
+
+        for (int row = 0; row < 3; row++)
+        {
+            float z = rearZ - row * 1.05f;
+            float y = baseY + 3.9f + row * 0.42f;
+            Material pipeMaterial = row == 0 ? pipeBlueMaterial : row == 1 ? pipeGreenMaterial : pipePurpleMaterial;
+            CreateHorizontalCylinder("Dense Rear Pipe Corridor", root,
+                new Vector3(center.x, y, z), 0.075f, pipeLength, pipeMaterial, true);
+        }
+
+        for (int i = 0; i < 9; i++)
+        {
+            float x = Mathf.Lerp(leftX + 2f, rightX - 2f, i / 8f);
+            CreateCube("Dense Pipe Rack Upright", root,
+                new Vector3(x, baseY + 2.0f, rearZ - 1.05f),
+                new Vector3(0.16f, 4.0f, 0.16f), steelMaterial);
+            CreateCube("Dense Pipe Rack Crossbeam", root,
+                new Vector3(x, baseY + 4.18f, rearZ - 1.05f),
+                new Vector3(0.22f, 0.14f, 2.6f), steelMaterial);
+        }
+
+        for (int i = 0; i < 5; i++)
+        {
+            float x = center.x - siteWidth * 0.34f + i * siteWidth * 0.17f;
+            CreateHorizontalCylinder("Foreground Utility Pipe", root,
+                new Vector3(x, baseY + 1.05f, frontZ),
+                0.065f, siteDepth * 0.22f, i % 2 == 0 ? pipeGreenMaterial : pipeBlueMaterial, false);
+            CreateCube("Foreground Pipe Support", root,
+                new Vector3(x, baseY + 0.5f, frontZ),
+                new Vector3(0.18f, 1.0f, 0.18f), steelMaterial);
+        }
+    }
+
+    private void CreateScaffoldAndServiceFrames(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)
+    {
+        float rearZ = center.z + siteDepth * 0.41f;
+        float leftX = center.x - siteWidth * 0.37f;
+        float rightX = center.x + siteWidth * 0.34f;
+
+        CreateServiceFrame(root, new Vector3(leftX, baseY, rearZ), 5.5f, 3.4f, 5.4f);
+        CreateServiceFrame(root, new Vector3(rightX, baseY, rearZ - 1.8f), 6.6f, 3.8f, 4.8f);
+
+        CreateCube("Background Control Building Wide Block", root,
+            new Vector3(center.x - siteWidth * 0.08f, baseY + 2.2f, rearZ + 5.2f),
+            new Vector3(14f, 4.4f, 4.6f), controlRoomMaterial);
+        CreateCube("Background Control Building Roof", root,
+            new Vector3(center.x - siteWidth * 0.08f, baseY + 4.55f, rearZ + 5.2f),
+            new Vector3(14.6f, 0.24f, 5.1f), steelMaterial);
+
+        for (int i = 0; i < 6; i++)
+        {
+            float x = center.x - 6f + i * 2.4f;
+            CreateCube("Small Equipment Plinth", root,
+                new Vector3(x, baseY + 0.32f, rearZ + 1.9f),
+                new Vector3(1.25f, 0.64f, 1.1f), concreteMaterial);
+            CreateCube("Small Skid Package", root,
+                new Vector3(x, baseY + 0.92f, rearZ + 1.9f),
+                new Vector3(1.0f, 0.72f, 0.85f), steelMaterial);
+        }
+    }
+
+    private void CreateServiceFrame(Transform root, Vector3 basePosition, float width, float depth, float height)
+    {
+        float postHalfHeight = height * 0.5f;
+        for (int ix = 0; ix < 2; ix++)
+        {
+            for (int iz = 0; iz < 2; iz++)
+            {
+                float x = basePosition.x + (ix == 0 ? -width * 0.5f : width * 0.5f);
+                float z = basePosition.z + (iz == 0 ? -depth * 0.5f : depth * 0.5f);
+                CreateCube("Refinery Scaffold Post", root,
+                    new Vector3(x, basePosition.y + postHalfHeight, z),
+                    new Vector3(0.16f, height, 0.16f), steelMaterial);
+            }
+        }
+
+        CreateCube("Refinery Scaffold Deck", root,
+            new Vector3(basePosition.x, basePosition.y + height * 0.55f, basePosition.z),
+            new Vector3(width + 0.4f, 0.12f, depth + 0.4f), safetyYellowMaterial);
+        CreateCube("Refinery Scaffold Top Beam X", root,
+            new Vector3(basePosition.x, basePosition.y + height, basePosition.z - depth * 0.5f),
+            new Vector3(width, 0.14f, 0.14f), steelMaterial);
+        CreateCube("Refinery Scaffold Top Beam X", root,
+            new Vector3(basePosition.x, basePosition.y + height, basePosition.z + depth * 0.5f),
+            new Vector3(width, 0.14f, 0.14f), steelMaterial);
+        CreateCube("Refinery Scaffold Top Beam Z", root,
+            new Vector3(basePosition.x - width * 0.5f, basePosition.y + height, basePosition.z),
+            new Vector3(0.14f, 0.14f, depth), steelMaterial);
+        CreateCube("Refinery Scaffold Top Beam Z", root,
+            new Vector3(basePosition.x + width * 0.5f, basePosition.y + height, basePosition.z),
+            new Vector3(0.14f, 0.14f, depth), steelMaterial);
     }
 
     private void SuppressLargeFloatingPlanes(float baseY)
