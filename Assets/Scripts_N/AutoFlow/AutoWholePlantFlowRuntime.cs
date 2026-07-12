@@ -11,8 +11,8 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
 {
     [Header("Global Flow Settings")]
     public float globalSpeed = 1.0f;
-    public float particleSize = 0.09f;
-    public float lineWidth = 0.035f;
+    public float particleSize = 0.16f;
+    public float lineWidth = 0.075f;
     public float pipeAlpha = 0.28f;
     public bool makePipesTransparent = true;
     public bool showThinGuideLines = true;
@@ -60,15 +60,15 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
         float recycle = Mathf.InverseLerp(0f, 450f, snapshot.recycleGasKgH);
 
         SetRouteIntensity("H2: electrolyzer to tank", h2);
-        SetRouteIntensity("Absorber to Desorber CO2 rich", captured);
-        SetRouteIntensity("Desorber to Absorber lean amine", captured);
+        SetRouteIntensity("Rich amine: absorber to desorber", captured);
+        SetRouteIntensity("Lean amine: desorber to absorber", captured);
         SetRouteIntensity("CO2 tank to compressor", captured);
         SetRouteIntensity("Flash recycle to compressor", recycle);
-        SetRouteIntensity("Compressor to reactor feed", syngas);
-        SetRouteIntensity("Reactor to condenser hot product", methanol);
-        SetRouteIntensity("Condenser to flash separator", methanol);
-        SetRouteIntensity("Flash separator to distillation", methanol);
-        SetRouteIntensity("Distillation to methanol tank", methanol);
+        SetRouteIntensity("Syngas: compressor to reactor feed", syngas);
+        SetRouteIntensity("Hot product: reactor to condenser", methanol);
+        SetRouteIntensity("Crude methanol: condenser to flash separator", methanol);
+        SetRouteIntensity("Crude methanol: flash separator to distillation", methanol);
+        SetRouteIntensity("Methanol product: distillation to tank", methanol);
         SetRouteIntensity("Purge / inerts", recycle * 0.45f);
     }
 
@@ -100,23 +100,29 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
     private void BuildWholePlantFlow()
     {
         // Colors follow your process diagram approximately.
-        Color h2 = new Color(0.1f, 1.0f, 0.15f, 1f);          // green
-        Color co2 = new Color(1.0f, 0.05f, 0.03f, 1f);        // red
-        Color amine = new Color(0.0f, 1.0f, 0.2f, 1f);        // lean amine green
-        Color hot = new Color(1.0f, 0.45f, 0.05f, 1f);        // orange/hot gas
-        Color product = new Color(0.1f, 0.7f, 1.0f, 1f);      // blue/cyan methanol liquid
-        Color recycle = new Color(0.6f, 1.0f, 0.1f, 1f);      // light green recycle
-        Color purple = new Color(0.8f, 0.15f, 1.0f, 1f);      // purge/inerts
+        // Process material colors:
+        // H2 = green, amine = teal, CO2 = pale grey, syngas = yellow,
+        // hot reactor product = orange, methanol liquid = purple, recycle gas = violet.
+        Color h2 = new Color(0.1f, 1.0f, 0.15f, 1f);
+        Color richAmine = new Color(0.0f, 0.9f, 0.78f, 1f);
+        Color leanAmine = new Color(0.0f, 1.0f, 0.42f, 1f);
+        Color co2 = new Color(0.86f, 0.92f, 1.0f, 1f);
+        Color syngas = new Color(1.0f, 0.82f, 0.08f, 1f);
+        Color hotProduct = new Color(1.0f, 0.45f, 0.05f, 1f);
+        Color methanol = new Color(0.72f, 0.18f, 1.0f, 1f);
+        Color crudeMethanol = new Color(0.35f, 0.72f, 1.0f, 1f);
+        Color recycle = new Color(0.58f, 0.28f, 1.0f, 1f);
+        Color purge = new Color(1.0f, 0.2f, 0.95f, 1f);
 
         AddRoute("H2: electrolyzer to tank", h2, 28, 1.5f, new [] {
             "Cylinder", "pipe bend (2)", "Cylinder (20)", "pipe bend (3)", "Cylinder (19)", "pipe bend (4)", "Cylinder (30)", "pipe bend (21)"
         });
 
-        AddRoute("Absorber to Desorber CO2 rich", co2, 26, 1.25f, new [] {
+        AddRoute("Rich amine: absorber to desorber", richAmine, 26, 1.25f, new [] {
             "pipe bend (4)", "Cylinder (2)", "pipe bend (5)", "Cylinder (3)", "pipe bend (13)"
         });
 
-        AddRoute("Desorber to Absorber lean amine", amine, 26, 1.15f, new [] {
+        AddRoute("Lean amine: desorber to absorber", leanAmine, 26, 1.15f, new [] {
             "pipe bend (16)", "Cylinder (5)", "pipe bend (19)", "Cylinder (18)", "pipe bend (15)", "Cylinder (28)", "pipe bend (14)"
         });
 
@@ -128,28 +134,28 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
             "pipe bend (22)", "Cylinder (25)", "pipe bend (23)", "Cylinder (27)", "pipe bend (24)", "Cylinder (21)", "t junction", "Cylinder (17)", "pipe bend (28)", "Cylinder (8)", "pipe bend (12)", "Cylinder (16)"
         });
 
-        AddRoute("Compressor to reactor feed", h2, 36, 1.45f, new [] {
+        AddRoute("Syngas: compressor to reactor feed", syngas, 36, 1.45f, new [] {
             "Cylinder (7)", "pipe bend (26)", "Cylinder (29)", "pipe bend (25)", "Cylinder (9)", "Cylinder (31)", "pipe bend (27)", "Cylinder (32)"
         });
 
-        AddRoute("Reactor to condenser hot product", hot, 28, 1.3f, new [] {
+        AddRoute("Hot product: reactor to condenser", hotProduct, 28, 1.3f, new [] {
             "pipe bend (8)", "Cylinder (33)", "pipe bend (7)", "Cylinder (6)", "pipe bend (6)", "Cylinder (10)"
         });
 
-        AddRoute("Condenser to flash separator", product, 28, 1.25f, new [] {
+        AddRoute("Crude methanol: condenser to flash separator", crudeMethanol, 28, 1.25f, new [] {
             "Cylinder (11)", "pipe bend (9)", "Cylinder (12)", "pipe bend (10)", "Cylinder (13)"
         });
 
-        AddRoute("Flash separator to distillation", product, 14, 0.95f, new [] {
+        AddRoute("Crude methanol: flash separator to distillation", crudeMethanol, 14, 0.95f, new [] {
             "Cylinder (15)"
         });
 
-        AddRoute("Distillation to methanol tank", product, 24, 1.1f, new [] {
+        AddRoute("Methanol product: distillation to tank", methanol, 24, 1.1f, new [] {
             "Cylinder (35)", "pipe bend (29)", "Cylinder (34)"
         });
 
         // Small visible purge marker if those objects exist later. Safe if missing.
-        AddRoute("Purge / inerts", purple, 10, 0.7f, new [] { "purge", "vent", "Cube (5)" });
+        AddRoute("Purge / inerts", purge, 10, 0.7f, new [] { "purge", "vent", "Cube (5)" });
     }
 
     private void AddRoute(string routeName, Color color, int particleCount, float speed, string[] objectNames)
@@ -182,7 +188,8 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
         parent.transform.SetParent(transform);
 
         Material mat = CreateUnlitMaterial("FlowMat_" + routeName, color);
-        RouteRuntime runtime = new RouteRuntime(parent.transform, points, mat, particleCount, speed, particleSize);
+        int amplifiedParticleCount = Mathf.CeilToInt(particleCount * 1.35f);
+        RouteRuntime runtime = new RouteRuntime(parent.transform, points, mat, amplifiedParticleCount, speed, particleSize);
         routes.Add(runtime);
         routeMap[routeName] = runtime;
 
@@ -214,7 +221,11 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
     {
         if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
         if (m.HasProperty("_Color")) m.SetColor("_Color", c);
-        if (m.HasProperty("_EmissionColor")) m.SetColor("_EmissionColor", c);
+        if (m.HasProperty("_EmissionColor"))
+        {
+            m.EnableKeyword("_EMISSION");
+            m.SetColor("_EmissionColor", c * 1.65f);
+        }
     }
 
     private void CreateGuideLine(Transform parent, string routeName, List<Vector3> points, Color color)
@@ -230,7 +241,7 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
         lr.numCapVertices = 4;
 
         Color guideColor = color;
-        guideColor.a = 0.35f;
+        guideColor.a = 0.82f;
         Material mat = CreateUnlitMaterial("GuideMat_" + routeName, guideColor);
         lr.material = mat;
         lr.startColor = guideColor;
@@ -371,9 +382,9 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
         public void SetIntensity(float value)
         {
             intensity = Mathf.Clamp01(value);
-            float visibleFraction = Mathf.Lerp(0.18f, 1f, intensity);
+            float visibleFraction = Mathf.Lerp(0.42f, 1f, intensity);
             int visibleCount = Mathf.Max(1, Mathf.RoundToInt(particles.Count * visibleFraction));
-            float scale = Mathf.Lerp(baseParticleSize * 0.55f, baseParticleSize * 1.55f, intensity);
+            float scale = Mathf.Lerp(baseParticleSize * 0.9f, baseParticleSize * 2.15f, intensity);
 
             for (int i = 0; i < particles.Count; i++)
             {

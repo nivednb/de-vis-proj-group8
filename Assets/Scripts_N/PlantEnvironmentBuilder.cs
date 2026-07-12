@@ -116,24 +116,33 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         }
 
         CreateSiteSign(root.transform, center, siteWidth, siteDepth, baseY);
+        SuppressLargeFloatingPlanes(baseY);
     }
 
     [ContextMenu("Clear Plant Environment")]
     public void ClearEnvironment()
     {
-        GameObject existing = GameObject.Find(EnvironmentRootName);
-        if (existing == null)
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (GameObject existing in allObjects)
         {
-            return;
-        }
+            if (existing == null)
+            {
+                continue;
+            }
 
-        if (Application.isPlaying)
-        {
-            Destroy(existing);
-        }
-        else
-        {
-            DestroyImmediate(existing);
+            if (existing.name == EnvironmentRootName ||
+                existing.name == "Generated Plant Environment" ||
+                existing.name.StartsWith("Generated_Plant_Environment"))
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(existing);
+                }
+                else
+                {
+                    DestroyImmediate(existing);
+                }
+            }
         }
     }
 
@@ -224,6 +233,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     {
         float rearZ = center.z + siteDepth * 0.58f;
         float farZ = center.z + siteDepth * 0.78f;
+        float midZ = center.z + siteDepth * 0.48f;
         float leftX = center.x - siteWidth * 0.42f;
         float rightX = center.x + siteWidth * 0.42f;
 
@@ -248,6 +258,33 @@ public class PlantEnvironmentBuilder : MonoBehaviour
             new Vector3(center.x, baseY + 5.95f, rearZ - 2.7f),
             0.1f, siteWidth * 0.62f, pipeGreenMaterial, true);
 
+        CreateCube("Rear Industrial Boundary Wall", root,
+            new Vector3(center.x, baseY + 1.45f, midZ + 2.5f),
+            new Vector3(siteWidth * 0.92f, 2.9f, 0.28f), controlRoomMaterial);
+
+        CreateCube("Left Workshop Building", root,
+            new Vector3(leftX + 3.2f, baseY + 2.15f, midZ - 3.5f),
+            new Vector3(7.8f, 4.3f, 6.4f), controlRoomMaterial);
+        CreateCube("Right Compressor Shelter", root,
+            new Vector3(rightX - 6.5f, baseY + 2.55f, midZ - 2.2f),
+            new Vector3(9.5f, 5.1f, 5.2f), controlRoomMaterial);
+        CreateCube("Right Compressor Shelter Roof", root,
+            new Vector3(rightX - 6.5f, baseY + 5.25f, midZ - 2.2f),
+            new Vector3(10.2f, 0.25f, 5.8f), steelMaterial);
+
+        for (int i = 0; i < 6; i++)
+        {
+            float x = Mathf.Lerp(leftX + 10f, rightX - 10f, i / 5f);
+            float z = midZ + (i % 2 == 0 ? -0.6f : 1.2f);
+            CreateCube("Background Cable Tray Post", root,
+                new Vector3(x, baseY + 2.25f, z),
+                new Vector3(0.16f, 4.5f, 0.16f), steelMaterial);
+        }
+
+        CreateCube("Background Cable Tray", root,
+            new Vector3(center.x, baseY + 4.6f, midZ + 0.3f),
+            new Vector3(siteWidth * 0.76f, 0.18f, 0.35f), hazardMaterial);
+
         for (int i = 0; i < 5; i++)
         {
             float x = Mathf.Lerp(leftX + 18f, rightX - 10f, i / 4f);
@@ -270,6 +307,68 @@ public class PlantEnvironmentBuilder : MonoBehaviour
                 new Vector3(x, baseY + 10.65f, rearZ + 2.8f),
                 0.32f, 0.35f, hazardMaterial, Quaternion.identity);
         }
+    }
+
+    private void SuppressLargeFloatingPlanes(float baseY)
+    {
+        if (!Application.isPlaying)
+        {
+            return;
+        }
+
+        Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || ShouldIgnoreRenderer(renderer))
+            {
+                continue;
+            }
+
+            Bounds bounds = renderer.bounds;
+            bool largeFlatSlab = bounds.size.x > 24f && bounds.size.z > 8f && bounds.size.y < 1.4f;
+            bool floatingAbovePlant = bounds.center.y > baseY + 2.0f;
+            bool likelyScenePlane = LooksLikeLoosePlane(renderer.transform);
+
+            if (largeFlatSlab && floatingAbovePlant && likelyScenePlane)
+            {
+                renderer.gameObject.SetActive(false);
+                Debug.Log($"PlantEnvironmentBuilder: disabled likely floating plane '{renderer.gameObject.name}' at y={bounds.center.y:F2}.");
+            }
+        }
+    }
+
+    private bool LooksLikeLoosePlane(Transform transformToCheck)
+    {
+        Transform current = transformToCheck;
+        while (current != null)
+        {
+            string objectName = current.name.ToLowerInvariant();
+            if (objectName.Contains("cube") ||
+                objectName.Contains("plane") ||
+                objectName.Contains("slab") ||
+                objectName.Contains("ground") ||
+                objectName.Contains("pad"))
+            {
+                return true;
+            }
+
+            if (objectName.Contains("reactor") ||
+                objectName.Contains("absorber") ||
+                objectName.Contains("desorber") ||
+                objectName.Contains("compressor") ||
+                objectName.Contains("condenser") ||
+                objectName.Contains("distillation") ||
+                objectName.Contains("tank") ||
+                objectName.Contains("pipe") ||
+                objectName.Contains("piping"))
+            {
+                return false;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
     }
 
     private void CreateRoadsAndSafetyMarkings(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)

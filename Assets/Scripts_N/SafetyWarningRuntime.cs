@@ -56,36 +56,37 @@ public class SafetyWarningRuntime : MonoBehaviour
         canvasObject.transform.SetParent(transform, false);
         canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 120;
+        canvas.sortingOrder = 68;
         canvasObject.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        canvasObject.AddComponent<GraphicRaycaster>();
 
         GameObject panel = new GameObject("Warning Panel");
         panel.transform.SetParent(canvasObject.transform, false);
         panelRect = panel.AddComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.5f, 1f);
-        panelRect.anchorMax = new Vector2(0.5f, 1f);
-        panelRect.pivot = new Vector2(0.5f, 1f);
-        panelRect.anchoredPosition = new Vector2(0f, -18f);
-        panelRect.sizeDelta = new Vector2(720f, 92f);
+        panelRect.anchorMin = new Vector2(0f, 1f);
+        panelRect.anchorMax = new Vector2(0f, 1f);
+        panelRect.pivot = new Vector2(0f, 1f);
+        panelRect.anchoredPosition = new Vector2(18f, -18f);
+        panelRect.sizeDelta = new Vector2(520f, 58f);
         panelImage = panel.AddComponent<Image>();
-        panelImage.color = new Color(0.12f, 0.04f, 0.02f, 0.92f);
+        panelImage.raycastTarget = false;
+        panelImage.color = new Color(0.12f, 0.04f, 0.02f, 0.82f);
 
         GameObject textObject = new GameObject("Warning Text");
         textObject.transform.SetParent(panel.transform, false);
         warningText = textObject.AddComponent<Text>();
         warningText.font = font;
-        warningText.fontSize = 18;
+        warningText.fontSize = 13;
         warningText.fontStyle = FontStyle.Bold;
-        warningText.alignment = TextAnchor.MiddleCenter;
+        warningText.alignment = TextAnchor.MiddleLeft;
         warningText.horizontalOverflow = HorizontalWrapMode.Wrap;
         warningText.verticalOverflow = VerticalWrapMode.Truncate;
+        warningText.raycastTarget = false;
         warningText.color = Color.white;
         RectTransform textRect = warningText.rectTransform;
         textRect.anchorMin = Vector2.zero;
         textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(18f, 10f);
-        textRect.offsetMax = new Vector2(-18f, -10f);
+        textRect.offsetMin = new Vector2(14f, 8f);
+        textRect.offsetMax = new Vector2(-14f, -8f);
 
         panel.SetActive(false);
     }
@@ -121,12 +122,12 @@ public class SafetyWarningRuntime : MonoBehaviour
         }
 
         panelImage.color = hasAlarm
-            ? new Color(0.65f, 0.03f, 0.02f, 0.94f)
-            : new Color(0.95f, 0.55f, 0.06f, 0.94f);
+            ? new Color(0.65f, 0.03f, 0.02f, 0.84f)
+            : new Color(0.95f, 0.55f, 0.06f, 0.82f);
 
         List<string> active = hasAlarm ? alarms : cautions;
-        string prefix = hasAlarm ? "CRITICAL WARNING" : "PROCESS WARNING";
-        warningText.text = $"{prefix}: {string.Join("  |  ", active.GetRange(0, Mathf.Min(active.Count, 3)))}";
+        string prefix = hasAlarm ? "CRITICAL" : "WARNING";
+        warningText.text = $"{prefix}: {string.Join("  |  ", active.GetRange(0, Mathf.Min(active.Count, 2)))}";
     }
 
     private void AddElectrolyzerWarnings(PlantProcessSimulator.ProcessSnapshot s, List<string> cautions)
