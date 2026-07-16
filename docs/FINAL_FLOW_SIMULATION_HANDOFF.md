@@ -22,6 +22,19 @@ This branch contains the reduced `whole_plant` scene focused on the reactor and 
 - The reactor is made transparent.
 - Internal reactor particles and a catalyst-bed condition visual are generated at runtime.
 
+## Flow-only branch behavior
+
+This branch is intentionally configured for flow visualization only. The older auto-generated systems and UI/prototype scripts were removed from this branch so they do not compile, auto-create objects, or overlap with the final flow simulation:
+
+- no warning overlay
+- no generated industrial background/environment
+- no generated module eye-button panels
+- no generated process-simulator object
+- no older duplicate whole-plant/reaction flow prototypes
+- no TextMesh Pro sample/demo assets
+
+The only runtime system that should auto-create visible content is `FinalFlowSystem`.
+
 ## Flow colors
 
 - Hydrogen: green
@@ -77,7 +90,6 @@ If only one pipe is wrong:
 
 This avoids editing code for small naming/direction mistakes.
 
-## Legacy systems
+## Removed legacy systems
 
-Older experimental automatic flow systems are still present for reference, but their auto-start was disabled so they do not overlap with the final flow simulation.
-
+Older experimental automatic flow systems, warning overlays, module UI panels, generated plant-environment scripts, process-simulator scripts, and TextMesh Pro example/demo assets were removed from this branch to keep the project lighter and focused on the final flow visualization.
