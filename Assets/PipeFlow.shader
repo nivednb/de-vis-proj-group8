@@ -7,6 +7,8 @@ Shader "Custom/PipeFlow"
         _FlowSpeed ("Flow Speed", Float) = 1.0
         _Tiling ("V Tiling (dash density)", Float) = 4.0
         _BaseAlpha ("Pipe Base Alpha (faint pipe tint, 0 = transparent pipe)", Range(0,1)) = 0.15
+        _FlowIntensity ("Flow Band Intensity", Range(0,2)) = 1.1
+        _BandSharpness ("Flow Band Sharpness", Range(0.1,1.5)) = 0.62
         [Toggle] _GhostMode ("Ghost Supply Mode (unmodeled source)", Float) = 0
         _GhostAlphaMul ("Ghost Alpha Multiplier", Range(0,1)) = 0.4
         _GhostTilingMul ("Ghost Tiling Multiplier (wider dash spacing)", Range(0.1,1)) = 0.5
@@ -31,6 +33,8 @@ Shader "Custom/PipeFlow"
             float _FlowSpeed;
             float _Tiling;
             float _BaseAlpha;
+            float _FlowIntensity;
+            float _BandSharpness;
             float _FlowOffset; // set per-instance via MaterialPropertyBlock
             float _GhostMode;
             float _GhostAlphaMul;
@@ -53,9 +57,13 @@ Shader "Custom/PipeFlow"
             {
                 float2 scrolledUV = i.uv + float2(0, _FlowOffset);
                 fixed4 tex = tex2D(_MainTex, scrolledUV);
+                float proceduralBand = smoothstep(1.0 - _BandSharpness, 1.0, frac(scrolledUV.y));
+                float centerGlow = 1.0 - abs(i.uv.x - 0.5) * 1.4;
+                centerGlow = saturate(centerGlow);
                 fixed4 col = _FlowColor;
                 float alphaMul = lerp(1.0, _GhostAlphaMul, _GhostMode);
-                col.a = (tex.a * 0.9 + _BaseAlpha) * alphaMul;
+                col.rgb *= 0.75 + proceduralBand * 0.75;
+                col.a = saturate(_BaseAlpha + max(tex.a, proceduralBand) * centerGlow * _FlowIntensity) * alphaMul;
                 return col;
             }
             ENDCG

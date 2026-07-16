@@ -9,6 +9,8 @@ using UnityEngine;
 /// </summary>
 public class AutoWholePlantFlowRuntime : MonoBehaviour
 {
+    private const bool LegacyAutoCreateEnabled = false;
+
     [Header("Global Flow Settings")]
     public float globalSpeed = 1.0f;
     public float particleSize = 0.16f;
@@ -26,6 +28,7 @@ public class AutoWholePlantFlowRuntime : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
     {
+        if (!LegacyAutoCreateEnabled) return;
         if (FindFirstObjectByType<AutoWholePlantFlowRuntime>() != null) return;
         GameObject go = new GameObject("Generated Whole Plant Flow");
         go.AddComponent<AutoWholePlantFlowRuntime>();

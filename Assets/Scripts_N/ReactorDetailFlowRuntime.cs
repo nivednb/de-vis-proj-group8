@@ -9,6 +9,8 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class ReactorDetailFlowRuntime : MonoBehaviour
 {
+    private const bool LegacyAutoCreateEnabled = false;
+
     [SerializeField] private bool autoCreateOnStart = true;
     [SerializeField] private float inletOrbitRadius = 1.35f;
     [SerializeField] private float productOrbitRadius = 1.85f;
@@ -37,6 +39,7 @@ public class ReactorDetailFlowRuntime : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
     {
+        if (!LegacyAutoCreateEnabled) return;
         if (FindFirstObjectByType<ReactorDetailFlowRuntime>() != null)
         {
             return;
