@@ -34,6 +34,23 @@ public class PipeFlowPrototypeRuntime : MonoBehaviour
     private Transform generatedRoot;
     private Font uiFont;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void AutoCreateInStandalonePrototypeProject()
+    {
+        if (!Application.dataPath.Replace("\\", "/").Contains("PipeFlowPrototypeProject"))
+        {
+            return;
+        }
+
+        if (FindFirstObjectByType<PipeFlowPrototypeRuntime>() != null)
+        {
+            return;
+        }
+
+        GameObject prototypeObject = new GameObject("Auto Pipe Flow Prototype Runtime");
+        prototypeObject.AddComponent<PipeFlowPrototypeRuntime>();
+    }
+
     private void Start()
     {
         if (rebuildOnStart)
