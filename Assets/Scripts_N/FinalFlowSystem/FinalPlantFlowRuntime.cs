@@ -164,10 +164,22 @@ public class FinalPlantFlowRuntime : MonoBehaviour
             animator = pipe.AddComponent<PipeFlowAnimator>();
         }
 
+        animator.flowKind = flowKind;
+        animator.flowColor = color;
+        animator.speed = speed * globalSpeedMultiplier;
+        animator.speedOverride = animator.speed;
+        animator.density = Mathf.Max(2f, density * globalDensityMultiplier * 0.18f);
+        animator.pipeAlpha = Mathf.Clamp01(pipeAlpha * globalPipeAlphaMultiplier);
+        animator.flowIntensity = intensity * globalIntensityMultiplier * 0.72f;
         animator.reverseDirection = reverse;
-        animator.speedOverride = speed * globalSpeedMultiplier;
         animator.isFlowing = flowing;
+        animator.forceFlowOff = !flowing;
         animator.isGhostSupply = false;
+        animator.Apply();
+
+        PipeFlowAccent accent = pipe.GetComponent<PipeFlowAccent>();
+        if (accent == null) accent = pipe.AddComponent<PipeFlowAccent>();
+        accent.Configure(renderer, flowKind, color, Mathf.Clamp01(intensity * 0.55f));
     }
 
     private Material CreatePipeMaterial(PlantFlowKind kind, Color color, float speed, float density, float alpha, float intensity, float sharpness)
@@ -187,9 +199,9 @@ public class FinalPlantFlowRuntime : MonoBehaviour
             materialCache[kind] = material;
         }
 
-        float finalDensity = density * globalDensityMultiplier;
+        float finalDensity = Mathf.Max(2f, density * globalDensityMultiplier * 0.18f);
         float finalAlpha = Mathf.Clamp01(alpha * globalPipeAlphaMultiplier);
-        float finalIntensity = intensity * globalIntensityMultiplier;
+        float finalIntensity = intensity * globalIntensityMultiplier * 0.72f;
 
         if (material.HasProperty(FlowColorId)) material.SetColor(FlowColorId, color);
         if (material.HasProperty(FlowSpeedId)) material.SetFloat(FlowSpeedId, speed * globalSpeedMultiplier);
@@ -274,7 +286,7 @@ public class FinalPlantFlowRuntime : MonoBehaviour
             }
 
             string lower = obj.name.ToLowerInvariant();
-            if (!lower.Contains("reactor") || lower.Contains("panel") || lower.Contains("manager"))
+            if (!lower.Equals("reactor base model", System.StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -283,6 +295,13 @@ public class FinalPlantFlowRuntime : MonoBehaviour
             foreach (Renderer renderer in renderers)
             {
                 if (renderer == null || renderer is ParticleSystemRenderer)
+                {
+                    continue;
+                }
+
+                string rendererName = renderer.gameObject.name.ToLowerInvariant();
+                bool isVesselShell = rendererName == "reactor_shell" || rendererName == "cap_top" || rendererName == "cap_bottom";
+                if (!isVesselShell)
                 {
                     continue;
                 }
@@ -332,7 +351,7 @@ public class FinalPlantFlowRuntime : MonoBehaviour
             string lower = obj.name.ToLowerInvariant();
             foreach (string token in contains)
             {
-                if (lower.Contains(token.ToLowerInvariant()))
+                if (lower.Equals(token, System.StringComparison.OrdinalIgnoreCase))
                 {
                     return obj;
                 }

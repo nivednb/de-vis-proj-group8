@@ -56,15 +56,28 @@ Shader "Custom/PipeFlow"
             fixed4 frag(v2f i) : SV_Target
             {
                 float2 scrolledUV = i.uv + float2(0, _FlowOffset);
-                fixed4 tex = tex2D(_MainTex, scrolledUV);
-                float proceduralBand = smoothstep(1.0 - _BandSharpness, 1.0, frac(scrolledUV.y));
-                float centerGlow = 1.0 - abs(i.uv.x - 0.5) * 1.4;
-                centerGlow = saturate(centerGlow);
-                fixed4 col = _FlowColor;
+                // Smooth broad concentration waves representing carrier flow direction
+                float carrierWave = 0.5 + 0.5 * sin(scrolledUV.y * 6.2831853);
+                carrierWave = smoothstep(0.15, 0.85, carrierWave);
+
+                // Keep flow concentrated along the pipe core axis to look like it is inside
+                float axialCore = saturate(1.0 - abs(i.uv.x - 0.5) * 2.0);
+                axialCore = pow(axialCore, 1.5); // sharpen toward center
+
+                // Neutral translucent steel-gray pipe body
+                fixed4 pipeBody = fixed4(0.50, 0.53, 0.56, _BaseAlpha);
+
+                // Animated process fluid flow bands
+                fixed4 flowColor = _FlowColor;
+
+                // Blend physical pipe body with flowing internal fluid
+                fixed4 carrier;
+                carrier.rgb = lerp(pipeBody.rgb, flowColor.rgb * _FlowIntensity, carrierWave * axialCore * 0.65);
+
                 float alphaMul = lerp(1.0, _GhostAlphaMul, _GhostMode);
-                col.rgb *= 0.75 + proceduralBand * 0.75;
-                col.a = saturate(_BaseAlpha + max(tex.a, proceduralBand) * centerGlow * _FlowIntensity) * alphaMul;
-                return col;
+                carrier.a = saturate(pipeBody.a + carrierWave * axialCore * 0.35) * alphaMul;
+
+                return carrier;
             }
             ENDCG
         }

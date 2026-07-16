@@ -3,21 +3,38 @@ using UnityEngine;
 /// <summary>
 /// Shared flow classification used by the automatic pipe network and by
 /// per-pipe manual overrides. Kept separate so Inspector dropdowns are stable.
+/// Compatibility aliases are included so older runtime scripts still compile.
 /// </summary>
 public enum PlantFlowKind
 {
     Hydrogen,
+    H2 = Hydrogen,
+
     HydrogenFromStorage,
+
     CarbonDioxide,
+    CO2 = CarbonDioxide,
+
     RichAmine,
     LeanAmine,
     RecycleGas,
     MixedFeed,
+
     SyngasCold,
+
     SyngasHeated,
+    SyngasHot = SyngasHeated,
+    HotSyngas = SyngasHeated,
+
     ReactorEffluent,
+
     CrudeMethanolVapourLiquid,
+    CrudeMethanol = CrudeMethanolVapourLiquid,
+    CrudeMeOH = CrudeMethanolVapourLiquid,
+
     LiquidCrudeMethanol,
+    LiqCrudeMeOH = LiquidCrudeMethanol,
+
     MethanolProduct
 }
 
