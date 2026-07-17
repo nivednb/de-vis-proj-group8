@@ -7,7 +7,7 @@ using UnityEngine.Rendering;
 ///
 /// It finds the manually renamed pipe meshes, applies semi-transparent
 /// process-specific flow materials, adds dense animated flow bands, configures
-/// reactor transparency, and creates an internal reactor flow/catalyst visual.
+/// reactor transparency, and keeps the pipe-flow visualization active.
 ///
 /// Manual adjustment:
 /// - Edit route values in this component at runtime, or
@@ -30,7 +30,6 @@ public class FinalPlantFlowRuntime : MonoBehaviour
     [Header("Reactor Visuals")]
     public bool configureTransparentReactor = true;
     [Range(0.05f, 0.75f)] public float reactorShellAlpha = 0.26f;
-    public bool addInternalReactorSimulation = true;
     public bool animateCatalystCondition = true;
 
     [Header("Routes - editable for manual correction")]
@@ -103,13 +102,7 @@ public class FinalPlantFlowRuntime : MonoBehaviour
         {
             ConfigureReactorTransparency(sceneObjects);
         }
-
-        if (addInternalReactorSimulation)
-        {
-            ConfigureReactorInternalFlow(sceneObjects);
-        }
-
-        Debug.Log("Final MSc flow simulation configured " + configuredPipes + " pipes.");
+Debug.Log("Final MSc flow simulation configured " + configuredPipes + " pipes.");
     }
 
     private void ConfigurePipe(GameObject pipe, PlantFlowRouteSettings route)
@@ -177,9 +170,18 @@ public class FinalPlantFlowRuntime : MonoBehaviour
         animator.isGhostSupply = false;
         animator.Apply();
 
+        // Species are encoded as soft UV tracers in PipeFlow.shader. Disable the
+        // old mesh-sampled square particles, including objects surviving hot reload.
         PipeFlowAccent accent = pipe.GetComponent<PipeFlowAccent>();
-        if (accent == null) accent = pipe.AddComponent<PipeFlowAccent>();
-        accent.Configure(renderer, flowKind, color, Mathf.Clamp01(intensity * 0.55f));
+        if (accent != null) accent.enabled = false;
+        foreach (ParticleSystem obsolete in pipe.GetComponentsInChildren<ParticleSystem>(true))
+        {
+            if (obsolete.name.StartsWith("Gas Species") || obsolete.name == "Mesh Flow Sparkles")
+            {
+                obsolete.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                obsolete.gameObject.SetActive(false);
+            }
+        }
     }
 
     private Material CreatePipeMaterial(PlantFlowKind kind, Color color, float speed, float density, float alpha, float intensity, float sharpness)
@@ -320,25 +322,6 @@ public class FinalPlantFlowRuntime : MonoBehaviour
         }
     }
 
-    private void ConfigureReactorInternalFlow(Dictionary<string, GameObject> sceneObjects)
-    {
-        GameObject reactor = FindFirstObject(sceneObjects, "Reactor base model", "reactor base model", "reactor");
-        if (reactor == null)
-        {
-            Debug.LogWarning("Final reactor flow: reactor object not found.");
-            return;
-        }
-
-        ReactorInternalFlowRuntime internalFlow = reactor.GetComponent<ReactorInternalFlowRuntime>();
-        if (internalFlow == null)
-        {
-            internalFlow = reactor.AddComponent<ReactorInternalFlowRuntime>();
-        }
-
-        internalFlow.animateCatalystCondition = animateCatalystCondition;
-        internalFlow.ConfigureFromReactorBounds();
-    }
-
     private static GameObject FindFirstObject(Dictionary<string, GameObject> sceneObjects, params string[] contains)
     {
         foreach (GameObject obj in sceneObjects.Values)
@@ -439,3 +422,5 @@ public class FinalPlantFlowRuntime : MonoBehaviour
         }
     }
 }
+
+

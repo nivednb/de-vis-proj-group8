@@ -1,6 +1,5 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 public class CameraController : MonoBehaviour
 {
@@ -25,7 +24,7 @@ public class CameraController : MonoBehaviour
     [Header("UI")]
     public Button nextButton;
     public Button prevButton;
-    public TMP_Text moduleNameLabel;
+    public Component moduleNameLabel;
 
     [Header("Smooth Speed")]
     public float smoothSpeed = 5f;
@@ -58,7 +57,7 @@ public class CameraController : MonoBehaviour
         transform.position = targetPosition;
         transform.rotation = targetRotation;
 
-        if (moduleNameLabel) moduleNameLabel.text = m.moduleName;
+        SetModuleNameLabel(m.moduleName);
     }
 
     public void NextModule()
@@ -74,4 +73,15 @@ public class CameraController : MonoBehaviour
     }
 
     
+    void SetModuleNameLabel(string value)
+    {
+        if (moduleNameLabel == null) return;
+
+        System.Reflection.PropertyInfo textProperty = moduleNameLabel.GetType().GetProperty("text");
+        if (textProperty != null && textProperty.CanWrite)
+        {
+            textProperty.SetValue(moduleNameLabel, value, null);
+        }
+    }
 }
+

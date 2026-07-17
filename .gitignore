@@ -1,4 +1,3 @@
-# Unity generated folders
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
@@ -6,35 +5,36 @@
 [Bb]uilds/
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
-Assets/_Recovery/
+[Mm]emoryCaptures/
+[Rr]ecordings/
 
-# Visual Studio / Rider / local IDE files
+# IDE and operating-system files
 .vs/
 .vscode/
 .idea/
 *.csproj
 *.sln
+*.suo
 *.user
 *.userprefs
 *.pidb
 *.booproj
 *.svd
-*.tmp
-
-# OS files
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Unity crash/debug output
+# Unity crash and diagnostic output
 sysinfo.txt
-*.stackdump
+crashlytics-build.properties
+*.log
 
-# Large local archives / exported builds
-*.zip
-*.7z
-*.rar
-*.exe
-*.app
-*.apk
-*.aab
+# Local verification captures and temporary backups
+/*.png
+/Scripts_N_Backup_Original/
+
+# Asset Store tools
+/Assets/AssetStoreTools*

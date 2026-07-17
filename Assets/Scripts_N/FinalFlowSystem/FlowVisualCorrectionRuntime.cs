@@ -73,12 +73,7 @@ public sealed class FlowVisualCorrectionRuntime : MonoBehaviour
         Transform reactorRoot = FindSceneTransformContaining("reactor base model");
         if (reactorRoot == null) reactorRoot = FindSceneTransformContaining("reactor");
         if (reactorRoot == null) return;
-
-        // ReactorInternalFlowRuntime already owns the catalyst material and pulse.
-        // A second controller would overwrite its transparency every frame.
-        if (reactorRoot.GetComponent<ReactorInternalFlowRuntime>() != null) return;
-
-        Renderer catalyst = FindNamedCatalystRenderer(reactorRoot);
+Renderer catalyst = FindNamedCatalystRenderer(reactorRoot);
 
         if (catalyst == null) return;
 
@@ -534,3 +529,4 @@ static class FlowVisualCorrectionRuntimeMaterialCache
         return material;
     }
 }
+

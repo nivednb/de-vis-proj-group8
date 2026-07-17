@@ -24,6 +24,10 @@ public class PipeFlowAnimator : MonoBehaviour
     public bool forceFlowOff;
 
     static readonly int FlowColorId = Shader.PropertyToID("_FlowColor");
+    static readonly int SpeciesColorAId = Shader.PropertyToID("_SpeciesColorA");
+    static readonly int SpeciesColorBId = Shader.PropertyToID("_SpeciesColorB");
+    static readonly int SpeciesColorCId = Shader.PropertyToID("_SpeciesColorC");
+    static readonly int SpeciesCountId = Shader.PropertyToID("_SpeciesCount");
     static readonly int FlowSpeedId = Shader.PropertyToID("_FlowSpeed");
     static readonly int FlowOffsetId = Shader.PropertyToID("_FlowOffset");
     static readonly int TilingId = Shader.PropertyToID("_Tiling");
@@ -89,6 +93,32 @@ public class PipeFlowAnimator : MonoBehaviour
 
         cachedRenderer.GetPropertyBlock(propertyBlock);
         propertyBlock.SetColor(FlowColorId, flowColor);
+        Color speciesA = flowColor, speciesB = flowColor, speciesC = flowColor;
+        float speciesCount = 1f;
+        if (flowKind == PlantFlowKind.MixedFeed || flowKind == PlantFlowKind.SyngasCold || flowKind == PlantFlowKind.SyngasHeated)
+        {
+            speciesA = new Color(0.20f, 1.00f, 0.28f, 1f);
+            speciesB = new Color(0.72f, 0.94f, 1.00f, 1f);
+            speciesC = new Color(1.00f, 0.82f, 0.16f, 1f);
+            speciesCount = 3f;
+        }
+        else if (flowKind == PlantFlowKind.ReactorEffluent)
+        {
+            speciesA = new Color(0.68f, 0.24f, 1.00f, 1f);
+            speciesB = new Color(0.15f, 0.70f, 1.00f, 1f);
+            speciesC = new Color(0.20f, 1.00f, 0.28f, 1f);
+            speciesCount = 3f;
+        }
+        else if (flowKind == PlantFlowKind.RecycleGas || flowKind == PlantFlowKind.CrudeMethanolVapourLiquid)
+        {
+            speciesA = new Color(0.68f, 0.24f, 1.00f, 1f);
+            speciesB = new Color(0.15f, 0.70f, 1.00f, 1f);
+            speciesCount = 2f;
+        }
+        propertyBlock.SetColor(SpeciesColorAId, speciesA);
+        propertyBlock.SetColor(SpeciesColorBId, speciesB);
+        propertyBlock.SetColor(SpeciesColorCId, speciesC);
+        propertyBlock.SetFloat(SpeciesCountId, speciesCount);
         propertyBlock.SetFloat(FlowSpeedId, flowEnabled ? signedSpeed : 0f);
         propertyBlock.SetFloat(FlowOffsetId, flowOffset);
         propertyBlock.SetFloat(TilingId, density);

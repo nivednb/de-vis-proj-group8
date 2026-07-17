@@ -1,6 +1,5 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.InputSystem;
-using TMPro;
 
 /// <summary>
 /// Orbits the camera around a fixed pivot point on the surface of an imaginary sphere.
@@ -22,14 +21,14 @@ public class OrbitCameraController : MonoBehaviour
     public Transform[] focusPoints;
     [Tooltip("Optional: orbit distance to use for each entry in focusPoints (same length/order). Leave empty to keep the current distance when switching focus.")]
     public float[] focusDistances;
-    [Tooltip("Optional: orthographic size (visual zoom) to use for each entry, same length/order as focusPoints. Only matters when useOrthographic is true — 'distance' alone does NOT visually zoom in orthographic mode, this field is what actually controls zoom level per module.")]
+    [Tooltip("Optional: orthographic size (visual zoom) to use for each entry, same length/order as focusPoints. Only matters when useOrthographic is true â€” 'distance' alone does NOT visually zoom in orthographic mode, this field is what actually controls zoom level per module.")]
     public float[] focusOrthoSizes;
     [Tooltip("Optional: vertical offset (in Unity units) added to each focusPoints entry, since most module meshes have their pivot at the base/floor rather than their visual center. Same length/order as focusPoints. E.g. 8 for a tall column, 2 for a short tank.")]
     public float[] focusHeightOffsets;
     [Tooltip("Optional: name shown on-screen for each module (same length/order as focusPoints). Hook up moduleNameText below to display it.")]
     public string[] focusNames;
-    [Tooltip("Assign a TextMeshProUGUI element here to show the current module's name on screen. Leave empty to skip.")]
-    public TextMeshProUGUI moduleNameText;
+    [Tooltip("Assign any text component with a public text property here to show the current module name. Leave empty to skip.")]
+    public Component moduleNameText;
     [Tooltip("Text shown when focus index is -1 (whole-plant view).")]
     public string wholePlantLabel = "Full Plant Overview";
     [Tooltip("How long the camera takes to glide to a newly selected focus point, in seconds.")]
@@ -44,6 +43,7 @@ public class OrbitCameraController : MonoBehaviour
     public float azimuthSpeed = 60f;   // degrees per second, left/right arrows
     public float elevationSpeed = 45f; // degrees per second, up/down arrows
     public float zoomSpeed = 40f;      // units per second, for +/- or scroll
+    public float panSpeed = 30f;       // world units per second, A/D translate left/right
 
     [Header("Elevation clamp (degrees, avoids flipping over the poles)")]
     [Tooltip("Keep a degree or two short of 90 (e.g. 89) to avoid gimbal-flip at the exact pole.")]
@@ -63,7 +63,7 @@ public class OrbitCameraController : MonoBehaviour
     private float _elevation;
     private Camera _cam;
 
-    // Smoothed focus target — lets the camera glide between modules instead of snapping
+    // Smoothed focus target â€” lets the camera glide between modules instead of snapping
     private Vector3 _currentTarget;
     private Vector3 _targetFrom;
     private Vector3 _targetTo;
@@ -78,7 +78,7 @@ public class OrbitCameraController : MonoBehaviour
     private float _orthoTo;
     private int _focusIndex = -1; // -1 = using 'pivot'/worldOrigin (whole-plant view)
 
-    // "Home" view — captured once at Start from the Inspector's start fields, and used
+    // "Home" view â€” captured once at Start from the Inspector's start fields, and used
     // to snap exactly back to the original starting view whenever focus returns to -1
     // (Full Plant Overview), rather than just keeping whatever angle you'd orbited to.
     private float _homeAzimuth;
@@ -97,7 +97,7 @@ public class OrbitCameraController : MonoBehaviour
             if (useOrthographic) _cam.orthographicSize = orthographicSize;
         }
 
-        // Capture the Inspector's starting values as "home" — CycleFocus uses these
+        // Capture the Inspector's starting values as "home" â€” CycleFocus uses these
         // whenever focus returns to -1 (Full Plant Overview) so it's an exact return,
         // not just "wherever you happened to be orbiting."
         _homeAzimuth = startAzimuth;
@@ -124,7 +124,7 @@ public class OrbitCameraController : MonoBehaviour
     /// Right-click the component header in the Inspector and choose this to capture
     /// whatever view you've manually framed (by hand-dragging the camera in the Scene
     /// view, or wherever Play has it parked) as the new starting/home view. Works in
-    /// both Edit mode and Play mode — it just reads the camera's current transform and
+    /// both Edit mode and Play mode â€” it just reads the camera's current transform and
     /// orthographic size relative to the pivot, and writes the equivalent
     /// azimuth/elevation/distance back into the Inspector fields above.
     /// </summary>
@@ -136,7 +136,7 @@ public class OrbitCameraController : MonoBehaviour
         float d = rel.magnitude;
         if (d < 0.001f)
         {
-            Debug.LogWarning("Camera is sitting exactly on the pivot — move it first, then capture.");
+            Debug.LogWarning("Camera is sitting exactly on the pivot â€” move it first, then capture.");
             return;
         }
 
@@ -150,7 +150,7 @@ public class OrbitCameraController : MonoBehaviour
         var cam = _cam != null ? _cam : GetComponent<Camera>();
         if (cam != null) orthographicSize = cam.orthographicSize;
 
-        Debug.Log($"Captured home view — Azimuth: {az:F2}, Elevation: {el:F2}, Distance: {d:F2}, OrthoSize: {orthographicSize:F2}. These are now saved in the Inspector's Starting Angles / Sphere Radius / Projection fields.");
+        Debug.Log($"Captured home view â€” Azimuth: {az:F2}, Elevation: {el:F2}, Distance: {d:F2}, OrthoSize: {orthographicSize:F2}. These are now saved in the Inspector's Starting Angles / Sphere Radius / Projection fields.");
     }
 
     void Update()
@@ -168,6 +168,22 @@ public class OrbitCameraController : MonoBehaviour
             if (kb.leftArrowKey.wasPressedThisFrame) CycleFocus(-1);
         }
 
+        // Read manual orbit input before advancing a focus glide. A/D are aliases for
+        // Left/Right so orbiting still works when the editor UI consumes arrow keys.
+        // Manual input intentionally cancels an in-progress focus glide.
+        bool orbitLeft = !shiftHeld && kb.leftArrowKey.isPressed;
+        bool orbitRight = !shiftHeld && kb.rightArrowKey.isPressed;
+        bool orbitUp = !shiftHeld && (kb.upArrowKey.isPressed || kb.eKey.isPressed);
+        bool orbitDown = !shiftHeld && (kb.downArrowKey.isPressed || kb.qKey.isPressed);
+        bool panLeft = !shiftHeld && kb.aKey.isPressed;
+        bool panRight = !shiftHeld && kb.dKey.isPressed;
+        bool hasManualOrbitInput = orbitLeft || orbitRight || orbitUp || orbitDown || panLeft || panRight;
+        if (hasManualOrbitInput && _targetBlend < 1f)
+        {
+            _targetBlend = 1f;
+            _targetTo = _currentTarget;
+        }
+
         // Advance the smooth glide toward whichever focus point was last selected
         if (_targetBlend < 1f)
         {
@@ -181,20 +197,34 @@ public class OrbitCameraController : MonoBehaviour
             if (useOrthographic && _cam != null) _cam.orthographicSize = orthographicSize;
 
             UpdateCameraPosition();
-            return; // skip manual input entirely while gliding — avoids fighting the lerp
+            return; // skip manual input entirely while gliding â€” avoids fighting the lerp
         }
 
         _currentTarget = _targetTo;
 
-        // Only orbit with plain arrow keys (no Shift) — Shift+arrow is reserved for focus switching above
+        // A/D translate the view left/right without rotating it. Move the orbit target
+        // along the camera's screen-horizontal axis and retain it as the new target.
+        float panAxis = (panRight ? 1f : 0f) - (panLeft ? 1f : 0f);
+        if (Mathf.Abs(panAxis) > 0.01f)
+        {
+            Vector3 screenRight = transform.right;
+            screenRight.y = 0f;
+            if (screenRight.sqrMagnitude < 0.0001f) screenRight = Vector3.right;
+            screenRight.Normalize();
+            float adaptivePanSpeed = useOrthographic ? Mathf.Max(panSpeed, orthographicSize * 0.75f) : panSpeed;
+            Vector3 panDelta = screenRight * (panAxis * adaptivePanSpeed * Time.deltaTime);
+            _currentTarget += panDelta;
+            _targetTo = _currentTarget;
+        }
+        // Only orbit with plain arrow keys (no Shift) â€” Shift+arrow is reserved for focus switching above
         float horizontal = 0f;
         float vertical = 0f;
         if (!shiftHeld)
         {
-            if (kb.rightArrowKey.isPressed) horizontal += 1f;
-            if (kb.leftArrowKey.isPressed) horizontal -= 1f;
-            if (kb.upArrowKey.isPressed) vertical += 1f;
-            if (kb.downArrowKey.isPressed) vertical -= 1f;
+            if (orbitRight) horizontal += 1f;
+            if (orbitLeft) horizontal -= 1f;
+            if (orbitUp) vertical += 1f;
+            if (orbitDown) vertical -= 1f;
         }
 
         _azimuth += horizontal * azimuthSpeed * Time.deltaTime;
@@ -276,7 +306,7 @@ public class OrbitCameraController : MonoBehaviour
             {
                 newTarget += Vector3.up * focusHeightOffsets[_focusIndex];
             }
-            // Keep current orbit angle when jumping between modules — only position/zoom change
+            // Keep current orbit angle when jumping between modules â€” only position/zoom change
             newAz = _azimuth;
             newEl = _elevation;
             newDistance = (focusDistances != null && _focusIndex < focusDistances.Length && focusDistances[_focusIndex] > 0f)
@@ -306,18 +336,28 @@ public class OrbitCameraController : MonoBehaviour
 
         if (_focusIndex == -1)
         {
-            moduleNameText.text = wholePlantLabel;
+            SetModuleNameText(wholePlantLabel);
         }
         else if (focusNames != null && _focusIndex < focusNames.Length && !string.IsNullOrEmpty(focusNames[_focusIndex]))
         {
-            moduleNameText.text = focusNames[_focusIndex];
+            SetModuleNameText(focusNames[_focusIndex]);
         }
         else if (focusPoints[_focusIndex] != null)
         {
-            moduleNameText.text = focusPoints[_focusIndex].name; // fallback: use the GameObject's own name
+            SetModuleNameText(focusPoints[_focusIndex].name); // fallback: use the GameObject's own name
         }
     }
 
+    void SetModuleNameText(string value)
+    {
+        if (moduleNameText == null) return;
+
+        System.Reflection.PropertyInfo textProperty = moduleNameText.GetType().GetProperty("text");
+        if (textProperty != null && textProperty.CanWrite)
+        {
+            textProperty.SetValue(moduleNameText, value, null);
+        }
+    }
 #if UNITY_EDITOR
     void OnDrawGizmosSelected()
     {
@@ -343,3 +383,7 @@ public class OrbitCameraController : MonoBehaviour
     }
 #endif
 }
+
+
+
+
