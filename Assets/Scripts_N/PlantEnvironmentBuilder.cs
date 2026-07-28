@@ -20,6 +20,8 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [SerializeField] private bool rebuildOnStart = true;
     [SerializeField] private float minimumSiteWidth = 78f;
     [SerializeField] private float minimumSiteDepth = 46f;
+    [SerializeField] private float maximumSiteWidth = 118f;
+    [SerializeField] private float maximumSiteDepth = 72f;
     [SerializeField] private float sitePadding = 16f;
     [SerializeField] private float groundThickness = 0.25f;
     [SerializeField] private float environmentYOffset = -0.08f;
@@ -31,6 +33,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [SerializeField] private bool createUtilityZone = true;
     [SerializeField] private bool createStorageContainment = true;
     [SerializeField] private bool createIndustrialBackground = true;
+    [SerializeField] private Color industrialBackdropColor = new Color(0.50f, 0.61f, 0.72f, 1f);
 
     private Material concreteMaterial;
     private Material asphaltMaterial;
@@ -71,15 +74,17 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     {
         ClearEnvironment();
         CreateMaterials();
+        ConfigureIndustrialBackdrop();
 
         Bounds plantBounds = CalculatePlantBounds();
         Vector3 center = plantBounds.center;
-        float siteWidth = Mathf.Max(minimumSiteWidth, plantBounds.size.x + sitePadding * 2f);
-        float siteDepth = Mathf.Max(minimumSiteDepth, plantBounds.size.z + sitePadding * 2f);
+        float siteWidth = Mathf.Clamp(plantBounds.size.x + sitePadding * 2f, minimumSiteWidth, maximumSiteWidth);
+        float siteDepth = Mathf.Clamp(plantBounds.size.z + sitePadding * 2f, minimumSiteDepth, maximumSiteDepth);
         // Keep the generated site at floor level. Some runtime objects such as flow
         // lines and UI helpers have high renderer bounds, which previously caused a
         // giant slab to be generated through the middle of the plant.
         float baseY = Mathf.Min(plantBounds.min.y + environmentYOffset, -0.12f);
+        Debug.Log($"PlantEnvironmentBuilder: site {siteWidth:F1} x {siteDepth:F1} m around process bounds {plantBounds.size}.");
 
         GameObject root = new GameObject(EnvironmentRootName);
 
@@ -119,6 +124,25 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         SuppressLargeFloatingPlanes(baseY);
     }
 
+    private void ConfigureIndustrialBackdrop()
+    {
+        Camera[] cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (Camera sceneCamera in cameras)
+        {
+            if (sceneCamera == null || sceneCamera.targetTexture != null)
+            {
+                continue;
+            }
+
+            // The lower hemisphere of Unity's procedural skybox appears as a huge
+            // dark sloping polygon from the elevated plant camera. A controlled
+            // blue-grey clear colour keeps every orbit angle clean and lets the
+            // generated industrial structures define the site horizon.
+            sceneCamera.clearFlags = CameraClearFlags.SolidColor;
+            sceneCamera.backgroundColor = industrialBackdropColor;
+        }
+    }
+
     [ContextMenu("Clear Plant Environment")]
     public void ClearEnvironment()
     {
@@ -154,7 +178,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
 
         foreach (Renderer renderer in renderers)
         {
-            if (renderer == null || ShouldIgnoreRenderer(renderer))
+            if (renderer == null || IsLegacyLargePlane(renderer) || ShouldIgnoreRenderer(renderer))
             {
                 continue;
             }
@@ -176,6 +200,22 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         }
 
         return bounds;
+    }
+
+    private bool IsLegacyLargePlane(Renderer renderer)
+    {
+        Bounds bounds = renderer.bounds;
+        if (renderer.gameObject.name.Equals("Plane", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        bool oversizedFlatSurface =
+            bounds.size.x > 24f &&
+            bounds.size.z > 8f &&
+            bounds.size.y < 1.4f;
+        return oversizedFlatSurface &&
+            (LooksLikeLoosePlane(renderer.transform) || bounds.size.x > maximumSiteWidth);
     }
 
     private bool ShouldIgnoreRenderer(Renderer renderer)
@@ -459,20 +499,32 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
         foreach (Renderer renderer in renderers)
         {
-            if (renderer == null || ShouldIgnoreRenderer(renderer))
+            if (renderer == null)
             {
                 continue;
             }
 
             Bounds bounds = renderer.bounds;
-            bool largeFlatSlab = bounds.size.x > 24f && bounds.size.z > 8f && bounds.size.y < 1.4f;
-            bool floatingAbovePlant = bounds.center.y > baseY + 2.0f;
-            bool likelyScenePlane = LooksLikeLoosePlane(renderer.transform);
-
-            if (largeFlatSlab && floatingAbovePlant && likelyScenePlane)
+            bool explicitLegacyPlane = renderer.gameObject.name.Equals("Plane", System.StringComparison.OrdinalIgnoreCase);
+            if (explicitLegacyPlane)
             {
                 renderer.gameObject.SetActive(false);
-                Debug.Log($"PlantEnvironmentBuilder: disabled likely floating plane '{renderer.gameObject.name}' at y={bounds.center.y:F2}.");
+                Debug.Log($"PlantEnvironmentBuilder: replaced explicit legacy plane '{renderer.gameObject.name}' ({bounds.size}) with the generated industrial site.");
+                continue;
+            }
+
+            if (ShouldIgnoreRenderer(renderer))
+            {
+                continue;
+            }
+
+            bool largeFlatSlab = bounds.size.x > 24f && bounds.size.z > 8f && bounds.size.y < 1.4f;
+            bool likelyScenePlane = LooksLikeLoosePlane(renderer.transform);
+
+            if (largeFlatSlab && (likelyScenePlane || bounds.size.x > maximumSiteWidth))
+            {
+                renderer.gameObject.SetActive(false);
+                Debug.Log($"PlantEnvironmentBuilder: replaced legacy large plane '{renderer.gameObject.name}' ({bounds.size}) with the generated industrial site.");
             }
         }
     }

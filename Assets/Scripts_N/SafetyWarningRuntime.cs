@@ -56,8 +56,11 @@ public class SafetyWarningRuntime : MonoBehaviour
         canvasObject.transform.SetParent(transform, false);
         canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 68;
-        canvasObject.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvas.sortingOrder = 72;
+        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1536f, 1024f);
+        scaler.matchWidthOrHeight = 0.5f;
 
         GameObject panel = new GameObject("Warning Panel");
         panel.transform.SetParent(canvasObject.transform, false);
@@ -65,8 +68,8 @@ public class SafetyWarningRuntime : MonoBehaviour
         panelRect.anchorMin = new Vector2(0f, 1f);
         panelRect.anchorMax = new Vector2(0f, 1f);
         panelRect.pivot = new Vector2(0f, 1f);
-        panelRect.anchoredPosition = new Vector2(18f, -18f);
-        panelRect.sizeDelta = new Vector2(520f, 58f);
+        panelRect.anchoredPosition = new Vector2(16f, -88f);
+        panelRect.sizeDelta = new Vector2(710f, 48f);
         panelImage = panel.AddComponent<Image>();
         panelImage.raycastTarget = false;
         panelImage.color = new Color(0.12f, 0.04f, 0.02f, 0.82f);
@@ -75,7 +78,7 @@ public class SafetyWarningRuntime : MonoBehaviour
         textObject.transform.SetParent(panel.transform, false);
         warningText = textObject.AddComponent<Text>();
         warningText.font = font;
-        warningText.fontSize = 13;
+        warningText.fontSize = 12;
         warningText.fontStyle = FontStyle.Bold;
         warningText.alignment = TextAnchor.MiddleLeft;
         warningText.horizontalOverflow = HorizontalWrapMode.Wrap;

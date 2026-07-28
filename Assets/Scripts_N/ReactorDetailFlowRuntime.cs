@@ -26,8 +26,13 @@ public class ReactorDetailFlowRuntime : MonoBehaviour
     private Material waterMaterial;
     private Material catalystMaterial;
     private Material glowMaterial;
+    private Material cutawayShellMaterial;
     private Transform catalystBed;
     private Transform temperatureGlow;
+    private OrbitCameraController cameraController;
+    private bool cutawayActive;
+    private readonly List<Renderer> shellRenderers = new List<Renderer>();
+    private readonly List<Material[]> shellOriginalMaterials = new List<Material[]>();
 
     private readonly List<ParticlePoint> h2Particles = new List<ParticlePoint>();
     private readonly List<ParticlePoint> co2Particles = new List<ParticlePoint>();
@@ -60,6 +65,8 @@ public class ReactorDetailFlowRuntime : MonoBehaviour
         {
             return;
         }
+
+        UpdateCutawayState();
 
         PlantProcessSimulator.ProcessSnapshot snapshot = PlantProcessSimulator.Instance != null
             ? PlantProcessSimulator.Instance.Current
@@ -97,6 +104,9 @@ public class ReactorDetailFlowRuntime : MonoBehaviour
         waterMaterial = CreateMaterial("Generated Reactor Water Flow", new Color(0.1f, 0.58f, 1f, 1f));
         catalystMaterial = CreateMaterial("Generated Reactor Catalyst Bed", new Color(1f, 0.64f, 0.16f, 0.82f));
         glowMaterial = CreateMaterial("Generated Reactor Temperature Glow", new Color(1f, 0.84f, 0.2f, 0.18f));
+        cutawayShellMaterial = CreateMaterial("Generated Reactor Cutaway Shell", new Color(0.58f, 0.72f, 0.82f, 0.2f));
+        cameraController = FindFirstObjectByType<OrbitCameraController>();
+        CacheShellRenderers();
 
         for (int i = 0; i < h2ParticleCount; i++)
             h2Particles.Add(CreateParticle("H2 feed particle", h2Material, i / (float)h2ParticleCount));
@@ -126,6 +136,54 @@ public class ReactorDetailFlowRuntime : MonoBehaviour
         if (temperatureGlow != null) DestroyObject(temperatureGlow.gameObject);
         catalystBed = null;
         temperatureGlow = null;
+        RestoreShellMaterials();
+        shellRenderers.Clear();
+        shellOriginalMaterials.Clear();
+    }
+
+    private void CacheShellRenderers()
+    {
+        shellRenderers.Clear();
+        shellOriginalMaterials.Clear();
+        if (reactorTarget == null) return;
+
+        foreach (Renderer renderer in reactorTarget.GetComponentsInChildren<Renderer>(true))
+        {
+            shellRenderers.Add(renderer);
+            shellOriginalMaterials.Add(renderer.sharedMaterials);
+        }
+    }
+
+    private void UpdateCutawayState()
+    {
+        if (cameraController == null) cameraController = FindFirstObjectByType<OrbitCameraController>();
+        bool shouldShow = cameraController != null && cameraController.CurrentFocusIndex == 7;
+        if (shouldShow == cutawayActive || cutawayShellMaterial == null) return;
+
+        cutawayActive = shouldShow;
+        for (int i = 0; i < shellRenderers.Count; i++)
+        {
+            Renderer renderer = shellRenderers[i];
+            if (renderer == null) continue;
+            if (!cutawayActive)
+            {
+                renderer.sharedMaterials = shellOriginalMaterials[i];
+                continue;
+            }
+
+            Material[] transparent = new Material[Mathf.Max(1, renderer.sharedMaterials.Length)];
+            for (int m = 0; m < transparent.Length; m++) transparent[m] = cutawayShellMaterial;
+            renderer.sharedMaterials = transparent;
+        }
+    }
+
+    private void RestoreShellMaterials()
+    {
+        for (int i = 0; i < shellRenderers.Count && i < shellOriginalMaterials.Count; i++)
+        {
+            if (shellRenderers[i] != null) shellRenderers[i].sharedMaterials = shellOriginalMaterials[i];
+        }
+        cutawayActive = false;
     }
 
     private void ClearParticles(List<ParticlePoint> particles)
@@ -300,9 +358,15 @@ public class ReactorDetailFlowRuntime : MonoBehaviour
 
     private Material CreateMaterial(string materialName, Color color)
     {
-        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        Shader shader = Shader.Find("PtMeOH/Runtime Particle Unlit");
+        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
         if (shader == null) shader = Shader.Find("Unlit/Color");
         if (shader == null) shader = Shader.Find("Standard");
+        if (shader == null)
+        {
+            Debug.LogError("ReactorDetailFlowRuntime: no compatible particle shader is available.");
+            return null;
+        }
 
         Material material = new Material(shader) { name = materialName };
         SetMaterialColor(material, color);

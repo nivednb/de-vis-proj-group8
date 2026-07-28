@@ -107,8 +107,8 @@ public class PlantProcessSimulator : MonoBehaviour
     private float manualCoolingWaterTemperature = 24f;
     private float manualSeparatorTemperature = 34f;
     private float manualRecycleRatio = 65f;
-    private float manualRefluxRatio = 2.2f;
-    private float manualDistillationReboilerTemp = 92f;
+    private float manualRefluxRatio = 3.2f;
+    private float manualDistillationReboilerTemp = 98f;
 
     private bool manualTimelineEnabled;
     private bool manualTemperatureEnabled;

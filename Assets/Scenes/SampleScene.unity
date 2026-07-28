@@ -4837,7 +4837,7 @@ MonoBehaviour:
   maxElevation: 89
   useOrthographic: 1
   orthographicSize: 40
-  startAzimuth: 0
+  startAzimuth: 20
   startElevation: 20
 --- !u!1001 &331483272
 PrefabInstance:

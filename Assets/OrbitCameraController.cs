@@ -24,6 +24,8 @@ public class OrbitCameraController : MonoBehaviour
     public float[] focusDistances;
     [Tooltip("Optional: orthographic size (visual zoom) to use for each entry, same length/order as focusPoints. Only matters when useOrthographic is true — 'distance' alone does NOT visually zoom in orthographic mode, this field is what actually controls zoom level per module.")]
     public float[] focusOrthoSizes;
+    [Tooltip("Close-up orthographic size used when a focus point has no explicit value.")]
+    public float defaultFocusOrthoSize = 12f;
     [Tooltip("Optional: vertical offset (in Unity units) added to each focusPoints entry, since most module meshes have their pivot at the base/floor rather than their visual center. Same length/order as focusPoints. E.g. 8 for a tall column, 2 for a short tank.")]
     public float[] focusHeightOffsets;
     [Tooltip("Optional: name shown on-screen for each module (same length/order as focusPoints). Hook up moduleNameText below to display it.")]
@@ -77,6 +79,8 @@ public class OrbitCameraController : MonoBehaviour
     private float _orthoFrom;
     private float _orthoTo;
     private int _focusIndex = -1; // -1 = using 'pivot'/worldOrigin (whole-plant view)
+
+    public int CurrentFocusIndex => _focusIndex;
 
     // "Home" view — captured once at Start from the Inspector's start fields, and used
     // to snap exactly back to the original starting view whenever focus returns to -1
@@ -208,7 +212,9 @@ public class OrbitCameraController : MonoBehaviour
 
         if (useOrthographic && _cam != null)
         {
-            orthographicSize = Mathf.Clamp(orthographicSize + zoomDelta * 0.5f, 5f, 150f);
+            float minOrtho = _focusIndex >= 0 ? 7f : 24f;
+            float maxOrtho = _focusIndex >= 0 ? Mathf.Max(18f, defaultFocusOrthoSize * 1.75f) : 52f;
+            orthographicSize = Mathf.Clamp(orthographicSize + zoomDelta * 0.5f, minOrtho, maxOrtho);
             _cam.orthographicSize = orthographicSize;
         }
         else
@@ -239,6 +245,30 @@ public class OrbitCameraController : MonoBehaviour
     /// <summary>Hook this up to your "Previous" button's OnClick() in the Inspector.</summary>
     public void FocusPrevious() => CycleFocus(-1);
 
+    /// <summary>Returns to the saved whole-plant view.</summary>
+    public void FocusOverview()
+    {
+        if (_focusIndex == -1)
+        {
+            BeginFocusTransition(-1);
+            return;
+        }
+
+        BeginFocusTransition(-1);
+    }
+
+    /// <summary>Focuses a configured module by its zero-based focus-point index.</summary>
+    public void FocusModule(int index)
+    {
+        if (focusPoints == null || index < 0 || index >= focusPoints.Length)
+        {
+            Debug.LogWarning($"Cannot focus module {index}: focus point is not configured.");
+            return;
+        }
+
+        BeginFocusTransition(index);
+    }
+
     /// <summary>
     /// Cycles forward (+1) or backward (-1) through focusPoints. Index -1 is reserved for
     /// the original whole-plant pivot/worldOrigin so Shift+Left from module 0 returns you
@@ -251,6 +281,13 @@ public class OrbitCameraController : MonoBehaviour
         _focusIndex += direction;
         if (_focusIndex >= count) _focusIndex = -1;
         if (_focusIndex < -1) _focusIndex = count - 1;
+
+        BeginFocusTransition(_focusIndex);
+    }
+
+    private void BeginFocusTransition(int focusIndex)
+    {
+        _focusIndex = focusIndex;
 
         Vector3 newTarget;
         float newDistance;
@@ -282,7 +319,7 @@ public class OrbitCameraController : MonoBehaviour
             newDistance = (focusDistances != null && _focusIndex < focusDistances.Length && focusDistances[_focusIndex] > 0f)
                 ? focusDistances[_focusIndex] : distance;
             newOrtho = (focusOrthoSizes != null && _focusIndex < focusOrthoSizes.Length && focusOrthoSizes[_focusIndex] > 0f)
-                ? focusOrthoSizes[_focusIndex] : orthographicSize;
+                ? focusOrthoSizes[_focusIndex] : defaultFocusOrthoSize;
         }
 
         UpdateModuleNameLabel();

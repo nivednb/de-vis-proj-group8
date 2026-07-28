@@ -13,7 +13,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 {
     private const string RuntimeRootName = "Generated Interactive Module Panels";
 
-    [SerializeField] private Vector2 buttonSize = new Vector2(40f, 28f);
+    [SerializeField] private Vector2 buttonSize = new Vector2(28f, 28f);
     [SerializeField] private Vector2 panelSize = new Vector2(390f, 300f);
     [SerializeField] private Vector2 panelOffset = new Vector2(230f, -150f);
 
@@ -40,6 +40,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         Build();
+        SetSelectionVisible(false);
     }
 
     private void LateUpdate()
@@ -103,6 +104,14 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         }
     }
 
+    public void SetSelectionVisible(bool visible)
+    {
+        if (canvas != null)
+        {
+            canvas.gameObject.SetActive(visible);
+        }
+    }
+
     private void CreateCanvas()
     {
         GameObject canvasObject = new GameObject("Interactive Module Canvas");
@@ -110,7 +119,10 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 75;
-        canvasObject.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1536f, 1024f);
+        scaler.matchWidthOrHeight = 0.5f;
         canvasObject.AddComponent<GraphicRaycaster>();
     }
 
@@ -120,6 +132,16 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         if (oldUi != null)
         {
             Destroy(oldUi);
+        }
+
+        Button[] legacyButtons = FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (Button legacyButton in legacyButtons)
+        {
+            if (legacyButton.name.EndsWith("InfoButton", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(legacyButton.name, "GearButton", StringComparison.OrdinalIgnoreCase))
+            {
+                legacyButton.gameObject.SetActive(false);
+            }
         }
     }
 
@@ -157,7 +179,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         image.color = new Color(0.04f, 0.1f, 0.14f, 0.92f);
         button = root.AddComponent<Button>();
 
-        Text eye = CreateText("Eye Icon", root.transform, "VIEW", 12, TextAnchor.MiddleCenter, Color.white);
+        Text eye = CreateText("Eye Icon", root.transform, "i", 16, TextAnchor.MiddleCenter, Color.white);
         eye.fontStyle = FontStyle.Bold;
         Stretch(eye.rectTransform);
         return root;
@@ -230,8 +252,8 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
                 CreateSlider(parent, "Sep. temp", 20f, 65f, 34f, 0, " C", v => Simulator()?.SetSeparatorTemperature(v), -168f);
                 break;
             case "distillation":
-                CreateSlider(parent, "Reflux ratio", 0.5f, 5f, 2.2f, 1, "", v => Simulator()?.SetRefluxRatio(v), -136f);
-                CreateSlider(parent, "Reboiler temp", 70f, 115f, 92f, 0, " C", v => Simulator()?.SetDistillationReboilerTemperature(v), -168f);
+                CreateSlider(parent, "Reflux ratio", 0.5f, 5f, 3.2f, 1, "", v => Simulator()?.SetRefluxRatio(v), -136f);
+                CreateSlider(parent, "Reboiler temp", 70f, 115f, 98f, 0, " C", v => Simulator()?.SetDistillationReboilerTemperature(v), -168f);
                 break;
             case "storage":
                 Button reset = CreateWideButton(parent, "Reset stored methanol", new Vector2(0f, 50f), new Vector2(235f, 30f));
