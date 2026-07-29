@@ -32,6 +32,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     void Start()
     {
         ConfigureRoutes();
+        LightweightReactorVisual.Configure(gameObject);
         EnsureCatalystIndicator();
         simulator = PlantProcessSimulator.Instance != null
             ? PlantProcessSimulator.Instance
@@ -169,8 +170,12 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     {
         float h2KmolH = Mathf.Max(0f, s.h2InputKgH) / 2.016f;
         float co2KmolH = Mathf.Max(0f, s.co2CapturedKgH) / 44.01f;
-        float total = Mathf.Max(.0001f, h2KmolH + co2KmolH);
-        return new Vector3(h2KmolH / total, co2KmolH / total, 0f);
+        // The third channel is an origin tracer for H2-rich recycle gas. Its
+        // effective molecular weight is intentionally approximate because the
+        // recycle contains H2, CO2, CO and traces rather than one pure compound.
+        float recycleKmolH = Mathf.Max(0f, s.recycleGasKgH) / 12.5f;
+        float total = Mathf.Max(.0001f, h2KmolH + co2KmolH + recycleKmolH);
+        return new Vector3(h2KmolH / total, co2KmolH / total, recycleKmolH / total);
     }
 
     static Vector3 SpeciesFractions(PlantFlowKind kind, Vector3 feed)
@@ -178,10 +183,11 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         return kind switch
         {
             PlantFlowKind.MixedFeed => feed,
-            // This project models direct CO2 hydrogenation, so the feed and
-            // pre-reactor syngas contain distinct H2 and CO2 tracers only.
+            // Direct CO2 hydrogenation feed: fresh H2 + fresh CO2 + an explicit
+            // recycled-gas origin tracer. The latter visually represents its
+            // H2/CO2/CO/inert contents without pretending it is one compound.
             PlantFlowKind.SyngasCold or PlantFlowKind.SyngasHeated => feed,
-            PlantFlowKind.RecycleGas => new Vector3(.74f, .26f, 0f),
+            PlantFlowKind.RecycleGas => new Vector3(.74f, .20f, .06f),
             PlantFlowKind.ReactorEffluent => new Vector3(.58f, .32f, .10f),
             PlantFlowKind.CrudeMethanolVapourLiquid => new Vector3(.64f, .36f, 0f),
             _ => new Vector3(1f, 0f, 0f)
@@ -226,8 +232,11 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     {
         route = default;
         if (Starts(name, "H2Storage_pipe_")) route = Def(PlantFlowKind.HydrogenFromStorage, C(.1f, 1f, .22f), 1.05f, 17f);
-        else if (Starts(name, "H2_pipe_")) route = Def(PlantFlowKind.Hydrogen, C(.1f, 1f, .22f), 1.15f, 18f);
-        else if (Starts(name, "CO2_pipe_")) route = Def(PlantFlowKind.CarbonDioxide, C(.86f, .94f, 1f), .82f, 15f);
+        // In the imported complete-plant meshes, increasing shader coordinates
+        // run away from the T-junction. Reverse both fresh feeds so H2 and CO2
+        // visibly converge at the junction; the mixed route then leaves it.
+        else if (Starts(name, "H2_pipe_")) route = Def(PlantFlowKind.Hydrogen, C(.1f, 1f, .22f), 1.15f, 18f, true);
+        else if (Starts(name, "CO2_pipe_")) route = Def(PlantFlowKind.CarbonDioxide, C(.86f, .94f, 1f), .82f, 15f, true);
         else if (Starts(name, "RichAmine_pipe_")) route = Def(PlantFlowKind.RichAmine, C(.04f, .72f, .42f), .62f, 12f);
         else if (Starts(name, "LeanAmine_pipe_")) route = Def(PlantFlowKind.LeanAmine, C(.05f, .92f, .52f), .68f, 13f);
         else if (Starts(name, "RecycleGas_pipe_")) route = Def(PlantFlowKind.RecycleGas, C(.48f, .82f, 1f), .9f, 16f, true);
@@ -250,7 +259,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     static Color C(float r, float g, float b) => new(r, g, b, 1f);
     static RouteDefinition Def(PlantFlowKind k, Color c, float s, float d, bool reverse = false) =>
-        new(k, c, s, d, 1.05f, .2f, reverse);
+        new(k, c, s, d, 1.55f, .24f, reverse);
     static int TrailingNumber(string value)
     {
         int underscore = value.LastIndexOf('_');

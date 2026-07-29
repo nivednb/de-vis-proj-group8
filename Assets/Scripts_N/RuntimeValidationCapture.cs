@@ -12,6 +12,9 @@ public sealed class RuntimeValidationCapture : MonoBehaviour
     private static void TryCreate()
     {
         string[] args = System.Environment.GetCommandLineArgs();
+        string environmentPath = System.Environment.GetEnvironmentVariable("PTMEOH_CAPTURE_PATH");
+        int environmentFocus = -1;
+        int.TryParse(System.Environment.GetEnvironmentVariable("PTMEOH_CAPTURE_FOCUS"), out environmentFocus);
         int focusIndex = -1;
         for (int i = 0; i < args.Length - 1; i++)
         {
@@ -28,6 +31,13 @@ public sealed class RuntimeValidationCapture : MonoBehaviour
                 new GameObject("Runtime Validation Capture").AddComponent<RuntimeValidationCapture>();
             capture.StartCoroutine(capture.Capture(args[i + 1], focusIndex));
             return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(environmentPath))
+        {
+            RuntimeValidationCapture capture =
+                new GameObject("Runtime Validation Capture").AddComponent<RuntimeValidationCapture>();
+            capture.StartCoroutine(capture.Capture(environmentPath, environmentFocus));
         }
     }
 

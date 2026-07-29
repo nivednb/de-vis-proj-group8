@@ -21,7 +21,9 @@ public sealed class PipeFlowAnimator : MonoBehaviour
         Fractions=Shader.PropertyToID("_SpeciesFractions"),
         Tiling=Shader.PropertyToID("_Tiling"), Alpha=Shader.PropertyToID("_BaseAlpha"),
         Intensity=Shader.PropertyToID("_FlowIntensity"), Ghost=Shader.PropertyToID("_GhostMode"),
-        Liquid=Shader.PropertyToID("_IsLiquid"), TwoPhase=Shader.PropertyToID("_IsTwoPhase");
+        Liquid=Shader.PropertyToID("_IsLiquid"), TwoPhase=Shader.PropertyToID("_IsTwoPhase"),
+        UseObjectFlow=Shader.PropertyToID("_UseObjectFlow"), FlowAxisOS=Shader.PropertyToID("_FlowAxisOS"),
+        FlowMin=Shader.PropertyToID("_FlowMin"), FlowLength=Shader.PropertyToID("_FlowLength");
     Renderer target;
     MaterialPropertyBlock block;
     float offset;
@@ -44,10 +46,14 @@ public sealed class PipeFlowAnimator : MonoBehaviour
         switch(flowKind)
         {
             case PlantFlowKind.MixedFeed:
-                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f); count=2; break;
+                // Fresh H2, fresh CO2 and the H2-rich recycle remain individually
+                // identifiable after the T-junction instead of becoming one colour.
+                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f);
+                c=new Color(.72f,.28f,1f); count=3; break;
             case PlantFlowKind.SyngasCold:
             case PlantFlowKind.SyngasHeated:
-                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f); count=2; break;
+                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f);
+                c=new Color(.72f,.28f,1f); count=3; break;
             case PlantFlowKind.ReactorEffluent:
                 a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); c=new Color(.10f,1f,.22f); count=3; twoPhase=1; break;
             case PlantFlowKind.CrudeMethanolVapourLiquid:
@@ -57,7 +63,10 @@ public sealed class PipeFlowAnimator : MonoBehaviour
             case PlantFlowKind.LiquidCrudeMethanol:
             case PlantFlowKind.MethanolProduct: liquid=1; break;
             case PlantFlowKind.RecycleGas:
-                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f); count=2; break;
+                // Recycle is principally H2 and CO2 with a smaller CO/inert
+                // remainder. Purple is a recycle-origin tracer, not a new species.
+                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f);
+                c=new Color(.72f,.28f,1f); count=3; break;
         }
         target.GetPropertyBlock(block);
         block.SetColor(FlowColor,flowColor); block.SetColor(A,a); block.SetColor(B,b); block.SetColor(C,c);
@@ -68,7 +77,27 @@ public sealed class PipeFlowAnimator : MonoBehaviour
         block.SetFloat(Count,count); block.SetFloat(Tiling,density); block.SetFloat(Alpha,pipeAlpha);
         block.SetFloat(Intensity,isFlowing?flowIntensity:0); block.SetFloat(Ghost,isGhostSupply?1:0);
         block.SetFloat(Liquid,liquid); block.SetFloat(TwoPhase,twoPhase); block.SetFloat(Offset,offset);
+        ApplyGeometricCoordinates(block);
         target.SetPropertyBlock(block);
+    }
+    void ApplyGeometricCoordinates(MaterialPropertyBlock properties)
+    {
+        MeshFilter filter=GetComponent<MeshFilter>();
+        Mesh mesh=filter!=null?filter.sharedMesh:null;
+        if(mesh==null){properties.SetFloat(UseObjectFlow,0f);return;}
+        Bounds bounds=mesh.bounds;
+        Vector3 size=bounds.size;
+        int longest=size.x>=size.y&&size.x>=size.z?0:(size.y>=size.z?1:2);
+        float major=longest==0?size.x:(longest==1?size.y:size.z);
+        float otherA=longest==0?size.y:size.x;
+        float otherB=longest==2?size.y:size.z;
+        bool straight=major>Mathf.Max(otherA,otherB)*1.35f;
+        Vector3 axis=longest==0?Vector3.right:(longest==1?Vector3.up:Vector3.forward);
+        float center=Vector3.Dot(bounds.center,axis);
+        properties.SetFloat(UseObjectFlow,straight?1f:0f);
+        properties.SetVector(FlowAxisOS,axis);
+        properties.SetFloat(FlowMin,center-major*.5f);
+        properties.SetFloat(FlowLength,Mathf.Max(.0001f,major));
     }
     void Ensure(){ if(target==null)target=GetComponent<Renderer>(); if(block==null)block=new MaterialPropertyBlock(); }
 }
