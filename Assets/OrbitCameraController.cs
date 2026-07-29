@@ -4,7 +4,7 @@ using TMPro;
 
 /// <summary>
 /// Orbits the camera around a fixed pivot point on the surface of an imaginary sphere.
-/// Arrow keys (or WASD) change azimuth/elevation; the camera always looks at the pivot.
+/// Arrow keys change azimuth/elevation, A/D pan laterally, and W/S zoom.
 /// Attach directly to the Main Camera. Set 'pivot' to an empty GameObject placed at the
 /// visual center of the plant (e.g. near the Reactor, roughly X=5 in your current layout)
 /// so the whole setup stays framed while you rotate around it.
@@ -46,6 +46,8 @@ public class OrbitCameraController : MonoBehaviour
     public float azimuthSpeed = 60f;   // degrees per second, left/right arrows
     public float elevationSpeed = 45f; // degrees per second, up/down arrows
     public float zoomSpeed = 40f;      // units per second, for +/- or scroll
+    [Tooltip("World-space lateral pan speed for A/D. Orthographic views scale this with zoom so movement stays readable.")]
+    public float panSpeed = 24f;
 
     [Header("Elevation clamp (degrees, avoids flipping over the poles)")]
     [Tooltip("Keep a degree or two short of 90 (e.g. 89) to avoid gimbal-flip at the exact pole.")]
@@ -204,6 +206,25 @@ public class OrbitCameraController : MonoBehaviour
         _azimuth += horizontal * azimuthSpeed * Time.deltaTime;
         _elevation -= vertical * elevationSpeed * Time.deltaTime; // Up arrow = look from higher up
         _elevation = Mathf.Clamp(_elevation, minElevation, maxElevation);
+
+        // A/D translate the view left/right without changing its viewing angle.
+        // Moving both endpoints keeps subsequent focus interpolation internally consistent.
+        float panInput = 0f;
+        if (kb.dKey.isPressed) panInput += 1f;
+        if (kb.aKey.isPressed) panInput -= 1f;
+        if (!Mathf.Approximately(panInput, 0f))
+        {
+            Vector3 planarRight = Vector3.ProjectOnPlane(transform.right, Vector3.up).normalized;
+            if (planarRight.sqrMagnitude < 0.001f) planarRight = Vector3.right;
+
+            float zoomScale = useOrthographic && _cam != null
+                ? Mathf.Max(0.35f, _cam.orthographicSize / Mathf.Max(1f, _homeOrthoSize))
+                : Mathf.Max(0.35f, distance / Mathf.Max(1f, _homeDistance));
+            Vector3 panDelta = planarRight * (panInput * panSpeed * zoomScale * Time.deltaTime);
+            _currentTarget += panDelta;
+            _targetFrom += panDelta;
+            _targetTo += panDelta;
+        }
 
         // Zoom: W = zoom in, S = zoom out (also keeping +/- as a backup)
         float zoomDelta = 0f;

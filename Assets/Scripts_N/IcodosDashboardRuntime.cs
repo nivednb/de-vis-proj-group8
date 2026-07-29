@@ -226,7 +226,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             "• Use the top navigation or module arrows to focus equipment.\n" +
             "• Select equipment to open educational controls and live values.\n" +
             "• Stream colours show qualitative material movement through the actual pipe routes.\n" +
-            "• Arrow keys orbit; W/S zoom; Shift + arrows cycle modules.\n\n" +
+            "• Arrow keys orbit; A/D pan; W/S zoom; Shift + arrows cycle modules.\n\n" +
             "Important: values and animations are simplified educational representations. " +
             "This application is not CFD, Aspen, industrial control software, or a validated process model.",
             16, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
@@ -286,8 +286,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void ToggleStreams()
     {
-        AutoWholePlantFlowRuntime flow = FindFirstObjectByType<AutoWholePlantFlowRuntime>(FindObjectsInactive.Include);
-        if (flow != null) flow.gameObject.SetActive(!flow.gameObject.activeSelf);
+        FinalPlantFlowRuntime flow = FindFirstObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
+        if (flow != null) flow.ToggleVisuals();
     }
 
     private void ToggleModulePanels(bool visible)

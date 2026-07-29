@@ -911,7 +911,7 @@ GameObject:
   - component: {fileID: 54089649}
   - component: {fileID: 54089648}
   m_Layer: 0
-  m_Name: Cylinder (32)
+  m_Name: Syngas_pipe_8
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1340,7 +1340,7 @@ GameObject:
   - component: {fileID: 99506866}
   - component: {fileID: 99506865}
   m_Layer: 0
-  m_Name: Cylinder (7)
+  m_Name: Syngas_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1748,7 +1748,7 @@ GameObject:
   - component: {fileID: 157894723}
   - component: {fileID: 157894722}
   m_Layer: 0
-  m_Name: Cylinder (18)
+  m_Name: LeanAmine_pipe_4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2490,7 +2490,7 @@ GameObject:
   - component: {fileID: 186154696}
   - component: {fileID: 186154695}
   m_Layer: 0
-  m_Name: Cylinder (9)
+  m_Name: Syngas_pipe_5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3105,7 +3105,7 @@ GameObject:
   - component: {fileID: 203346536}
   - component: {fileID: 203346535}
   m_Layer: 0
-  m_Name: Cylinder (31)
+  m_Name: Syngas_pipe_6
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5000,7 +5000,7 @@ GameObject:
   - component: {fileID: 348238742}
   - component: {fileID: 348238741}
   m_Layer: 0
-  m_Name: Cylinder (22)
+  m_Name: CO2_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5240,7 +5240,7 @@ GameObject:
   - component: {fileID: 390339000}
   - component: {fileID: 390338999}
   m_Layer: 0
-  m_Name: Cylinder (26)
+  m_Name: MixedFeed_pipe_5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5354,7 +5354,7 @@ GameObject:
   - component: {fileID: 390583474}
   - component: {fileID: 390583473}
   m_Layer: 0
-  m_Name: Cylinder (35)
+  m_Name: MethanolProduct_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5605,7 +5605,7 @@ GameObject:
   - component: {fileID: 400391799}
   - component: {fileID: 400391798}
   m_Layer: 0
-  m_Name: Cylinder (10)
+  m_Name: ReactorEffluent_pipe_6
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5755,7 +5755,7 @@ GameObject:
   - component: {fileID: 405039999}
   - component: {fileID: 405039998}
   m_Layer: 0
-  m_Name: Cylinder (25)
+  m_Name: H2Storage_pipe_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6122,7 +6122,7 @@ GameObject:
   - component: {fileID: 422336496}
   - component: {fileID: 422336495}
   m_Layer: 0
-  m_Name: Cylinder (17)
+  m_Name: RecycleGas_pipe_5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6277,7 +6277,7 @@ GameObject:
   - component: {fileID: 431048488}
   - component: {fileID: 431048487}
   m_Layer: 0
-  m_Name: Cylinder (2)
+  m_Name: RichAmine_pipe_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6744,7 +6744,7 @@ GameObject:
   - component: {fileID: 466231535}
   - component: {fileID: 466231534}
   m_Layer: 0
-  m_Name: Cylinder (5)
+  m_Name: LeanAmine_pipe_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7227,7 +7227,7 @@ GameObject:
   - component: {fileID: 486516372}
   - component: {fileID: 486516371}
   m_Layer: 0
-  m_Name: Cylinder (34)
+  m_Name: MethanolProduct_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7341,7 +7341,7 @@ GameObject:
   - component: {fileID: 487746887}
   - component: {fileID: 487746886}
   m_Layer: 0
-  m_Name: Cylinder (13)
+  m_Name: CrudeMeOH_pipe_5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8775,7 +8775,7 @@ GameObject:
   - component: {fileID: 576747166}
   - component: {fileID: 576747165}
   m_Layer: 0
-  m_Name: Cylinder (6)
+  m_Name: ReactorEffluent_pipe_4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -10031,7 +10031,7 @@ GameObject:
   - component: {fileID: 664458918}
   - component: {fileID: 664458917}
   m_Layer: 0
-  m_Name: Cylinder (21)
+  m_Name: H2Storage_pipe_6
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -11139,7 +11139,7 @@ GameObject:
   - component: {fileID: 780412292}
   - component: {fileID: 780412291}
   m_Layer: 0
-  m_Name: Cylinder (8)
+  m_Name: RecycleGas_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -12275,7 +12275,7 @@ GameObject:
   - component: {fileID: 833545972}
   - component: {fileID: 833545971}
   m_Layer: 0
-  m_Name: Cylinder (23)
+  m_Name: CO2_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -13336,7 +13336,7 @@ GameObject:
   - component: {fileID: 928791647}
   - component: {fileID: 928791646}
   m_Layer: 0
-  m_Name: Cylinder (19)
+  m_Name: H2_pipe_5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -14696,7 +14696,7 @@ GameObject:
   - component: {fileID: 1044187275}
   - component: {fileID: 1044187274}
   m_Layer: 0
-  m_Name: Cylinder (24)
+  m_Name: MixedFeed_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -14810,7 +14810,7 @@ GameObject:
   - component: {fileID: 1056324958}
   - component: {fileID: 1056324957}
   m_Layer: 0
-  m_Name: Cylinder (4)
+  m_Name: MixedFeed_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -15272,7 +15272,7 @@ GameObject:
   - component: {fileID: 1076159440}
   - component: {fileID: 1076159439}
   m_Layer: 0
-  m_Name: Cylinder (3)
+  m_Name: RichAmine_pipe_4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -15463,7 +15463,7 @@ GameObject:
   - component: {fileID: 1098780898}
   - component: {fileID: 1098780897}
   m_Layer: 0
-  m_Name: Cylinder
+  m_Name: H2_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -16369,7 +16369,7 @@ GameObject:
   - component: {fileID: 1158989771}
   - component: {fileID: 1158989770}
   m_Layer: 0
-  m_Name: Cylinder (16)
+  m_Name: RecycleGas_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -16560,7 +16560,7 @@ GameObject:
   - component: {fileID: 1166304052}
   - component: {fileID: 1166304051}
   m_Layer: 0
-  m_Name: Cylinder (30)
+  m_Name: H2_pipe_7
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -16749,7 +16749,7 @@ GameObject:
   - component: {fileID: 1168690911}
   - component: {fileID: 1168690910}
   m_Layer: 0
-  m_Name: Cylinder (14)
+  m_Name: Liq_CrudeMeOH_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -16937,7 +16937,7 @@ GameObject:
   - component: {fileID: 1184452173}
   - component: {fileID: 1184452172}
   m_Layer: 0
-  m_Name: Cylinder (29)
+  m_Name: Syngas_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -17511,7 +17511,7 @@ GameObject:
   - component: {fileID: 1259335667}
   - component: {fileID: 1259335666}
   m_Layer: 0
-  m_Name: Cylinder (15)
+  m_Name: Liq_CrudeMeOH_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -17944,7 +17944,7 @@ GameObject:
   - component: {fileID: 1315075019}
   - component: {fileID: 1315075018}
   m_Layer: 0
-  m_Name: Cylinder (20)
+  m_Name: H2_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -22343,7 +22343,7 @@ GameObject:
   - component: {fileID: 1791415123}
   - component: {fileID: 1791415122}
   m_Layer: 0
-  m_Name: Cylinder (12)
+  m_Name: CrudeMeOH_pipe_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -22706,7 +22706,7 @@ GameObject:
   - component: {fileID: 1825398493}
   - component: {fileID: 1825398492}
   m_Layer: 0
-  m_Name: Cylinder (33)
+  m_Name: ReactorEffluent_pipe_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -22964,7 +22964,7 @@ GameObject:
   - component: {fileID: 1857312681}
   - component: {fileID: 1857312680}
   m_Layer: 0
-  m_Name: Cylinder (11)
+  m_Name: CrudeMeOH_pipe_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -24537,7 +24537,7 @@ GameObject:
   - component: {fileID: 1939746549}
   - component: {fileID: 1939746548}
   m_Layer: 0
-  m_Name: Cylinder (28)
+  m_Name: LeanAmine_pipe_6
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -26111,7 +26111,7 @@ GameObject:
   - component: {fileID: 2138686936}
   - component: {fileID: 2138686935}
   m_Layer: 0
-  m_Name: Cylinder (27)
+  m_Name: H2Storage_pipe_4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

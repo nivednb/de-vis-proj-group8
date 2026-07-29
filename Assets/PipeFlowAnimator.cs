@@ -1,64 +1,74 @@
 using UnityEngine;
 
-/// <summary>
-/// Drop onto any pipe GameObject (straight Cylinder or pipe-bend prefab) that has a
-/// MeshRenderer using the PipeFlow shader. Scrolls the texture along V to fake fluid
-/// movement. One script per pipe object; speed/direction/color come from the assigned
-/// Material instance so you only ever touch the Material, never this script, when
-/// re-tagging a pipe to a different fluid.
-/// </summary>
-[RequireComponent(typeof(MeshRenderer))]
-public class PipeFlowAnimator : MonoBehaviour
+[DisallowMultipleComponent]
+public sealed class PipeFlowAnimator : MonoBehaviour
 {
-    [Tooltip("Reverses scroll direction. Use for recycle/return lines so flow reads correctly against the pipe's mesh orientation.")]
-    public bool reverseDirection = false;
-
-    [Tooltip("Optional override. If 0, uses the material's own _FlowSpeed.")]
-    public float speedOverride = 0f;
-
-    [Tooltip("Master on/off — flip this from a process-state script (e.g. when a unit is shut down).")]
+    public PlantFlowKind flowKind = PlantFlowKind.MixedFeed;
+    public Color flowColor = Color.white;
+    [Min(0f)] public float speed = 1f;
+    [Min(0f)] public float density = 18f;
+    [Range(0f, 1f)] public float pipeAlpha = .2f;
+    [Range(0f, 3f)] public float flowIntensity = 1f;
+    public bool reverseDirection;
     public bool isFlowing = true;
+    public bool isGhostSupply;
+    [Tooltip("Visible molar/phase fractions for multi-species routes. Values are normalized by Apply().")]
+    public Vector3 speciesFractions = new(1f, 0f, 0f);
 
-    [Header("Ghost Supply (unmodeled source line)")]
-    [Tooltip("Marks this pipe as feeding from an unmodeled external source (e.g. CO2 ghost supplier). Dims alpha and widens dash spacing via the shared material's ghost properties, without needing a separate material asset.")]
-    public bool isGhostSupply = false;
+    static readonly int FlowColor=Shader.PropertyToID("_FlowColor"), A=Shader.PropertyToID("_SpeciesColorA"),
+        B=Shader.PropertyToID("_SpeciesColorB"), C=Shader.PropertyToID("_SpeciesColorC"),
+        Count=Shader.PropertyToID("_SpeciesCount"), Offset=Shader.PropertyToID("_FlowOffset"),
+        Fractions=Shader.PropertyToID("_SpeciesFractions"),
+        Tiling=Shader.PropertyToID("_Tiling"), Alpha=Shader.PropertyToID("_BaseAlpha"),
+        Intensity=Shader.PropertyToID("_FlowIntensity"), Ghost=Shader.PropertyToID("_GhostMode"),
+        Liquid=Shader.PropertyToID("_IsLiquid"), TwoPhase=Shader.PropertyToID("_IsTwoPhase");
+    Renderer target;
+    MaterialPropertyBlock block;
+    float offset;
 
-    private MaterialPropertyBlock _block;
-    private MeshRenderer _renderer;
-    private float _offset;
-    private static readonly int FlowColorId = Shader.PropertyToID("_FlowColor");
-    private static readonly int OffsetId = Shader.PropertyToID("_FlowOffset");
-    private static readonly int GhostModeId = Shader.PropertyToID("_GhostMode");
-
-    void Awake()
-    {
-        _renderer = GetComponent<MeshRenderer>();
-        _block = new MaterialPropertyBlock();
-    }
-
+    void Awake() => Ensure();
+    void OnEnable() => Apply();
+    void OnValidate() => Apply();
     void Update()
     {
-        if (!isFlowing) return;
-
-        float baseSpeed = speedOverride > 0f
-            ? speedOverride
-            : (_renderer.sharedMaterial != null && _renderer.sharedMaterial.HasProperty("_FlowSpeed")
-                ? _renderer.sharedMaterial.GetFloat("_FlowSpeed")
-                : 1f);
-
-        float dir = reverseDirection ? -1f : 1f;
-        _offset += baseSpeed * dir * Time.deltaTime;
-
-        _renderer.GetPropertyBlock(_block);
-        _block.SetFloat(OffsetId, _offset);
-        _block.SetFloat(GhostModeId, isGhostSupply ? 1f : 0f);
-        _renderer.SetPropertyBlock(_block);
+        Ensure();
+        if (target == null) return;
+        if (isFlowing) offset=Mathf.Repeat(offset+Time.deltaTime*speed*(reverseDirection?-1f:1f),1f);
+        target.GetPropertyBlock(block); block.SetFloat(Offset,offset); target.SetPropertyBlock(block);
     }
 
-    /// <summary>Flip ghost state at runtime — e.g. when a future sprint replaces the
-    /// ghost supplier with a real modeled CO2 source unit, call SetGhostSupply(false).</summary>
-    public void SetGhostSupply(bool ghost) => isGhostSupply = ghost;
-
-    /// <summary>Call this if you ever swap a pipe's material at runtime (e.g. process-mode toggle).</summary>
-    public void ResetOffset() => _offset = 0f;
+    public void Apply()
+    {
+        Ensure(); if(target==null)return;
+        Color a=flowColor,b=flowColor,c=flowColor; float count=1,liquid=0,twoPhase=0;
+        switch(flowKind)
+        {
+            case PlantFlowKind.MixedFeed:
+                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f); count=2; break;
+            case PlantFlowKind.SyngasCold:
+            case PlantFlowKind.SyngasHeated:
+                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f); count=2; break;
+            case PlantFlowKind.ReactorEffluent:
+                a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); c=new Color(.10f,1f,.22f); count=3; twoPhase=1; break;
+            case PlantFlowKind.CrudeMethanolVapourLiquid:
+                a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); count=2; twoPhase=1; break;
+            case PlantFlowKind.RichAmine:
+            case PlantFlowKind.LeanAmine:
+            case PlantFlowKind.LiquidCrudeMethanol:
+            case PlantFlowKind.MethanolProduct: liquid=1; break;
+            case PlantFlowKind.RecycleGas:
+                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f); count=2; break;
+        }
+        target.GetPropertyBlock(block);
+        block.SetColor(FlowColor,flowColor); block.SetColor(A,a); block.SetColor(B,b); block.SetColor(C,c);
+        Vector3 fractions=speciesFractions;
+        float total=Mathf.Max(.0001f,fractions.x+fractions.y+fractions.z);
+        fractions/=total;
+        block.SetVector(Fractions,new Vector4(fractions.x,fractions.y,fractions.z,0f));
+        block.SetFloat(Count,count); block.SetFloat(Tiling,density); block.SetFloat(Alpha,pipeAlpha);
+        block.SetFloat(Intensity,isFlowing?flowIntensity:0); block.SetFloat(Ghost,isGhostSupply?1:0);
+        block.SetFloat(Liquid,liquid); block.SetFloat(TwoPhase,twoPhase); block.SetFloat(Offset,offset);
+        target.SetPropertyBlock(block);
+    }
+    void Ensure(){ if(target==null)target=GetComponent<Renderer>(); if(block==null)block=new MaterialPropertyBlock(); }
 }
