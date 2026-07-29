@@ -1,97 +1,86 @@
-# PtMeOH Interactive Simulation
+# Power-to-Methanol Digital Twin
 
-An interactive educational Unity visualization of a **Power-to-Methanol (PtMeOH)** plant. The current Unity 6 branch focuses on a full-plant overview with process equipment, corrected routing, camera focus controls, and early animated flow visualization.
+Interactive Unity 6 educational visualization of a complete Power-to-Methanol
+(PtM) plant. The application combines a full industrial plant layout, process
+dashboard, interactive operating controls, engineering stream visualization,
+reactor/catalyst visualization, warnings, equipment focus views, and a
+lightweight steady-state process model.
 
----
+> This is a master's-project educational digital-twin demonstrator. It is not a
+> CFD model, a rigorous thermodynamic/kinetic simulator, a plant control system,
+> or certified process-safety software.
 
-## Progress screenshots
+## Current integrated version
 
-### Current Unity full-plant view
+- Branch: `codex-icodos-final-flow-integration`
+- Unity: `6000.4.7f1`
+- Render pipeline: URP `17.4.0`
+- Startup scene: `Assets/Scenes/SampleScene.unity`
+- Windows build: `D:\Builds\PowerToMethanolDigitalTwin\PowerToMethanolDigitalTwin.exe`
+- Latest recorded validation: successful scene validation and successful
+  Windows build with zero build errors
 
-![Unity full plant game view](docs/images/unity-full-plant-game-view.png)
+## Documentation
 
-### Target visual direction
+- [Final project report](docs/FINAL_PROJECT_REPORT.md)
+- [Implementation and equation reference](docs/IMPLEMENTATION_REFERENCE.md)
+- [Unity project context](docs/AI/UnityProjectContext.md)
+- [Project health and validation status](docs/AI/UnityProjectHealth.md)
+- [Progress screenshots](docs/progress-screenshots.md)
 
-The intended final direction is a more polished ICODOS-style industrial dashboard, with labelled process equipment, stream colors, live KPIs, and process navigation.
+## Main systems
 
-![Target UI reference](docs/images/target-ui-reference-icodos.jpeg)
+- Central process model and live operating snapshot
+- Electrolyzer, CO2 capture, compression, methanol synthesis, condensation,
+  separation/distillation, recycle, and storage visualization
+- Flow speed, density, visibility, and stream composition coupled to process
+  controls
+- Discrete H2, CO2, and recycle packets in mixed-gas routes
+- Transparent process pipes with direction-aware shader animation
+- Transparent reactor shell, upflow reactor visualization, and
+  conversion-dependent catalyst-bed color
+- ICODOS-inspired dashboard, KPIs, module navigation, equipment controls, and
+  educational warnings
+- Orbit, pan, zoom, overview, and module-focus camera controls
+- Lightweight procedurally generated plant environment
 
-More images are documented in [docs/progress-screenshots.md](docs/progress-screenshots.md).
+## Open and run
 
----
+1. Open Unity Hub.
+2. Add this repository folder.
+3. Open it with Unity `6000.4.7f1`.
+4. Open `Assets/Scenes/SampleScene.unity`.
+5. Enter Play Mode.
 
-## Tech stack
+Camera controls:
 
-- Unity `6000.4.7f1` - primary simulation engine
-- Blender - 3D asset creation/export
-- C# - interaction, UI, camera, and flow logic
-- Git - version control
+| Input | Action |
+| --- | --- |
+| Arrow keys | Orbit |
+| A / D | Pan left / right |
+| W / S | Zoom |
+| Shift + arrow keys | Cycle module focus |
+| Home | Return to plant overview |
 
----
-
-## Project structure
+## Repository structure
 
 ```text
 Assets/
-|-- Scenes/              # Unity scenes
-|-- Scripts_N/           # Added flow/waypoint scripts for full-plant visualization
-|-- Prefabs_N/           # Flow particle prefab(s)
-|-- Settings/            # URP settings
-|-- *.fbx                # Plant equipment models
-|-- Mat_*.mat            # Stream/material colors
-|-- PipeFlow.shader      # Pipe-flow shader prototype
-`-- TextMesh Pro/        # TMP UI assets
-
+|-- Editor/                     # Inventory, release validation, Windows build
+|-- Materials_N/                # Process-stream and equipment materials
+|-- Scenes/SampleScene.unity    # Integrated plant scene
+|-- Scripts_N/                  # Simulation, UI, flow, reactor, warnings
+|-- Settings/                   # URP configuration
+|-- *.fbx                       # Plant equipment and pipe assets
+|-- PipeFlow.shader             # Multi-species packet flow shader
+`-- legacy/support scripts      # Earlier panels and prototype utilities
+docs/
+|-- FINAL_PROJECT_REPORT.md
+|-- IMPLEMENTATION_REFERENCE.md
+`-- AI/                         # Persistent Unity context and health report
 Packages/
 ProjectSettings/
-README.md
 ```
 
-## Branch status
-
-- `nived-unity6-progress` - Nived's Unity 6 full-plant progress branch.
-- `chaitanya` - teammate full-plant branch used as the visual base.
-- `main` - original starter branch.
-
-## Current progress
-
-- Full plant equipment scene in Unity 6.
-- Added support structures, storage tank, mixing point, and corrected route layout.
-- Added lightweight industrial plant environment generator:
-  - concrete plant slab, service roads, and safety walkways
-  - perimeter fencing and pipe rack details
-  - control/utility zone and storage containment area
-  - runtime generation from Unity primitives to avoid heavy imported assets
-- Orbit camera with module focus/navigation.
-- Added `Scripts_N` flow visualization layer:
-  - `AutoWholePlantFlowRuntime`
-  - `FlowPath`
-  - `FlowFollower`
-  - `PipeWaypointGenerator`
-- Early moving flow-dot visualization along named process routes.
-
-## Plant environment feedback update
-
-The feedback about making the complete plant model feel more like a real plant site is handled through
-`Assets/Scripts_N/PlantEnvironmentBuilder.cs`.
-
-It builds a surrounding industrial environment using lightweight Unity primitives, so the model gains context
-without requiring large external asset packs. In Play Mode, the environment is generated automatically. In the
-Unity Editor, it can also be generated manually from:
-
-```text
-Tools > Nived > Build Plant Environment
-```
-
-## Open in Unity
-
-1. Open Unity Hub.
-2. Click **Add project from disk**.
-3. Select this repository folder.
-4. Open with Unity `6000.4.7f1`.
-
----
-
-## Notes
-
-Unity-generated folders such as `Library/`, `Temp/`, `Logs/`, `UserSettings/`, `.vs/`, and `obj/` are intentionally excluded from Git.
+Unity-generated folders (`Library`, `Temp`, `Logs`, `UserSettings`, `.vs`,
+`obj`) are excluded from Git.

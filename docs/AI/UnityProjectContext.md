@@ -2,114 +2,111 @@
 
 <!-- unity-onboarding:generated:start -->
 
-## Project Summary
+## Project summary
 
-- Project root: `work/de-vis-proj-group8`
-- Purpose: Interactive educational Power-to-Methanol plant digital twin for OVGU.
-- Last analyzed: 2026-07-28
-- Last analyzed commit: `d7b31827d41cfc160a6d259beed60a37ef57a09f`
-- Integration branch: `codex-icodos-complete`
+- Repository: `de-vis-proj-group8`
+- Integrated working copy:
+  `D:\Projects\de-vis-proj-group8-icodos-final-flow`
+- Purpose: interactive educational Power-to-Methanol digital twin
+- Last analyzed: 2026-07-29
+- Last analyzed starting commit: `834f3a67cc8f3c87a627d4bcc68ad399ff997594`
+- Integration branch: `codex-icodos-final-flow-integration`
+- Remote: `https://github.com/nivednb/de-vis-proj-group8.git`
 
-## Confirmed Environment
+## Confirmed environment
 
-- Unity version: `6000.4.7f1` (`f3c3c4248748`)
-- Render pipeline: Universal Render Pipeline 17.4.0
-- Input system: Unity Input System 1.19.0, with a project input-actions asset
-- Target platform: Windows desktop is the intended first build target
-
-## Important Packages And Frameworks
-
-| Area | Finding | Confidence | Evidence |
-| --- | --- | --- | --- |
-| UI | uGUI and TextMesh Pro | High | `Packages/manifest.json`, scene, runtime scripts |
-| Rendering | URP with VFX Graph available | High | package manifest and URP settings assets |
-| Input | New Input System | High | package manifest and `InputSystem_Actions.inputactions` |
-| Process model | Lightweight illustrative `PlantProcessSimulator` | High | `Assets/Scripts_N/PlantProcessSimulator.cs` |
-| Unity MCP | Official Unity AI Assistant package is present, but Editor connection is unavailable | High | package manifest; no Unity Editor installed on host |
-
-## Directory Structure
-
-| Path | Purpose | Confidence | Evidence |
-| --- | --- | --- | --- |
-| `Assets/Scenes/SampleScene.unity` | Full plant and UI startup scene | High | enabled Build Settings scene |
-| `Assets/Scripts_N/` | Process simulation, environment, UI, warning, and flow runtime systems | High | representative script inspection |
-| `Assets/Prefabs_N/Flow/` | Flow visualization prefab | High | asset inventory |
-| `Assets/Settings/` | URP renderer and pipeline assets | High | asset inventory |
-| `docs/images/` | Current-state and ICODOS visual references | High | repository docs |
-
-## Assembly Boundaries
-
-There are no first-party `.asmdef` files. First-party runtime scripts compile into the default
-`Assembly-CSharp`; editor tooling under `Assets/Editor` compiles separately when present.
-
-## Scenes And Startup Flow
-
-- Build scenes: `Assets/Scenes/SampleScene.unity`
-- Likely startup scene: `SampleScene`
-- Runtime bootstrap components auto-create the process simulator, plant environment, flow
-  visualization, warning overlay, reactor detail visualization, and module panels after scene load.
+- Unity `6000.4.7f1` (`f3c3c4248748`)
+- Universal Render Pipeline `17.4.0`
+- Unity Input System `1.19.0`
+- uGUI and TextMesh Pro
+- Startup/build scene: `Assets/Scenes/SampleScene.unity`
+- Windows desktop build target
+- No first-party `.asmdef` files
 
 ## Architecture
 
-| Pattern | Finding | Confidence | Evidence |
-| --- | --- | --- | --- |
-| Scene composition | MonoBehaviour-centric single-scene application | High | scene and scripts |
-| Runtime augmentation | Several focused auto-created runtime components | High | `RuntimeInitializeOnLoadMethod` usage |
-| Process state | `PlantProcessSimulator` owns the illustrative operating snapshot | High | simulator implementation |
-| Presentation | UI and flow systems observe the process snapshot | High | runtime UI/flow scripts |
-| Camera | One orbit controller with module focus points | High | `OrbitCameraController.cs` |
+The application is a MonoBehaviour-centric, single-scene simulation.
+`PlantProcessSimulator` is the source of truth. Runtime UI, warnings, pipe
+flow, reactor visuals, and catalyst color observe its process snapshot.
+Several systems create themselves after scene load and discover objects by
+stable hierarchy/route names.
 
-## Coding Conventions
+## Main source locations
 
-- Namespace style: global namespace
-- Serialized fields: mix of public Inspector fields and `[SerializeField] private`
-- Async: none in first-party runtime code
-- Comments/docs: XML summaries for major runtime components; domain intent is documented
+| Path | Purpose |
+| --- | --- |
+| `Assets/Scenes/SampleScene.unity` | Integrated full plant |
+| `Assets/Scripts_N/PlantProcessSimulator.cs` | Central educational process model |
+| `Assets/Scripts_N/FinalFlowSystem/` | Flow integration and reactor/catalyst visuals |
+| `Assets/PipeFlowAnimator.cs` | Pipe-segment material animation |
+| `Assets/PipeFlow.shader` | Multi-species packet shader |
+| `Assets/Scripts_N/IcodosDashboardRuntime.cs` | Dashboard shell |
+| `Assets/Scripts_N/InteractiveModulePanelRuntime.cs` | Interactive controls |
+| `Assets/Scripts_N/SafetyWarningRuntime.cs` | Educational warnings |
+| `Assets/OrbitCameraController.cs` | Camera controls |
+| `Assets/Scripts_N/PlantEnvironmentBuilder.cs` | Industrial environment |
+| `Assets/Editor/` | Inventory, validation, and build tooling |
+| `docs/` | Report, implementation reference, project context |
 
-## Testing And Validation
+## Startup flow
 
-- EditMode tests: none detected
-- PlayMode tests: none detected
-- CI/build validation: none detected
-- Current limitation: Unity Editor `6000.4.7f1` and Unity Hub are not installed on this laptop
+1. `SampleScene` loads.
+2. Runtime bootstrap methods ensure the process simulator and presentation
+   systems exist.
+3. The flow runtime finds renamed routes and applies `Custom/PipeFlow`.
+4. The dashboard and module panels bind to the simulator.
+5. Reactor transparency, lightweight upflow visualization, and catalyst color
+   are configured.
+6. Environment and warning overlays are built.
+7. All systems update from the shared process snapshot.
 
-## Available Unity Tooling
+## Important packages
 
-| Capability | Status | Evidence |
+Package presence does not prove active feature use.
+
+| Package | Version | Confirmed use |
 | --- | --- | --- |
-| Official Unity MCP package | available in project | `com.unity.ai.assistant` 2.15.0-pre.1 |
-| Unity Editor connection | unavailable | Editor is not installed/running |
-| Console/scene/build/test MCP tools | unavailable | no active Unity MCP tools exposed |
-| Repository inspection | available | local integration branch |
+| URP | 17.4.0 | Yes |
+| Input System | 1.19.0 | Yes |
+| uGUI | 2.0.0 | Yes |
+| Test Framework | 1.6.0 | Package present; no first-party tests found |
+| AI Navigation | 2.0.12 | Package present; no core dependency confirmed |
+| Unity AI Assistant | 2.15.0-pre.1 | Installed tooling; not a runtime requirement |
+| Visual Scripting | 1.9.11 | Package present; no core dependency confirmed |
 
-## Important Constraints
+## Controls
 
-- This is an educational engineering visualization, not CFD, Aspen, industrial validation, or
-  chemically accurate plant control software.
-- Preserve lightweight runtime visualization and modular separation between process state, UI,
-  camera, warnings, environment, and flow.
-- Use `docs/images/target-ui-reference-icodos.jpeg` as visual direction, not as a claim that the
-  displayed values are industrially validated.
-- Existing remote branches must remain untouched. All integration work belongs on
-  `codex-icodos-complete`.
+- Arrow keys: orbit
+- A/D: lateral pan
+- W/S: zoom
+- Shift+arrow: module focus
+- Home: overview
+- Dashboard sliders: write into `PlantProcessSimulator`
 
-## Unknowns And Confidence
+## Validation status
 
-- Actual Unity compilation, package import state, scene references, and runtime appearance remain
-  unverified until the exact Editor version is installed and connected.
-- The official Unity MCP client still requires the Editor relay to be running and any Unity-side
-  approval completed.
+- Editor release validation: passed.
+- Windows build: succeeded with 0 errors and 37 warnings.
+- Build output:
+  `D:\Builds\PowerToMethanolDigitalTwin\PowerToMethanolDigitalTwin.exe`
+- First-party automated tests: none detected.
+- Chemical calibration against rigorous external simulation: not performed.
 
-## Source Files Inspected
+## Constraints
 
-- `README.md`
-- `docs/FINAL_FLOW_SIMULATION_HANDOFF.md`
-- `docs/images/target-ui-reference-icodos.jpeg`
-- `docs/images/unity-full-plant-game-view.png`
-- `Packages/manifest.json`
-- `Packages/packages-lock.json`
-- `ProjectSettings/ProjectVersion.txt`
-- `ProjectSettings/EditorBuildSettings.asset`
-- representative scripts under `Assets/` and `Assets/Scripts_N/`
+- Preserve the central process snapshot as the only presentation-data source.
+- Preserve renamed route prefixes; flow discovery depends on them.
+- Preserve mixed-gas packets as separate species.
+- Preserve reactor side/lower inlet to top-outlet upflow consistent with the
+  imported geometry.
+- Keep the lightweight reactor population bounded for laptop stability.
+- Treat all process values and warnings as educational approximations.
+- Integration changes belong on `codex-icodos-final-flow-integration`.
+
+## Canonical documentation
+
+- `docs/FINAL_PROJECT_REPORT.md`
+- `docs/IMPLEMENTATION_REFERENCE.md`
+- `docs/AI/UnityProjectHealth.md`
 
 <!-- unity-onboarding:generated:end -->
