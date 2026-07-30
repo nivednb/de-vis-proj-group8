@@ -11,7 +11,17 @@ using UnityEngine.Rendering;
 [DisallowMultipleComponent]
 public sealed class FinalPlantFlowRuntime : MonoBehaviour
 {
+    public enum InspectionMode
+    {
+        All,
+        FeedGases,
+        CaptureLoop,
+        SynthesisLoop,
+        Product
+    }
+
     [SerializeField] bool visualsEnabled = true;
+    [SerializeField] InspectionMode inspectionMode = InspectionMode.All;
     [SerializeField, Range(.25f, 2f)] float globalSpeed = 1f;
     [SerializeField, Range(.25f, 2f)] float globalDensity = 1f;
     [SerializeField, Range(.25f, 2f)] float globalIntensity = 1f;
@@ -69,12 +79,27 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         foreach (RouteBinding binding in bindings)
             if (binding.animator != null)
             {
-                binding.animator.isFlowing = enabled && binding.normalizedFlow > .005f;
+                binding.animator.isFlowing = enabled &&
+                    IsIncludedInInspection(binding.route.kind) &&
+                    binding.normalizedFlow > .005f;
                 binding.animator.Apply();
             }
     }
 
     public void ToggleVisuals() => SetVisualsEnabled(!visualsEnabled);
+
+    public void SetInspectionMode(int mode)
+    {
+        inspectionMode = (InspectionMode)Mathf.Clamp(mode, 0, (int)InspectionMode.Product);
+        foreach (RouteBinding binding in bindings)
+            if (binding.animator != null)
+            {
+                binding.animator.isFlowing = visualsEnabled &&
+                    IsIncludedInInspection(binding.route.kind) &&
+                    binding.normalizedFlow > .005f;
+                binding.animator.Apply();
+            }
+    }
 
     void ConfigureRoutes()
     {
@@ -110,9 +135,40 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
             animator.speed = binding.route.speed * globalSpeed * Mathf.Lerp(.35f, 1.35f, response);
             animator.density = binding.route.density * globalDensity * Mathf.Lerp(.55f, 1.3f, visible);
             animator.flowIntensity = binding.route.intensity * globalIntensity * Mathf.Lerp(.25f, 1.25f, response);
-            animator.isFlowing = visualsEnabled && flow > .005f;
+            animator.isFlowing = visualsEnabled &&
+                IsIncludedInInspection(binding.route.kind) &&
+                flow > .005f;
             animator.speciesFractions = SpeciesFractions(binding.route.kind, feedFractions);
             animator.Apply();
+        }
+    }
+
+    bool IsIncludedInInspection(PlantFlowKind kind)
+    {
+        switch (inspectionMode)
+        {
+            case InspectionMode.FeedGases:
+                return kind == PlantFlowKind.Hydrogen ||
+                    kind == PlantFlowKind.HydrogenFromStorage ||
+                    kind == PlantFlowKind.CarbonDioxide ||
+                    kind == PlantFlowKind.MixedFeed;
+            case InspectionMode.CaptureLoop:
+                return kind == PlantFlowKind.RichAmine ||
+                    kind == PlantFlowKind.LeanAmine ||
+                    kind == PlantFlowKind.CarbonDioxide;
+            case InspectionMode.SynthesisLoop:
+                return kind == PlantFlowKind.MixedFeed ||
+                    kind == PlantFlowKind.SyngasCold ||
+                    kind == PlantFlowKind.SyngasHeated ||
+                    kind == PlantFlowKind.RecycleGas ||
+                    kind == PlantFlowKind.ReactorEffluent;
+            case InspectionMode.Product:
+                return kind == PlantFlowKind.ReactorEffluent ||
+                    kind == PlantFlowKind.CrudeMethanolVapourLiquid ||
+                    kind == PlantFlowKind.LiquidCrudeMethanol ||
+                    kind == PlantFlowKind.MethanolProduct;
+            default:
+                return true;
         }
     }
 
