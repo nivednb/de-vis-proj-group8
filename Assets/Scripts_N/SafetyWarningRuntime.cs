@@ -232,7 +232,9 @@ public class SafetyWarningRuntime : MonoBehaviour
 
     private void AddStorageWarnings(PlantProcessSimulator.ProcessSnapshot s, List<string> alarms, List<string> cautions)
     {
-        if (s.storageFillPercent >= 95f)
+        if (s.storageInterlockActive)
+            alarms.Add($"STORAGE HIGH-HIGH: production interlock active ({s.storageFillPercent:F0}%). Reset/unload storage to restart");
+        else if (s.storageFillPercent >= 95f)
             alarms.Add($"STORAGE: methanol tank nearly full ({s.storageFillPercent:F0}%)");
         else if (s.storageFillPercent >= 85f)
             cautions.Add($"STORAGE: methanol tank level high ({s.storageFillPercent:F0}%)");

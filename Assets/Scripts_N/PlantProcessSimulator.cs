@@ -61,6 +61,7 @@ public class PlantProcessSimulator : MonoBehaviour
         public float storedMethanolKg;
         public float overallEfficiencyPercent;
         public float storageFillPercent;
+        public bool storageInterlockActive;
     }
 
     [Header("Design Capacity")]
@@ -75,6 +76,11 @@ public class PlantProcessSimulator : MonoBehaviour
     [SerializeField] private bool accumulateStorageInPlayMode = true;
     [SerializeField] private float storageSimulationHoursPerSecond = 0.035f;
     [SerializeField] private float outputSmoothing = 4.5f;
+
+    [Header("Storage Protection")]
+    [Tooltip("A high-high level trip prevents further methanol production until storage is reset/unloaded.")]
+    [SerializeField, Range(90f, 100f)] private float storageHighHighPercent = 99f;
+    [SerializeField] private bool enableStorageHighHighTrip = true;
 
     [Header("Optional UI Outputs")]
     [SerializeField] private TMP_Text methanolProductionLabel;
@@ -121,6 +127,7 @@ public class PlantProcessSimulator : MonoBehaviour
     private ProcessSnapshot current;
     private ProcessSnapshot target;
     private bool initialized;
+    private bool storageInterlockLatched;
 
     public ProcessSnapshot Current => current;
     public event Action<ProcessSnapshot> SnapshotUpdated;
@@ -217,6 +224,11 @@ public class PlantProcessSimulator : MonoBehaviour
         }
 
         current.storageFillPercent = StorageFill(current.storedMethanolKg);
+        if (enableStorageHighHighTrip && current.storageFillPercent >= storageHighHighPercent)
+        {
+            storageInterlockLatched = true;
+        }
+        current.storageInterlockActive = storageInterlockLatched;
         Publish();
     }
 
@@ -224,6 +236,8 @@ public class PlantProcessSimulator : MonoBehaviour
     {
         current.storedMethanolKg = 0f;
         current.storageFillPercent = 0f;
+        storageInterlockLatched = false;
+        current.storageInterlockActive = false;
         Publish();
     }
 
@@ -298,7 +312,7 @@ public class PlantProcessSimulator : MonoBehaviour
     private ProcessSnapshot CalculateSnapshot()
     {
         float timeline = manualTimelineEnabled ? manualTimeline : GetSliderValue(timelineSlider, 100f);
-        float plantRamp = CalculatePlantRamp(timeline);
+        float plantRamp = storageInterlockLatched ? 0f : CalculatePlantRamp(timeline);
 
         float temperature = manualTemperatureEnabled ? manualTemperature : GetSliderValue(temperatureSlider, 250f);
         float pressure = manualPressureEnabled ? manualPressure : GetSliderValue(pressureSlider, 70f);
@@ -391,7 +405,8 @@ public class PlantProcessSimulator : MonoBehaviour
             distillationEnergyPercent = distillationEnergy,
             methanolProductionKgH = methanol,
             storedMethanolKg = current.storedMethanolKg,
-            overallEfficiencyPercent = efficiency
+            overallEfficiencyPercent = efficiency,
+            storageInterlockActive = storageInterlockLatched
         };
 
         snapshot.storageFillPercent = StorageFill(snapshot.storedMethanolKg);
