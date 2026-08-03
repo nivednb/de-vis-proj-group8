@@ -1,7 +1,5 @@
 # Unity Project Context
 
-<!-- unity-onboarding:generated:start -->
-
 ## Project Summary
 
 - Project root: `work/de-vis-proj-group8`
@@ -73,14 +71,10 @@ There are no first-party `.asmdef` files. First-party runtime scripts compile in
 - CI/build validation: none detected
 - Current limitation: Unity Editor `6000.4.7f1` and Unity Hub are not installed on this laptop
 
-## Available Unity Tooling
+## Available Project Tooling
 
-| Capability | Status | Evidence |
-| --- | --- | --- |
-| Official Unity MCP package | available in project | `com.unity.ai.assistant` 2.15.0-pre.1 |
-| Unity Editor connection | unavailable | Editor is not installed/running |
-| Console/scene/build/test MCP tools | unavailable | no active Unity MCP tools exposed |
-| Repository inspection | available | local integration branch |
+Repository inspection is available from a local checkout. Compilation, scene validation, and build
+testing require Unity Editor `6000.4.7f1`.
 
 ## Important Constraints
 
@@ -88,8 +82,8 @@ There are no first-party `.asmdef` files. First-party runtime scripts compile in
   chemically accurate plant control software.
 - Preserve lightweight runtime visualization and modular separation between process state, UI,
   camera, warnings, environment, and flow.
-- Use `docs/images/target-ui-reference-icodos.jpeg` as visual direction, not as a claim that the
-  displayed values are industrially validated.
+- Treat the interface as an educational visualisation; displayed values require independent
+  engineering validation before any real-world use.
 - Existing remote branches must remain untouched. All integration work belongs on
   `codex-icodos-complete`.
 
@@ -97,14 +91,11 @@ There are no first-party `.asmdef` files. First-party runtime scripts compile in
 
 - Actual Unity compilation, package import state, scene references, and runtime appearance remain
   unverified until the exact Editor version is installed and connected.
-- The official Unity MCP client still requires the Editor relay to be running and any Unity-side
-  approval completed.
 
 ## Source Files Inspected
 
 - `README.md`
 - `docs/FINAL_FLOW_SIMULATION_HANDOFF.md`
-- `docs/images/target-ui-reference-icodos.jpeg`
 - `docs/images/unity-full-plant-game-view.png`
 - `Packages/manifest.json`
 - `Packages/packages-lock.json`
@@ -112,4 +103,3 @@ There are no first-party `.asmdef` files. First-party runtime scripts compile in
 - `ProjectSettings/EditorBuildSettings.asset`
 - representative scripts under `Assets/` and `Assets/Scripts_N/`
 
-<!-- unity-onboarding:generated:end -->
