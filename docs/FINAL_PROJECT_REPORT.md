@@ -30,7 +30,7 @@ source of truth is the principal digital-twin architecture of the project.
 ### 2.1 What is implemented
 
 - A full-plant 3D scene with major PtM equipment and interconnecting pipes.
-- An ICODOS-inspired application shell with module navigation, a stream
+- An industrial-dashboard application shell with module navigation, a stream
   legend, plant-status KPIs, equipment information, and operating controls.
 - A central process simulator that responds continuously to UI inputs.
 - Direction-aware flow visualization for pure, mixed-gas, liquid, and
@@ -68,7 +68,7 @@ the dashboard as “EDUCATIONAL VISUALIZATION • SIMPLIFIED PROCESS VALUES.”
 | Platform | Windows desktop |
 | Scene | `Assets/Scenes/SampleScene.unity` |
 | Version control | Git / GitHub |
-| Submission preparation branch | `agent/submission-ready-masters-enhancement` |
+| Release branch | `release/power_to_methanol-submission-v1` |
 
 The project contains no first-party assembly-definition files. Runtime scripts
 therefore compile into `Assembly-CSharp`, while scripts in `Assets/Editor`
@@ -314,7 +314,7 @@ The runtime dashboard provides:
 - previous/next module navigation; and
 - reset and help actions.
 
-The visual direction is based on the supplied HTML/Figma/ICODOS references,
+The visual direction is based on team-supplied interface concepts and industrial process-dashboard references,
 while remaining a Unity-native runtime UI.
 
 ### 8.2 Interactive controls

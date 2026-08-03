@@ -1,7 +1,5 @@
 # Unity Project Context
 
-<!-- unity-onboarding:generated:start -->
-
 ## Project summary
 
 - Repository: `de-vis-proj-group8`
@@ -9,7 +7,7 @@
 - Purpose: interactive educational Power-to-Methanol digital twin
 - Last analyzed: 2026-07-29
 - Last analyzed starting commit: `834f3a67cc8f3c87a627d4bcc68ad399ff997594`
-- Submission preparation branch: `agent/submission-ready-masters-enhancement`
+- Release branch: `release/power_to_methanol-submission-v1`
 - Remote: `https://github.com/nivednb/de-vis-proj-group8.git`
 
 ## Confirmed environment
@@ -106,5 +104,3 @@ Package presence does not prove active feature use.
 - `docs/FINAL_PROJECT_REPORT.md`
 - `docs/IMPLEMENTATION_REFERENCE.md`
 - `docs/DEVELOPMENT_NOTES/UnityProjectHealth.md`
-
-<!-- unity-onboarding:generated:end -->

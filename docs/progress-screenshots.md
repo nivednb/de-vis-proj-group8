@@ -1,6 +1,6 @@
 # Progress screenshots
 
-This page collects selected screenshots from the project history so an evaluator can understand the visual implementation without first opening Unity. Images are labelled as either project evidence or external design direction; they are not presented as test results.
+This page collects selected screenshots from the project history so an evaluator can understand the visual implementation without first opening Unity. These images document project work; they are not presented as test results.
 
 ## Current Unity full-plant progress
 
@@ -21,12 +21,6 @@ This project screenshot documents an earlier reactor interaction prototype with 
 This detail shot shows model work around platform/ladder support structures and equipment connections.
 
 ![Equipment detail with platform structures](images/equipment-detail-platforms.jpeg)
-
-## Target visual direction
-
-This is an external visual-direction reference, not a screenshot of project-authored software. It illustrates the desired industrial-dashboard qualities: labelled units, stream colors, module navigation, KPIs, and process values.
-
-![Target ICODOS-style UI reference](images/target-ui-reference-icodos.jpeg)
 
 ## Evidence limitations
 

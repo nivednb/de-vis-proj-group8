@@ -2,7 +2,7 @@
 
 Assessment date: 2026-07-29
 
-Baseline branch: `codex-masters-presentation-enhancement`
+Baseline branch: `release/power_to_methanol-submission-v1`
 
 Baseline commit: `834f3a67cc8f3c87a627d4bcc68ad399ff997594`
 
@@ -19,8 +19,8 @@ transparent-rendering/performance limits.
 
 | Finding | Confidence | Evidence |
 | --- | --- | --- |
-| Windows build succeeds | High | `Logs/codex-windows-build.log` |
-| Structural release validation passes | High | `Logs/codex-release-validation.log` |
+| Windows build succeeds | High | Recorded release build log |
+| Structural release validation passes | High | Recorded validation log |
 | One central process snapshot feeds UI and visuals | High | Source trace |
 | Mixed-gas flow preserves separate species | High | `FinalPlantFlowRuntime`, shader |
 | Flow speed/density responds to process state | High | `FinalPlantFlowRuntime` |

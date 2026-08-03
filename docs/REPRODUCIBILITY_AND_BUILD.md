@@ -7,7 +7,7 @@
 - Unity Editor `6000.4.7f1` with Windows Build Support
 
 The project uses URP `17.4.0`. Unity's Navigation package and built-in AI module
-refer to NavMesh/navigation features; they are not generative-AI authoring tools.
+provide NavMesh and pathfinding support.
 
 ## Clean-clone verification
 
@@ -53,15 +53,16 @@ Store these outside the Unity source tree or in a release attachment:
 Never submit `Library`, `Temp`, `Logs`, `UserSettings`, `.vs`, `obj`, or a stale
 build from a different commit.
 
-## Validation record for this preparation branch
+## Validation record for this release branch
 
 On 3 August 2026, Unity 6000.4.7f1 completed the automated release-scene
 validation and a Windows build in batch mode.
 
 - Validation passed (`RELEASE_VALIDATION_OK`), reporting 480 scene objects, 35
   process segments, the runtime-animated catalyst, reactor shell, and camera pan.
-- The Windows build succeeded with 0 errors at
-  `D:\Builds\PtMeOH-Submission\PtMeOH-DigitalTwin.exe`.
+- The Windows build succeeded with 0 errors. The build was written to an
+  external release directory so generated binaries were not committed to the
+  Unity source tree.
 - The compiler reported 40 warnings. These are primarily Unity 6 API
   deprecation warnings in existing runtime-discovery calls, plus one
   member-hiding warning. They do not block this build, but should be removed in

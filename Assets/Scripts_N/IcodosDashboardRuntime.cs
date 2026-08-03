@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Builds the ICODOS-inspired full-plant presentation at runtime.
+/// Builds the full-plant industrial dashboard presentation at runtime.
 /// The values are supplied by PlantProcessSimulator and remain educational estimates.
 /// </summary>
 [DisallowMultipleComponent]

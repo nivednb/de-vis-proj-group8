@@ -1,9 +1,10 @@
-# Tools, Assistance, and Provenance
+# Development Tools and Provenance
 
-This project was developed by the student team using Unity, Git/GitHub, design
-references, engineering literature, visual design tools, and coding assistants.
-Editor-only assistant packages are not required to run or build the submitted
-application and have been removed from the project dependency list.
+The student team developed this project using Unity, Git/GitHub, engineering
+literature, design references, 3D and interface-design tools, and
+software-assisted development tools. None of the authoring tools is required
+to run the submitted Windows application. Editor-only packages that are not
+part of the application have been removed from the Unity dependency list.
 
 The team remains responsible for:
 
@@ -14,9 +15,14 @@ The team remains responsible for:
 - complying with the university's rules for declaration of software and AI
   assistance.
 
-This file intentionally does not claim that no assistance was used. If the
-institution supplies a required declaration form or wording, that requirement
-takes precedence and should be completed honestly by the team.
+Any declaration required by the university should accompany the submitted
+release. Before assessment, the team should complete the contribution record
+below and confirm that every member can explain the work attributed to them.
 
-For final submission, add a contribution table containing each member's name,
-their authored/reviewed areas, and the evidence they can demonstrate.
+| Team member | Main contribution | Reviewed or tested areas | Evidence/demo responsibility |
+| --- | --- | --- | --- |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |

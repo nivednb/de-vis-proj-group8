@@ -12,7 +12,7 @@ lightweight steady-state process model.
 
 ## Evaluated project baseline
 
-- Submission preparation branch: `agent/submission-ready-masters-enhancement`
+- Release branch: `release/power_to_methanol-submission-v1`
 - Unity: `6000.4.7f1`
 - Render pipeline: URP `17.4.0`
 - Startup scene: `Assets/Scenes/SampleScene.unity`
@@ -31,6 +31,7 @@ lightweight steady-state process model.
 - [Submission readiness checklist](docs/SUBMISSION_READINESS_CHECKLIST.md)
 - [Reproducible build instructions](docs/REPRODUCIBILITY_AND_BUILD.md)
 - [Architecture and asset policy](docs/ARCHITECTURE_AND_ASSET_POLICY.md)
+- [References and asset provenance](docs/REFERENCES_AND_ASSET_PROVENANCE.md)
 - [Tool-use and provenance note](docs/TOOLS_AND_ASSISTANCE.md)
 
 ## Main systems
@@ -44,7 +45,7 @@ lightweight steady-state process model.
 - Transparent process pipes with direction-aware shader animation
 - Transparent reactor shell, upflow reactor visualization, and
   conversion-dependent catalyst-bed color
-- ICODOS-inspired dashboard, KPIs, module navigation, equipment controls, and
+- Industrial process dashboard, KPIs, module navigation, equipment controls, and
   educational warnings
 - Orbit, pan, zoom, overview, and module-focus camera controls
 - Lightweight procedurally generated plant environment
