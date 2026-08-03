@@ -24,9 +24,7 @@ This detail shot shows model work around platform/ladder support structures and 
 
 ## Target visual direction
 
-The final visual goal is closer to an industrial dashboard: labelled plant units, stream colors, module navigation, live KPIs, process values, and a polished overview interface.
-
-![Target ICODOS-style UI reference](images/target-ui-reference-icodos.jpeg)
+The final visual goal is an industrial dashboard with labelled plant units, stream colours, module navigation, live KPIs, process values, and a polished overview interface.
 
 ## Feedback-driven next steps
 

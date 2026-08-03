@@ -17,8 +17,8 @@ transparent-rendering/performance limits.
 
 | Finding | Confidence | Evidence |
 | --- | --- | --- |
-| Windows build succeeds | High | `Logs/codex-windows-build.log` |
-| Structural release validation passes | High | `Logs/codex-release-validation.log` |
+| Windows build succeeds | High | `Logs/windows-build.log` |
+| Structural release validation passes | High | `Logs/release-validation.log` |
 | One central process snapshot feeds UI and visuals | High | Source trace |
 | Mixed-gas flow preserves separate species | High | `FinalPlantFlowRuntime`, shader |
 | Flow speed/density responds to process state | High | `FinalPlantFlowRuntime` |

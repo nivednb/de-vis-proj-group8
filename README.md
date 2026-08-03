@@ -24,8 +24,8 @@ lightweight steady-state process model.
 
 - [Final project report](docs/FINAL_PROJECT_REPORT.md)
 - [Implementation and equation reference](docs/IMPLEMENTATION_REFERENCE.md)
-- [Unity project context](docs/AI/UnityProjectContext.md)
-- [Project health and validation status](docs/AI/UnityProjectHealth.md)
+- [Unity project context](docs/DEVELOPMENT_NOTES/UnityProjectContext.md)
+- [Project health and validation status](docs/DEVELOPMENT_NOTES/UnityProjectHealth.md)
 - [Progress screenshots](docs/progress-screenshots.md)
 
 ## Main systems
