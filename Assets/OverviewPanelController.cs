@@ -65,9 +65,9 @@ public class OverviewPanelController : MonoBehaviour
 
     void Update()
     {
-        SetBar(h2Bar,   h2TrackWidth,   ref targetH2,   co2Max,  h2Label,   "0.0", " kg/h");
+        SetBar(h2Bar,   h2TrackWidth,   ref targetH2,   h2Max,   h2Label,   "0.0", " kg/h");
         SetBar(co2Bar,  co2TrackWidth,  ref targetCO2,  co2Max,  co2Label,  "0.0", " kg/h");
-        SetBar(meohBar, meohTrackWidth, ref targetMeOH, co2Max,  meohLabel, "0.0", " kg/h");
+        SetBar(meohBar, meohTrackWidth, ref targetMeOH, meohMax, meohLabel, "0.0", " kg/h");
         SetBar(effBar,  effTrackWidth,  ref targetEff,  100f,    effLabel,  "0",   "%");
     }
 

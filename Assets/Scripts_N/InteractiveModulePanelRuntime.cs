@@ -99,7 +99,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     {
         if (canvas != null)
         {
-            DestroyObject(canvas.gameObject);
+            DestroyPanelObject(canvas.gameObject);
             canvas = null;
         }
     }
@@ -452,7 +452,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         rect.offsetMax = Vector2.zero;
     }
 
-    private void DestroyObject(UnityEngine.Object target)
+    private void DestroyPanelObject(UnityEngine.Object target)
     {
         if (target == null) return;
         if (Application.isPlaying) Destroy(target);
