@@ -10,23 +10,28 @@ lightweight steady-state process model.
 > CFD model, a rigorous thermodynamic/kinetic simulator, a plant control system,
 > or certified process-safety software.
 
-## Current integrated version
+## Evaluated project baseline
 
-- Branch: `codex-icodos-final-flow-integration`
+- Submission preparation branch: `agent/submission-ready-masters-enhancement`
 - Unity: `6000.4.7f1`
 - Render pipeline: URP `17.4.0`
 - Startup scene: `Assets/Scenes/SampleScene.unity`
-- Windows build: `D:\Builds\PowerToMethanolDigitalTwin\PowerToMethanolDigitalTwin.exe`
-- Latest recorded validation: successful scene validation and successful
-  Windows build with zero build errors
+- Default Windows build: `Builds/Windows/PtMeOH-DigitalTwin.exe`
+- Release status: run the validation steps below on the final submission commit;
+  recorded results must not be treated as a substitute for a fresh build.
 
 ## Documentation
 
 - [Final project report](docs/FINAL_PROJECT_REPORT.md)
 - [Implementation and equation reference](docs/IMPLEMENTATION_REFERENCE.md)
-- [Unity project context](docs/AI/UnityProjectContext.md)
-- [Project health and validation status](docs/AI/UnityProjectHealth.md)
+- [Unity project context](docs/DEVELOPMENT_NOTES/UnityProjectContext.md)
+- [Project health and validation status](docs/DEVELOPMENT_NOTES/UnityProjectHealth.md)
 - [Progress screenshots](docs/progress-screenshots.md)
+- [Professor evaluation guide](docs/PROFESSOR_EVALUATION_GUIDE.md)
+- [Submission readiness checklist](docs/SUBMISSION_READINESS_CHECKLIST.md)
+- [Reproducible build instructions](docs/REPRODUCIBILITY_AND_BUILD.md)
+- [Architecture and asset policy](docs/ARCHITECTURE_AND_ASSET_POLICY.md)
+- [Tool-use and provenance note](docs/TOOLS_AND_ASSISTANCE.md)
 
 ## Main systems
 
@@ -77,10 +82,20 @@ Assets/
 docs/
 |-- FINAL_PROJECT_REPORT.md
 |-- IMPLEMENTATION_REFERENCE.md
-`-- AI/                         # Persistent Unity context and health report
+`-- DEVELOPMENT_NOTES/          # Unity context and technical health notes
 Packages/
 ProjectSettings/
 ```
 
 Unity-generated folders (`Library`, `Temp`, `Logs`, `UserSettings`, `.vs`,
 `obj`) are excluded from Git.
+
+## Validate and build
+
+In Unity, use:
+
+1. `Tools > Power-to-Methanol > Validate Release Scene`.
+2. Confirm the Console contains `RELEASE_VALIDATION_OK` and no errors.
+3. `Tools > Power-to-Methanol > Build Windows Application`.
+4. Run the generated executable from `Builds/Windows` and complete the
+   evaluation checklist in `docs/SUBMISSION_READINESS_CHECKLIST.md`.

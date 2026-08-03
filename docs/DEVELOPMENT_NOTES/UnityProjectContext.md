@@ -5,12 +5,11 @@
 ## Project summary
 
 - Repository: `de-vis-proj-group8`
-- Integrated working copy:
-  `D:\Projects\de-vis-proj-group8-icodos-final-flow`
+- Integrated working copy: repository root (location is machine-dependent)
 - Purpose: interactive educational Power-to-Methanol digital twin
 - Last analyzed: 2026-07-29
 - Last analyzed starting commit: `834f3a67cc8f3c87a627d4bcc68ad399ff997594`
-- Integration branch: `codex-icodos-final-flow-integration`
+- Submission preparation branch: `agent/submission-ready-masters-enhancement`
 - Remote: `https://github.com/nivednb/de-vis-proj-group8.git`
 
 ## Confirmed environment
@@ -71,7 +70,6 @@ Package presence does not prove active feature use.
 | uGUI | 2.0.0 | Yes |
 | Test Framework | 1.6.0 | Package present; no first-party tests found |
 | AI Navigation | 2.0.12 | Package present; no core dependency confirmed |
-| Unity AI Assistant | 2.15.0-pre.1 | Installed tooling; not a runtime requirement |
 | Visual Scripting | 1.9.11 | Package present; no core dependency confirmed |
 
 ## Controls
@@ -88,7 +86,7 @@ Package presence does not prove active feature use.
 - Editor release validation: passed.
 - Windows build: succeeded with 0 errors and 37 warnings.
 - Build output:
-  `D:\Builds\PowerToMethanolDigitalTwin\PowerToMethanolDigitalTwin.exe`
+  `Builds/Windows/PtMeOH-DigitalTwin.exe`
 - First-party automated tests: none detected.
 - Chemical calibration against rigorous external simulation: not performed.
 
@@ -101,12 +99,12 @@ Package presence does not prove active feature use.
   imported geometry.
 - Keep the lightweight reactor population bounded for laptop stability.
 - Treat all process values and warnings as educational approximations.
-- Integration changes belong on `codex-icodos-final-flow-integration`.
+- Submission changes are reviewed through a pull request into `main`.
 
 ## Canonical documentation
 
 - `docs/FINAL_PROJECT_REPORT.md`
 - `docs/IMPLEMENTATION_REFERENCE.md`
-- `docs/AI/UnityProjectHealth.md`
+- `docs/DEVELOPMENT_NOTES/UnityProjectHealth.md`
 
 <!-- unity-onboarding:generated:end -->
