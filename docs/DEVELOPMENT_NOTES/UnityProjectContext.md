@@ -6,7 +6,7 @@
 
 - Repository: `de-vis-proj-group8`
 - Integrated working copy:
-  `D:\Projects\de-vis-proj-group8-icodos-final-flow`
+  `<local-project-root>`
 - Purpose: interactive educational Power-to-Methanol digital twin
 - Last analyzed: 2026-07-29
 - Last analyzed starting commit: `834f3a67cc8f3c87a627d4bcc68ad399ff997594`
@@ -107,6 +107,6 @@ Package presence does not prove active feature use.
 
 - `docs/FINAL_PROJECT_REPORT.md`
 - `docs/IMPLEMENTATION_REFERENCE.md`
-- `docs/AI/UnityProjectHealth.md`
+- `docs/DEVELOPMENT_NOTES/UnityProjectHealth.md`
 
 <!-- unity-onboarding:generated:end -->

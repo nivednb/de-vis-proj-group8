@@ -6,7 +6,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public static class CodexReleaseValidation
+public static class ReleaseValidation
 {
     private static readonly (string Prefix, int Count)[] RequiredProcessRoutes =
     {
@@ -24,7 +24,7 @@ public static class CodexReleaseValidation
         ("MethanolProduct_pipe_", 2)
     };
 
-    [MenuItem("Tools/Codex/Validate Release Scene")]
+    [MenuItem("Tools/Power-to-Methanol/Validate Release Scene")]
     public static void Run()
     {
         const string scenePath = "Assets/Scenes/SampleScene.unity";
@@ -89,7 +89,7 @@ public static class CodexReleaseValidation
             throw new InvalidOperationException("Release validation failed:\n- " + string.Join("\n- ", failures));
 
         Debug.Log(
-            $"CODEX_RELEASE_VALIDATION_OK scene={scene.path} objects={allObjects.Length} " +
+            $"RELEASE_VALIDATION_OK scene={scene.path} objects={allObjects.Length} " +
             $"processSegments={RequiredProcessRoutes.Sum(route => route.Count)} " +
             "catalyst=runtime-animated shell=present cameraPan=enabled");
     }

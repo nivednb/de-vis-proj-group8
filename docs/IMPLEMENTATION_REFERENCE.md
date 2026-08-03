@@ -27,9 +27,9 @@ are relative to the repository root.
 
 | File | Role |
 | --- | --- |
-| `Assets/Editor/CodexDeepProjectInventory.cs` | Deep hierarchy/asset inventory |
-| `Assets/Editor/CodexReleaseValidation.cs` | Structural release validation |
-| `Assets/Editor/CodexWindowsBuild.cs` | Reproducible Windows build entry point |
+| `Assets/Editor/DeepProjectInventory.cs` | Deep hierarchy/asset inventory |
+| `Assets/Editor/ReleaseValidation.cs` | Structural release validation |
+| `Assets/Editor/WindowsBuild.cs` | Reproducible Windows build entry point |
 
 ### 1.3 Legacy and support files
 
