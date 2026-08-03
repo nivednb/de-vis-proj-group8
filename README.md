@@ -10,11 +10,9 @@ An interactive educational Unity visualization of a **Power-to-Methanol (PtMeOH)
 
 ![Unity full plant game view](docs/images/unity-full-plant-game-view.png)
 
-### Target visual direction
+### Visual direction
 
-The intended final direction is a more polished ICODOS-style industrial dashboard, with labelled process equipment, stream colors, live KPIs, and process navigation.
-
-![Target UI reference](docs/images/target-ui-reference-icodos.jpeg)
+The interface is being developed as a clear industrial dashboard with labelled process equipment, stream colours, live KPIs, and process navigation.
 
 More images are documented in [docs/progress-screenshots.md](docs/progress-screenshots.md).
 
