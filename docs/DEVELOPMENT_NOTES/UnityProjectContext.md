@@ -1,7 +1,5 @@
 # Unity Project Context
 
-<!-- unity-onboarding:generated:start -->
-
 ## Project summary
 
 - Repository: `de-vis-proj-group8`
@@ -108,5 +106,3 @@ Package presence does not prove active feature use.
 - `docs/FINAL_PROJECT_REPORT.md`
 - `docs/IMPLEMENTATION_REFERENCE.md`
 - `docs/DEVELOPMENT_NOTES/UnityProjectHealth.md`
-
-<!-- unity-onboarding:generated:end -->
