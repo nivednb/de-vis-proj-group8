@@ -787,7 +787,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     }
 
 #if UNITY_EDITOR
-    [MenuItem("Tools/Nived/Build Plant Environment")]
+    [MenuItem("Tools/Power-to-Methanol/Build Plant Environment")]
     private static void BuildEnvironmentFromMenu()
     {
         PlantEnvironmentBuilder builder = FindFirstObjectByType<PlantEnvironmentBuilder>();
