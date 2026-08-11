@@ -50,6 +50,35 @@ lightweight steady-state process model.
 - Orbit, pan, zoom, overview, and module-focus camera controls
 - Lightweight procedurally generated plant environment
 
+## Current implemented features
+
+- Complete explorable Power-to-Methanol plant covering electrolysis, CO2
+  capture, compression, synthesis, cooling, separation, recycle, and storage.
+- Six-page ICODOS-style interface with plant overview, process views,
+  educational information, stream visualization, analytics, and operating
+  controls.
+- Live steady-state process calculations for mass flow, conversion, recovery,
+  production, efficiency, CO2 utilization, storage inventory, and estimated
+  time to a full methanol tank.
+- Interactive process sliders coupled to both calculated KPIs and the visible
+  speed and density of material moving through the plant.
+- An additional `MAX` efficiency control that selects the best operating point
+  inside the demonstrator's defined simulation envelope while respecting the
+  storage safety interlock.
+- Continuous, direction-aware pipe animation with transparent pipe walls,
+  persistent packet movement across pipe segments, and distinct H2, CO2,
+  recycle-gas, methanol, and water representations.
+- Multi-species mixed-gas streams that retain the individual constituent
+  tracers instead of displaying the mixture as one arbitrary color.
+- Transparent methanol reactor with geometry-aligned upflow visualization,
+  visible catalyst bed, and conversion-dependent catalyst color animation.
+- Plant status, alarms, tank high-high shutdown behavior, reset handling, and
+  synchronized dashboard values.
+- Equipment selection, information overlays, module navigation, overview and
+  focus presets, plus orbit, pan, and zoom camera controls.
+- Windows standalone build tooling, release-scene validation, implementation
+  reference, reproducibility instructions, and final-project documentation.
+
 ## Open and run
 
 1. Open Unity Hub.
