@@ -3,8 +3,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Runtime warning overlay for unsafe or inefficient operating conditions.
-/// Auto-created on Play, so no scene edits are required.
+/// Runtime warning controller for unsafe or inefficient operating conditions.
+/// The editable visual hierarchy is supplied by a prefab; a code-built fallback
+/// is retained for older scenes and recovery builds.
 /// </summary>
 [DisallowMultipleComponent]
 public class SafetyWarningRuntime : MonoBehaviour
@@ -12,6 +13,7 @@ public class SafetyWarningRuntime : MonoBehaviour
     private const string RuntimeRootName = "Generated Safety Warning Overlay";
 
     [SerializeField] private float updateInterval = 0.25f;
+    [SerializeField] private GameObject overlayPrefab;
 
     private Canvas canvas;
     private RectTransform panelRect;
@@ -36,7 +38,19 @@ public class SafetyWarningRuntime : MonoBehaviour
     {
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        BuildOverlay();
+
+        if (!BindOverlay())
+        {
+            if (overlayPrefab != null)
+            {
+                Instantiate(overlayPrefab, transform, false);
+            }
+
+            if (!BindOverlay())
+            {
+                BuildOverlay();
+            }
+        }
     }
 
     private void Update()
@@ -92,6 +106,41 @@ public class SafetyWarningRuntime : MonoBehaviour
         textRect.offsetMax = new Vector2(-14f, -8f);
 
         panel.SetActive(false);
+    }
+
+    private bool BindOverlay()
+    {
+        canvas = GetComponentInChildren<Canvas>(true);
+        if (canvas == null)
+        {
+            return false;
+        }
+
+        Transform panel = FindDescendant(canvas.transform, "Warning Panel");
+        Transform text = FindDescendant(canvas.transform, "Warning Text");
+        if (panel == null || text == null)
+        {
+            return false;
+        }
+
+        panelRect = panel.GetComponent<RectTransform>();
+        panelImage = panel.GetComponent<Image>();
+        warningText = text.GetComponent<Text>();
+        return panelRect != null && panelImage != null && warningText != null;
+    }
+
+    private static Transform FindDescendant(Transform root, string objectName)
+    {
+        Transform[] descendants = root.GetComponentsInChildren<Transform>(true);
+        foreach (Transform descendant in descendants)
+        {
+            if (descendant.name == objectName)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
     }
 
     private void RefreshWarnings()

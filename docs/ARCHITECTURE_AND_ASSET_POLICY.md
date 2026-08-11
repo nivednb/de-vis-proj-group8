@@ -41,3 +41,23 @@ visual hierarchies. Unique plant-wide layout may remain serialized in the scene.
 Do not convert everything in one pass. It creates duplicated state, broken
 references, larger scenes, and difficult merges. The final submission may retain
 documented runtime composition where it is deterministic and validated.
+
+## Implemented prefab boundary
+
+The runtime-to-prefab refactor establishes the following authored assets:
+
+- `Assets/Prefabs_N/Runtime/Systems/PlantRuntimeServices.prefab` is the single
+  scene-level composition root for simulation, flow, dashboard, module panels,
+  warnings, and environment ownership.
+- `Assets/Prefabs_N/Runtime/UI/SafetyWarningOverlay.prefab` contains the editable
+  warning canvas and presentation hierarchy. `SafetyWarningRuntime` binds to it
+  and retains a guarded fallback for damaged or older scenes.
+- `Assets/Prefabs_N/Environment/IndustrialPlantEnvironment.prefab` contains the
+  editable environment geometry formerly rebuilt at application startup.
+- `Assets/Materials_N/Environment` contains persistent environment materials;
+  they are no longer anonymous runtime-only material instances.
+
+The plant scene contains prefab instances of these assets. The simulator and
+flow controller still create transient state because their values, particle
+population, and mixed-species composition depend on current operating inputs.
+This is an intentional architecture boundary, not an incomplete conversion.

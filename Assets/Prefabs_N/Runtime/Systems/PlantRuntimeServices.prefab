@@ -1,0 +1,153 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1845382907769525111
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4398909525713136604}
+  - component: {fileID: 5060939928348460054}
+  - component: {fileID: 6853317513514186627}
+  - component: {fileID: 8355086927438048407}
+  - component: {fileID: 1734426994538337607}
+  - component: {fileID: 7533694411069703796}
+  - component: {fileID: 4989997995863087423}
+  m_Layer: 0
+  m_Name: PlantRuntimeServices
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4398909525713136604
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845382907769525111}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5060939928348460054
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845382907769525111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a92c34f8de14586ad15b44e214e9f33, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlantProcessSimulator
+  designH2InputKgH: 215
+  designCO2InputKgH: 1510
+  designWaterFeedKgH: 1935
+  designMethanolKgH: 1250
+  storageCapacityKg: 12000
+  autoFindSceneSliders: 1
+  accumulateStorageInPlayMode: 1
+  storageSimulationHoursPerSecond: 0.035
+  outputSmoothing: 4.5
+  storageHighHighPercent: 99
+  enableStorageHighHighTrip: 1
+  methanolProductionLabel: {fileID: 0}
+  storageLabel: {fileID: 0}
+  oxygenByproductLabel: {fileID: 0}
+  overallEfficiencyLabel: {fileID: 0}
+--- !u!114 &6853317513514186627
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845382907769525111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a87db264572fcf459882b4a97995a48, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FinalPlantFlowRuntime
+  visualsEnabled: 1
+  inspectionMode: 0
+  globalSpeed: 1
+  globalDensity: 1
+  globalIntensity: 1
+  startupStageDelay: 0.65
+  stageFadeDuration: 0.55
+--- !u!114 &8355086927438048407
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845382907769525111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31ae24fdacde43b78e39c15922e51ea4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::IcodosDashboardRuntime
+--- !u!114 &1734426994538337607
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845382907769525111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c6b9137e7294ffcb4623f4d96c94372, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InteractiveModulePanelRuntime
+  buttonSize: {x: 28, y: 28}
+  panelSize: {x: 390, y: 300}
+  panelOffset: {x: 230, y: -150}
+--- !u!114 &7533694411069703796
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845382907769525111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8cf71b2ffbb14cbd9be8c6a17acdf4b4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SafetyWarningRuntime
+  updateInterval: 0.25
+  overlayPrefab: {fileID: 523905429413327370, guid: 9247379c49959a04c87f6009f7cb90ed, type: 3}
+--- !u!114 &4989997995863087423
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845382907769525111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f4e28fd0e8047b6af00b09f2b5f2cf8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlantEnvironmentBuilder
+  rebuildOnStart: 0
+  minimumSiteWidth: 78
+  minimumSiteDepth: 46
+  maximumSiteWidth: 118
+  maximumSiteDepth: 72
+  sitePadding: 16
+  groundThickness: 0.25
+  environmentYOffset: -0.08
+  createPerimeterFence: 1
+  createPipeRack: 1
+  createRoadsAndMarkings: 1
+  createUtilityZone: 1
+  createStorageContainment: 1
+  createIndustrialBackground: 1
+  industrialBackdropColor: {r: 0.5, g: 0.61, b: 0.72, a: 1}
