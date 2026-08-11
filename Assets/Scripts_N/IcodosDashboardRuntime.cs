@@ -73,8 +73,10 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private int processStepIndex;
     private Text plantStatusText;
     private Text efficiencyText;
+    private Button maxEfficiencyButton;
     private Text productionText;
     private Text utilizationText;
+    private Text storageFillText;
     private Text electrolyzerKpis;
     private Text captureKpis;
     private Text reactorKpis;
@@ -308,14 +310,19 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMax = new Vector2(1f, 1f);
         panel.pivot = new Vector2(1f, 1f);
         panel.anchoredPosition = new Vector2(-16f, -94f - TitleBarHeight);
-        panel.sizeDelta = new Vector2(340f, 142f);
+        panel.sizeDelta = new Vector2(340f, 169f);
         AddPanelTitle(panel, "PLANT STATUS");
 
         plantStatusText = CreateText("Status", panel, "● Normal operation", 12, FontStyle.Normal, TextAnchor.MiddleRight, HealthyColor);
         AnchorTopRight(plantStatusText.rectTransform, new Vector2(-16f, -16f), new Vector2(180f, 28f));
         efficiencyText = AddStatusRow(panel, "Plant efficiency", -58f);
+        maxEfficiencyButton = CreateButton("Max Efficiency", panel, "MAX", AccentColor, 9);
+        AnchorTopRight(maxEfficiencyButton.GetComponent<RectTransform>(), new Vector2(-78f, -58f), new Vector2(46f, 22f));
+        AnchorTopRight(efficiencyText.rectTransform, new Vector2(-16f, -58f), new Vector2(56f, 24f));
+        maxEfficiencyButton.onClick.AddListener(ApplyMaximumEfficiency);
         productionText = AddStatusRow(panel, "Methanol production", -85f);
         utilizationText = AddStatusRow(panel, "CO2 utilization", -112f);
+        storageFillText = AddStatusRow(panel, "Methanol tank", -139f);
     }
 
     private void BuildKpiStrip(Transform parent)
@@ -955,6 +962,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             ? Mathf.Clamp01(co2ConvertedKgH / s.co2CapturedKgH) * 100f
             : 0f;
         utilizationText.text = $"{co2UtilizationPercent:F1}%";
+        storageFillText.text = FormatStorageFill(s);
+        if (maxEfficiencyButton != null)
+            maxEfficiencyButton.interactable = !s.storageInterlockActive;
 
         electrolyzerKpis.text = $"Power {s.electrolyzerPowerPercent:F0}%     H2 {s.h2InputKgH:F0} kg/h\nWater {s.waterFeedKgH:F0} kg/h     O2 {s.oxygenByproductKgH:F0} kg/h";
         captureKpis.text = $"Capture {s.captureEfficiencyPercent:F1}%     CO2 {s.co2CapturedKgH:F0} kg/h\nAmine {s.amineFlowPercent:F0}%     Regen {s.regeneratorTemperatureC:F0} °C";
@@ -1006,6 +1016,31 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
                 (s.captureEfficiencyPercent < 80f ? "Insight: CO2 capture is limiting carbon utilization. " : "CO2 capture is operating in the preferred educational range. ") +
                 (s.h2Co2Ratio < 2.8f || s.h2Co2Ratio > 3.2f ? "Adjust the synthesis feed ratio toward 3.0. " : "Synthesis feed ratio is near its target. ") +
                 (s.storageFillPercent > 85f ? "Storage headroom is low; monitor the interlock." : "Storage headroom is adequate.");
+    }
+
+    private void ApplyMaximumEfficiency()
+    {
+        PlantProcessSimulator simulator = PlantProcessSimulator.Instance;
+        if (simulator == null)
+            simulator = FindFirstObjectByType<PlantProcessSimulator>();
+
+        if (simulator != null && simulator.ApplyMaximumEfficiencyOperatingPoint())
+            Refresh();
+    }
+
+    private static string FormatStorageFill(PlantProcessSimulator.ProcessSnapshot snapshot)
+    {
+        if (snapshot.storageInterlockActive || snapshot.storageTimeRemainingSeconds <= 0f)
+            return $"{snapshot.storageFillPercent:F1}% (FULL / INTERLOCK)";
+
+        if (float.IsInfinity(snapshot.storageTimeRemainingSeconds) || snapshot.methanolProductionKgH <= 0.01f)
+            return $"{snapshot.storageFillPercent:F1}% (PAUSED)";
+
+        TimeSpan remaining = TimeSpan.FromSeconds(snapshot.storageTimeRemainingSeconds);
+        string eta = remaining.TotalHours >= 1d
+            ? $"{(int)remaining.TotalHours}:{remaining.Minutes:00}:{remaining.Seconds:00}"
+            : $"{remaining.Minutes:00}:{remaining.Seconds:00}";
+        return $"{snapshot.storageFillPercent:F1}% ({eta} left)";
     }
 
     private void SelectPage(DashboardPage page)

@@ -376,6 +376,10 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 
     private void CreateSlider(Transform parent, string label, float min, float max, float value, int decimals, string unit, Action<float> onChanged, float y, string moduleTitle)
     {
+        PlantProcessSimulator simulator = Simulator();
+        if (simulator != null)
+            value = simulator.GetControlValue(label, value);
+
         Text labelText = CreateText(label + " Label", parent, label, 12, TextAnchor.MiddleLeft, new Color(0.75f, 0.88f, 0.95f, 1f));
         labelText.rectTransform.anchorMin = new Vector2(0f, 1f);
         labelText.rectTransform.anchorMax = new Vector2(0f, 1f);

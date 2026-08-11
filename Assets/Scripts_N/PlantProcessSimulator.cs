@@ -61,6 +61,7 @@ public class PlantProcessSimulator : MonoBehaviour
         public float storedMethanolKg;
         public float overallEfficiencyPercent;
         public float storageFillPercent;
+        public float storageTimeRemainingSeconds;
         public bool storageInterlockActive;
     }
 
@@ -280,6 +281,9 @@ public class PlantProcessSimulator : MonoBehaviour
         }
 
         current.storageFillPercent = StorageFill(current.storedMethanolKg);
+        current.storageTimeRemainingSeconds = StorageTimeRemainingSeconds(
+            current.storedMethanolKg,
+            current.methanolProductionKgH);
         if (enableStorageHighHighTrip && current.storageFillPercent >= storageHighHighPercent)
         {
             storageInterlockLatched = true;
@@ -292,6 +296,7 @@ public class PlantProcessSimulator : MonoBehaviour
     {
         current.storedMethanolKg = 0f;
         current.storageFillPercent = 0f;
+        current.storageTimeRemainingSeconds = StorageTimeRemainingSeconds(0f, current.methanolProductionKgH);
         storageInterlockLatched = false;
         current.storageInterlockActive = false;
         Publish();
@@ -435,6 +440,84 @@ public class PlantProcessSimulator : MonoBehaviour
         if (regenTempSlider != null) regenTempSlider.SetValueWithoutNotify(manualRegenTemp);
     }
 
+    public float GetControlValue(string label, float fallback)
+    {
+        switch (label)
+        {
+            case "Plant load": return manualTimelineEnabled ? manualTimeline : GetSliderValue(timelineSlider, fallback);
+            case "Power": return manualElectrolyzerPower;
+            case "Water feed": return manualWaterFeed;
+            case "Amine flow": return manualAmineFlowEnabled ? manualAmineFlow : GetSliderValue(amineFlowSlider, fallback);
+            case "Flue gas": return manualFlueGasFlow;
+            case "Steam flow": return manualRegeneratorSteam;
+            case "Regen temp": return manualRegenTempEnabled ? manualRegenTemp : GetSliderValue(regenTempSlider, fallback);
+            case "Comp. ratio": return manualCompressionRatio;
+            case "Outlet press.":
+            case "Pressure": return manualPressureEnabled ? manualPressure : GetSliderValue(pressureSlider, fallback);
+            case "Temp": return manualTemperatureEnabled ? manualTemperature : GetSliderValue(temperatureSlider, fallback);
+            case "H2/CO2": return manualRatioEnabled ? manualRatio : GetSliderValue(ratioSlider, fallback);
+            case "GHSV": return manualGhsvEnabled ? manualGhsv : GetSliderValue(ghsvSlider, fallback);
+            case "Feed flow": return manualReactorFeedFlow;
+            case "Cooling flow": return manualCoolingWaterFlow;
+            case "Cooling temp": return manualCoolingWaterTemperature;
+            case "Recycle ratio": return manualRecycleRatio;
+            case "Sep. temp": return manualSeparatorTemperature;
+            case "Reflux ratio": return manualRefluxRatio;
+            case "Reboiler temp": return manualDistillationReboilerTemp;
+            default: return fallback;
+        }
+    }
+
+    public bool ApplyMaximumEfficiencyOperatingPoint()
+    {
+        // A full product tank is a hard safety constraint. Optimisation must never
+        // silently clear or bypass the storage high-high interlock.
+        if (storageInterlockLatched)
+            return false;
+
+        SetTimelinePercent(100f);
+        SetElectrolyzerPower(100f);
+        SetWaterFeed(100f);
+        SetFlueGasFlow(100f);
+        SetAmineFlow(100f);
+        SetRegeneratorSteam(100f);
+        SetRegeneratorTemperature(118f);
+        SetCompressionRatio(3f);
+        SetReactorFeedFlow(100f);
+        SetReactorTemperature(255f);
+        SetReactorPressure(70f);
+        SetH2Co2Ratio(3f);
+        SetGHSV(5900f);
+        SetCoolingWaterFlow(100f);
+        SetCoolingWaterTemperature(8f);
+        SetSeparatorTemperature(34f);
+        SetRecycleRatio(100f);
+        SetRefluxRatio(5f);
+        SetDistillationReboilerTemperature(105f);
+
+        SyncVisibleControlSliders();
+        current = CalculateSnapshot();
+        initialized = true;
+        Publish();
+        return true;
+    }
+
+    private void SyncVisibleControlSliders()
+    {
+        const string suffix = " Slider";
+        Slider[] sliders = FindObjectsByType<Slider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (Slider slider in sliders)
+        {
+            if (slider == null || !slider.name.EndsWith(suffix, StringComparison.Ordinal))
+                continue;
+
+            string label = slider.name.Substring(0, slider.name.Length - suffix.Length);
+            float value = GetControlValue(label, float.NaN);
+            if (!float.IsNaN(value))
+                slider.value = value;
+        }
+    }
+
     private void Publish()
     {
         UpdateOptionalLabels();
@@ -543,6 +626,9 @@ public class PlantProcessSimulator : MonoBehaviour
         };
 
         snapshot.storageFillPercent = StorageFill(snapshot.storedMethanolKg);
+        snapshot.storageTimeRemainingSeconds = StorageTimeRemainingSeconds(
+            snapshot.storedMethanolKg,
+            snapshot.methanolProductionKgH);
         return snapshot;
     }
 
@@ -574,6 +660,20 @@ public class PlantProcessSimulator : MonoBehaviour
     private float StorageFill(float storedKg)
     {
         return storageCapacityKg <= 0f ? 0f : Mathf.Clamp01(storedKg / storageCapacityKg) * 100f;
+    }
+
+    private float StorageTimeRemainingSeconds(float storedKg, float productionKgH)
+    {
+        float operationalFullKg = enableStorageHighHighTrip
+            ? storageCapacityKg * storageHighHighPercent / 100f
+            : storageCapacityKg;
+        float remainingKg = Mathf.Max(0f, operationalFullKg - storedKg);
+        float accumulationKgPerSecond = productionKgH * storageSimulationHoursPerSecond;
+
+        if (remainingKg <= 0.01f) return 0f;
+        return accumulationKgPerSecond > 0.0001f
+            ? remainingKg / accumulationKgPerSecond
+            : float.PositiveInfinity;
     }
 
     private float GetSliderValue(Slider slider, float fallback)
