@@ -1,10 +1,10 @@
 # Unity Project Health Report
 
-Assessment date: 2026-07-29
+Assessment date: 2026-08-11
 
 Baseline branch: `release/power_to_methanol-submission-v1`
 
-Baseline commit: `834f3a67cc8f3c87a627d4bcc68ad399ff997594`
+Baseline main commit: `1d5073274113cd701fd25c217bd1f7f3a4fab253`
 
 ## Overall assessment
 
@@ -30,6 +30,20 @@ transparent-rendering/performance limits.
 | Dashboard declares simplified values | High | `IcodosDashboardRuntime` |
 
 ## Findings
+
+### P1 — continuous end-to-end flow is not yet verified
+
+The latest product requirement is for a single continuous reaction-driven flow
+journey through the plant rather than animation that appears to restart or loop
+independently on each pipe segment. The current `main` implementation classifies
+and animates renderers per route/segment; repository evidence does not prove
+phase continuity across segment boundaries or coordinated transitions as
+reaction state changes.
+
+Recommended action: define a route-level progress coordinate or explicit
+segment-offset model driven by the shared process snapshot, then validate the
+complete journey in Play Mode from multiple camera distances and operating
+states. Preserve mixed-species handling and physical flow direction.
 
 ### P1 — academic validation is incomplete
 

@@ -7,6 +7,8 @@ using UnityEngine.Rendering;
 /// Lightweight bridge between calculated plant state and shader-driven pipe flow.
 /// No particle GameObjects are spawned. Visual speed/density are derived from
 /// calculated mass flow, so UI controls and displayed results share one authority.
+/// All renderers sample one transport clock and downstream stages are unlocked by
+/// the calculated process state instead of running independent decorative loops.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class FinalPlantFlowRuntime : MonoBehaviour
@@ -25,10 +27,15 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     [SerializeField, Range(.25f, 2f)] float globalSpeed = 1f;
     [SerializeField, Range(.25f, 2f)] float globalDensity = 1f;
     [SerializeField, Range(.25f, 2f)] float globalIntensity = 1f;
+    [Header("Continuous process transport")]
+    [SerializeField, Min(.1f)] float startupStageDelay = .65f;
+    [SerializeField, Min(.05f)] float stageFadeDuration = .55f;
 
     readonly List<RouteBinding> bindings = new();
     readonly Dictionary<PlantFlowKind, Material> materials = new();
     PlantProcessSimulator simulator;
+    PlantProcessSimulator.ProcessSnapshot currentSnapshot;
+    float processClock;
     float nextVisualUpdate;
     const float VisualUpdateInterval = .08f;
 
@@ -51,6 +58,46 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         {
             simulator.SnapshotUpdated += ApplySnapshot;
             ApplySnapshot(simulator.Current);
+        }
+    }
+
+    void Update()
+    {
+        processClock += Time.deltaTime;
+        foreach (RouteBinding binding in bindings)
+        {
+            PipeFlowAnimator animator = binding.animator;
+            if (animator == null) continue;
+
+            float stageStart = ProcessStage(binding.route.kind) * startupStageDelay;
+            float stageAvailability = Mathf.SmoothStep(0f, 1f,
+                Mathf.InverseLerp(stageStart, stageStart + stageFadeDuration, processClock));
+            if (!ReactionPrerequisiteSatisfied(binding.route.kind, currentSnapshot))
+                stageAvailability = 0f;
+
+            binding.stageAvailability = stageAvailability;
+            animator.flowIntensity = binding.targetIntensity * stageAvailability;
+            bool active = visualsEnabled &&
+                IsIncludedInInspection(binding.route.kind) &&
+                binding.normalizedFlow > .005f &&
+                stageAvailability > .001f;
+            animator.isFlowing = active;
+
+            // Every renderer samples the same plant clock. Route speed remains
+            // proportional to the calculated mass flow, while stage phase keeps
+            // the visual journey causal from feeds through reaction to storage.
+            float direction = binding.route.reverse ? -1f : 1f;
+            float transportedTime = Mathf.Max(0f, processClock - stageStart);
+            animator.SetSharedProcessOffset(
+                direction * transportedTime * animator.speed);
+
+            if (Mathf.Abs(binding.lastAppliedAvailability - stageAvailability) > .02f ||
+                active != binding.lastAppliedActive)
+            {
+                animator.Apply();
+                binding.lastAppliedAvailability = stageAvailability;
+                binding.lastAppliedActive = active;
+            }
         }
     }
 
@@ -81,7 +128,8 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
             {
                 binding.animator.isFlowing = enabled &&
                     IsIncludedInInspection(binding.route.kind) &&
-                    binding.normalizedFlow > .005f;
+                    binding.normalizedFlow > .005f &&
+                    binding.stageAvailability > .001f;
                 binding.animator.Apply();
             }
     }
@@ -96,7 +144,8 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
             {
                 binding.animator.isFlowing = visualsEnabled &&
                     IsIncludedInInspection(binding.route.kind) &&
-                    binding.normalizedFlow > .005f;
+                    binding.normalizedFlow > .005f &&
+                    binding.stageAvailability > .001f;
                 binding.animator.Apply();
             }
     }
@@ -122,6 +171,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
 
     void ApplySnapshot(PlantProcessSimulator.ProcessSnapshot s)
     {
+        currentSnapshot = s;
         if (Time.unscaledTime < nextVisualUpdate) return;
         nextVisualUpdate = Time.unscaledTime + VisualUpdateInterval;
         Vector3 feedFractions = FeedMolarFractions(s);
@@ -134,13 +184,49 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
             PipeFlowAnimator animator = binding.animator;
             animator.speed = binding.route.speed * globalSpeed * Mathf.Lerp(.35f, 1.35f, response);
             animator.density = binding.route.density * globalDensity * Mathf.Lerp(.55f, 1.3f, visible);
-            animator.flowIntensity = binding.route.intensity * globalIntensity * Mathf.Lerp(.25f, 1.25f, response);
+            binding.targetIntensity = binding.route.intensity * globalIntensity *
+                Mathf.Lerp(.25f, 1.25f, response);
+            animator.flowIntensity = binding.targetIntensity * binding.stageAvailability;
             animator.isFlowing = visualsEnabled &&
                 IsIncludedInInspection(binding.route.kind) &&
-                flow > .005f;
+                flow > .005f && binding.stageAvailability > .001f;
             animator.speciesFractions = SpeciesFractions(binding.route.kind, feedFractions);
             animator.Apply();
         }
+    }
+
+    static int ProcessStage(PlantFlowKind kind)
+    {
+        return kind switch
+        {
+            PlantFlowKind.Hydrogen or PlantFlowKind.HydrogenFromStorage or
+                PlantFlowKind.CarbonDioxide or PlantFlowKind.RichAmine or
+                PlantFlowKind.LeanAmine => 0,
+            PlantFlowKind.MixedFeed => 1,
+            PlantFlowKind.SyngasCold => 2,
+            PlantFlowKind.SyngasHeated => 3,
+            PlantFlowKind.ReactorEffluent => 4,
+            PlantFlowKind.CrudeMethanolVapourLiquid => 5,
+            PlantFlowKind.LiquidCrudeMethanol => 6,
+            PlantFlowKind.MethanolProduct or PlantFlowKind.RecycleGas => 7,
+            _ => 0
+        };
+    }
+
+    static bool ReactionPrerequisiteSatisfied(PlantFlowKind kind,
+        PlantProcessSimulator.ProcessSnapshot snapshot)
+    {
+        return kind switch
+        {
+            PlantFlowKind.MixedFeed or PlantFlowKind.SyngasCold or PlantFlowKind.SyngasHeated =>
+                snapshot.h2InputKgH > .01f && snapshot.co2CapturedKgH > .01f,
+            PlantFlowKind.ReactorEffluent =>
+                snapshot.syngasFeedKgH > .01f && snapshot.reactorYieldPercent > .01f,
+            PlantFlowKind.CrudeMethanolVapourLiquid or PlantFlowKind.LiquidCrudeMethanol or
+                PlantFlowKind.MethanolProduct or PlantFlowKind.RecycleGas =>
+                snapshot.methanolProductionKgH > .01f,
+            _ => true
+        };
     }
 
     bool IsIncludedInInspection(PlantFlowKind kind)
@@ -182,6 +268,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         animator.flowKind = route.kind;
         animator.flowColor = route.color;
         animator.reverseDirection = route.reverse;
+        animator.useSharedProcessClock = true;
         animator.pipeAlpha = route.alpha;
         animator.Apply();
         bindings.Add(new RouteBinding(animator, route));
@@ -327,6 +414,10 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         public readonly PipeFlowAnimator animator;
         public readonly RouteDefinition route;
         public float normalizedFlow;
+        public float stageAvailability;
+        public float targetIntensity;
+        public float lastAppliedAvailability = -1f;
+        public bool lastAppliedActive;
         public RouteBinding(PipeFlowAnimator animator, RouteDefinition route)
         { this.animator = animator; this.route = route; }
     }

@@ -3,6 +3,12 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class PipeFlowAnimator : MonoBehaviour
 {
+    // PipeFlow.shader's packet frequencies are all hundredths (for example
+    // 0.24, 0.34 and 0.43). Advancing the offset by 100 is therefore a whole
+    // number of cycles for every packet pattern. Wrapping at 1 made tracers
+    // jump backwards and look as if they regenerated inside each segment.
+    const float SeamlessOffsetPeriod = 100f;
+
     public PlantFlowKind flowKind = PlantFlowKind.MixedFeed;
     public Color flowColor = Color.white;
     [Min(0f)] public float speed = 1f;
@@ -12,6 +18,7 @@ public sealed class PipeFlowAnimator : MonoBehaviour
     public bool reverseDirection;
     public bool isFlowing = true;
     public bool isGhostSupply;
+    [HideInInspector] public bool useSharedProcessClock;
     [Tooltip("Visible molar/phase fractions for multi-species routes. Values are normalized by Apply().")]
     public Vector3 speciesFractions = new(1f, 0f, 0f);
 
@@ -35,8 +42,27 @@ public sealed class PipeFlowAnimator : MonoBehaviour
     {
         Ensure();
         if (target == null) return;
-        if (isFlowing) offset=Mathf.Repeat(offset+Time.deltaTime*speed*(reverseDirection?-1f:1f),1f);
+        if (useSharedProcessClock) return;
+        if (isFlowing)
+            offset = Mathf.Repeat(
+                offset + Time.deltaTime * speed * (reverseDirection ? -1f : 1f),
+                SeamlessOffsetPeriod);
         target.GetPropertyBlock(block); block.SetFloat(Offset,offset); target.SetPropertyBlock(block);
+    }
+
+    /// <summary>
+    /// Drives this renderer from the plant-wide transport clock. This prevents
+    /// individual pipe objects from restarting their own decorative loop.
+    /// </summary>
+    public void SetSharedProcessOffset(float processOffset)
+    {
+        useSharedProcessClock = true;
+        offset = Mathf.Repeat(processOffset, SeamlessOffsetPeriod);
+        Ensure();
+        if (target == null) return;
+        target.GetPropertyBlock(block);
+        block.SetFloat(Offset, offset);
+        target.SetPropertyBlock(block);
     }
 
     public void Apply()

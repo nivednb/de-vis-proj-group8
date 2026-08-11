@@ -151,6 +151,48 @@ overallEfficiency = methanol / theoreticalMethanol
 waterProduct = methanol × 18 / 32
 ```
 
+### 3.5 Methanol storage and live ETA
+
+```text
+storedMethanol += methanolProductionKgH
+                  * storageSimulationHoursPerSecond
+                  * realDeltaTimeSeconds
+storageFillPercent = 100 * storedMethanol / storageCapacityKg
+operationalFullKg = storageCapacityKg * storageHighHighPercent / 100
+timeRemainingSeconds =
+    (operationalFullKg - storedMethanol)
+    / (methanolProductionKgH * storageSimulationHoursPerSecond)
+```
+
+The Plant Status panel reads these values from the same authoritative process
+snapshot used by the tank and safety logic. It displays
+`fill % (MM:SS left)` (or `H:MM:SS` for longer durations), `PAUSED` when there
+is no production, and `FULL / INTERLOCK` at the configured operational-full
+threshold. The default high-high threshold is 99% of the 12,000 kg capacity;
+the countdown therefore reports simulated real time until that safety limit,
+not an independent UI estimate.
+
+### 3.6 Plant Status values and MAX operating point
+
+The Plant Status values are live outputs of `PlantProcessSimulator`; they are
+not decorative UI constants. Methanol production responds to plant load and
+available H2/CO2 feed as well as reactor, recovery, separation, and
+distillation performance. CO2 utilization is calculated from methanol output
+and captured CO2, while the tank fill and ETA use the production rate described
+above. Overall efficiency is the actual-to-stoichiometric methanol ratio, so
+quality/conversion controls affect it directly while a pure throughput change
+can change kg/h without materially changing the percentage.
+
+The additional `MAX` button beside the efficiency percentage applies the best
+high-throughput operating point represented by the current educational model
+(stoichiometric H2/CO2 ratio, reactor temperature/pressure/GHSV, cooling,
+separation, recycle, and distillation settings). It updates the authoritative
+simulator inputs and synchronizes existing and subsequently opened UI sliders;
+all KPI and flow responses therefore recalculate through the normal model. It
+is disabled while the methanol-storage high-high interlock is active and never
+clears or bypasses that safety state. `MAX` means maximum within this simplified
+simulation envelope, not a plant-wide real-world economic optimizer.
+
 ## 4. Flow response
 
 `FinalPlantFlowRuntime` refresh interval: 0.08 s.

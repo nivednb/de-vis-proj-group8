@@ -5,8 +5,8 @@
 - Repository: `de-vis-proj-group8`
 - Integrated working copy: repository root (location is machine-dependent)
 - Purpose: interactive educational Power-to-Methanol digital twin
-- Last analyzed: 2026-07-29
-- Last analyzed starting commit: `834f3a67cc8f3c87a627d4bcc68ad399ff997594`
+- Last analyzed: 2026-08-11
+- Last analyzed main commit: `1d5073274113cd701fd25c217bd1f7f3a4fab253`
 - Release branch: `release/power_to_methanol-submission-v1`
 - Remote: `https://github.com/nivednb/de-vis-proj-group8.git`
 
@@ -98,6 +98,12 @@ Package presence does not prove active feature use.
 - Keep the lightweight reactor population bounded for laptop stability.
 - Treat all process values and warnings as educational approximations.
 - Submission changes are reviewed through a pull request into `main`.
+- Current desired behavior is one continuous reaction-driven plant-flow journey,
+  not visibly independent looping animation on each pipe segment. This is not
+  yet verified complete on `main`; validate continuity across route boundaries
+  and process-state changes before marking it finished.
+- Multiple older local clones and worktrees exist. Resolve the canonical commit
+  against GitHub `main` before editing, merging, building, or publishing.
 
 ## Canonical documentation
 
