@@ -1,0 +1,49 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+Assets/_Recovery/
+
+# Visual Studio / Rider / local IDE files
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Unity crash/debug output
+sysinfo.txt
+*.stackdump
+
+# Large local archives / exported builds
+*.zip
+*.7z
+*.rar
+*.exe
+*.app
+*.apk
+*.aab
+[Mm]emoryCaptures/
+[Rr]ecordings/
+*.unityproj
+*.suo
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
