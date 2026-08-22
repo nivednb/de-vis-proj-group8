@@ -47,6 +47,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private Button analyticsStatsTabButton;
     private Button analyticsVisualiseTabButton;
     private bool analyticsWindowOpen;
+    private bool helpPanelOpen;
     private AnalyticsTab currentAnalyticsTab = AnalyticsTab.Stats;
     private readonly List<Button> graphButtons = new List<Button>();
     private readonly List<CanvasGroup> graphCanvasGroups = new List<CanvasGroup>();
@@ -71,6 +72,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private Text analyticsSummaryText;
     private Text analyticsInsightsText;
     private Text analyticsExportStatusText;
+    private GameObject analyticsExportToast;
+    private Text analyticsExportToastText;
+    private Button exportCsvButton;
     private DashboardPage currentPage = DashboardPage.Overview;
     private int processStepIndex;
     private Text plantStatusText;
@@ -253,7 +257,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
         Button help = CreateButton("Help", header, "HELP", HeaderColor, 11);
         Pin(help.GetComponent<RectTransform>(), new Vector2(0.87f, 0f), Vector2.one, Vector2.zero, Vector2.zero);
-        help.onClick.AddListener(() => SetPopupVisible(helpPanel, !helpPanel.activeSelf));
+        help.onClick.AddListener(() => { if (helpPanel.activeSelf) CloseHelpPanel(); else OpenHelpPanel(); });
     }
 
     private void BuildLegend(Transform parent)
@@ -263,7 +267,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMin = new Vector2(0f, 1f);
         panel.anchorMax = new Vector2(0f, 1f);
         panel.pivot = new Vector2(0f, 1f);
-        panel.anchoredPosition = new Vector2(14f, -90f - TitleBarHeight);
+        panel.anchoredPosition = new Vector2(14f, -126f - TitleBarHeight);
         panel.sizeDelta = new Vector2(254f, 286f);
 
         AddPanelTitle(panel, "PROCESS FLOW");
@@ -311,7 +315,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMin = new Vector2(1f, 1f);
         panel.anchorMax = new Vector2(1f, 1f);
         panel.pivot = new Vector2(1f, 1f);
-        panel.anchoredPosition = new Vector2(-16f, -94f - TitleBarHeight);
+        panel.anchoredPosition = new Vector2(-16f, -126f - TitleBarHeight);
         panel.sizeDelta = new Vector2(370f, 207f);
         AddPanelTitle(panel, "PLANT STATUS");
 
@@ -353,7 +357,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void BuildPagePanels(Transform parent)
     {
-        processPanel = BuildContextPanel("Guided Process", parent, new Vector2(0.18f, 0.20f), new Vector2(0.82f, 0.61f), "PLANT PROCESS - FOLLOW MATERIAL FROM INPUT TO PRODUCT");
+        processPanel = BuildContextPanel("Guided Process", parent, new Vector2(0.60f, 0.20f), new Vector2(0.985f, 0.66f), "PLANT PROCESS - INPUT TO PRODUCT");
         RectTransform process = processPanel.GetComponent<RectTransform>();
         processStepText = CreateText("Step", process, "", 12, FontStyle.Bold, TextAnchor.UpperLeft, AccentColor);
         Pin(processStepText.rectTransform, new Vector2(0f, 0.76f), new Vector2(1f, 0.90f), new Vector2(24f, 0f), new Vector2(-24f, 0f));
@@ -521,7 +525,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         runToggleButtons.Add(runButton);
         Button resetButton = AddFooterButton(footer, "RESET", 1, ResetSimulation);
         resetButton.GetComponent<Image>().color = Hex("7A2A2A");
-        AddFooterButton(footer, "VIEW INFORMATION", 2, () => SetPopupVisible(helpPanel, true));
+        AddFooterButton(footer, "VIEW INFORMATION", 2, OpenHelpPanel);
         AddFooterButton(footer, "PREVIOUS MODULE", 3, () => cameraController?.FocusPrevious());
         AddFooterButton(footer, "NEXT MODULE", 4, () => cameraController?.FocusNext());
         AddFooterButton(footer, "RESET VIEW", 5, () => cameraController?.FocusOverview());
@@ -544,7 +548,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Pin(body.rectTransform, Vector2.zero, Vector2.one, new Vector2(28f, 56f), new Vector2(-28f, -64f));
         Button close = CreateButton("Close", panel, "CLOSE", AccentColor, 13);
         AnchorBottomRight(close.GetComponent<RectTransform>(), new Vector2(-24f, 18f), new Vector2(120f, 36f));
-        close.onClick.AddListener(() => SetPopupVisible(helpPanel, false));
+        close.onClick.AddListener(CloseHelpPanel);
         helpPanel.SetActive(false);
     }
 
@@ -573,9 +577,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
         // Available regardless of which tab (Stats/Visualise) is active, so the window is
         // fully self-contained for controlling the run.
-        Button exportCsv = CreateButton("Export Mass Balance", titleBar, "EXPORT MASS-BALANCE CSV", Hex("147A52"), 10);
-        Pin(exportCsv.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-462f, 6f), new Vector2(-204f, -6f));
-        exportCsv.onClick.AddListener(ExportMassBalanceCsv);
+        exportCsvButton = CreateButton("Export Mass Balance", titleBar, "EXPORT MASS-BALANCE CSV", Hex("147A52"), 10);
+        Pin(exportCsvButton.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-462f, 6f), new Vector2(-204f, -6f));
+        exportCsvButton.onClick.AddListener(ExportMassBalanceCsv);
 
         Button windowRun = CreateButton("Window Run Toggle", titleBar, "PAUSE", AccentColor, 11);
         Pin(windowRun.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-200f, 6f), new Vector2(-102f, -6f));
@@ -605,6 +609,13 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         // Content area
         RectTransform content = CreatePanel("Content", win, new Color32(9, 29, 41, 0));
         Pin(content, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0f, -76f));
+
+        RectTransform toast = CreatePanel("CSV Export Toast", win, Hex("147A52"));
+        analyticsExportToast = toast.gameObject;
+        Pin(toast, new Vector2(0.24f, 0.86f), new Vector2(0.76f, 0.93f), Vector2.zero, Vector2.zero);
+        analyticsExportToastText = CreateText("CSV Export Toast Text", toast, "", 12, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+        Pin(analyticsExportToastText.rectTransform, Vector2.zero, Vector2.one, new Vector2(12f, 2f), new Vector2(-12f, -2f));
+        analyticsExportToast.SetActive(false);
 
         analyticsStatsTab = new GameObject("Stats Tab Content");
         analyticsStatsTab.transform.SetParent(content, false);
@@ -695,11 +706,21 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         try
         {
             string path = MassBalanceCsvExporter.Export(simulator);
+            GUIUtility.systemCopyBuffer = path;
+            string folder = System.IO.Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(folder))
+                Application.OpenURL(new Uri(folder).AbsoluteUri);
             if (analyticsExportStatusText != null)
             {
                 analyticsExportStatusText.color = HealthyColor;
                 analyticsExportStatusText.text = "EXPORTED: " + path;
             }
+            if (exportCsvButton != null)
+            {
+                Text label = exportCsvButton.GetComponentInChildren<Text>();
+                if (label != null) label.text = "CSV EXPORTED - PATH COPIED";
+            }
+            ShowExportToast("CSV SAVED • FOLDER OPENED • PATH COPIED\n" + path, HealthyColor);
         }
         catch (Exception exception)
         {
@@ -709,7 +730,24 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
                 analyticsExportStatusText.color = Hex("FF7043");
                 analyticsExportStatusText.text = "EXPORT FAILED - see application log";
             }
+            ShowExportToast("CSV EXPORT FAILED - SEE APPLICATION LOG", Hex("A82828"));
         }
+    }
+
+    private void ShowExportToast(string message, Color color)
+    {
+        if (analyticsExportToast == null || analyticsExportToastText == null) return;
+        analyticsExportToast.GetComponent<Image>().color = color;
+        analyticsExportToastText.text = message;
+        analyticsExportToast.transform.SetAsLastSibling();
+        analyticsExportToast.SetActive(true);
+        StartCoroutine(HideExportToast());
+    }
+
+    private IEnumerator HideExportToast()
+    {
+        yield return new WaitForSecondsRealtime(5f);
+        if (analyticsExportToast != null) analyticsExportToast.SetActive(false);
     }
 
     private void ToggleRunning()
@@ -737,12 +775,15 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void OpenAnalyticsWindow()
     {
+        helpPanelOpen = false;
+        if (helpPanel != null) helpPanel.SetActive(false);
         analyticsWindowOpen = true;
         if (analyticsWindow != null)
         {
             analyticsWindow.transform.SetAsLastSibling();
             SetPopupVisible(analyticsWindow, true);
         }
+        ApplyPageVisibility();
         Refresh();
     }
 
@@ -750,6 +791,29 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         analyticsWindowOpen = false;
         SetPopupVisible(analyticsWindow, false);
+        ApplyPageVisibility();
+        Refresh();
+    }
+
+    private void OpenHelpPanel()
+    {
+        if (analyticsWindowOpen)
+        {
+            analyticsWindowOpen = false;
+            if (analyticsWindow != null) analyticsWindow.SetActive(false);
+        }
+        helpPanelOpen = true;
+        if (helpPanel != null) helpPanel.transform.SetAsLastSibling();
+        SetPopupVisible(helpPanel, true);
+        ApplyPageVisibility();
+        Refresh();
+    }
+
+    private void CloseHelpPanel()
+    {
+        helpPanelOpen = false;
+        SetPopupVisible(helpPanel, false);
+        ApplyPageVisibility();
         Refresh();
     }
 
@@ -954,7 +1018,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         RectTransform banner = CreatePanel("Process Workflow Banner", parent, Hex("183246"));
         processWorkflowBanner = banner.gameObject;
-        Pin(banner, new Vector2(0.20f, 1f), new Vector2(0.80f, 1f), new Vector2(0f, -110f - TitleBarHeight), new Vector2(0f, -78f - TitleBarHeight));
+        Pin(banner, new Vector2(0.20f, 1f), new Vector2(0.80f, 1f), new Vector2(0f, -152f - TitleBarHeight), new Vector2(0f, -120f - TitleBarHeight));
         Text badge = CreateText("Process Workflow", banner,
             "WATER + ELECTRICITY  >  H2   |   CO2 CAPTURE  >  CO2   |   H2 + CO2  >  REACTOR  >  METHANOL  >  SEPARATION  >  STORAGE",
             10, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
@@ -1011,9 +1075,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         for (int i = 0; i < navigationImages.Count; i++)
         {
             if (navigationImages[i] == null) continue;
-            bool active = navigationPages[i] == DashboardPage.Analytics
-                ? analyticsWindowOpen
-                : navigationPages[i] == currentPage;
+            bool active = analyticsWindowOpen
+                ? navigationPages[i] == DashboardPage.Analytics
+                : !helpPanelOpen && navigationPages[i] == currentPage;
             navigationImages[i].color = active ? AccentColor : HeaderColor;
         }
 
@@ -1087,20 +1151,38 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void SelectPage(DashboardPage page)
     {
+        if (analyticsWindowOpen)
+        {
+            analyticsWindowOpen = false;
+            if (analyticsWindow != null) analyticsWindow.SetActive(false);
+        }
+        if (helpPanelOpen)
+        {
+            helpPanelOpen = false;
+            if (helpPanel != null) helpPanel.SetActive(false);
+        }
         currentPage = page;
-        if (processPanel != null) processPanel.SetActive(page == DashboardPage.Process);
-        if (equipmentPanel != null) equipmentPanel.SetActive(page == DashboardPage.Equipment);
-        if (simulationPanel != null) simulationPanel.SetActive(page == DashboardPage.Simulation);
-        if (flowInspectionPanel != null) flowInspectionPanel.SetActive(page == DashboardPage.FlowInspection);
-        if (processWorkflowBanner != null) processWorkflowBanner.SetActive(page == DashboardPage.Process);
-        if (legendPanel != null) legendPanel.SetActive(page == DashboardPage.Overview || page == DashboardPage.Process || page == DashboardPage.FlowInspection);
-        if (plantStatusPanel != null) plantStatusPanel.SetActive(page == DashboardPage.Overview);
-        if (kpiStrip != null) kpiStrip.SetActive(page == DashboardPage.Overview || page == DashboardPage.Process || page == DashboardPage.Simulation);
+        ApplyPageVisibility();
         if (page == DashboardPage.Overview) Focus(-1);
         else if (page == DashboardPage.FlowInspection) Focus(-1);
         else if (page == DashboardPage.Equipment) Focus(7);
         if (page != DashboardPage.FlowInspection) SetFlowInspectionMode(0);
         Refresh();
+    }
+
+    private void ApplyPageVisibility()
+    {
+        bool modalOpen = analyticsWindowOpen || helpPanelOpen;
+        if (processPanel != null) processPanel.SetActive(!modalOpen && currentPage == DashboardPage.Process);
+        if (equipmentPanel != null) equipmentPanel.SetActive(!modalOpen && currentPage == DashboardPage.Equipment);
+        if (simulationPanel != null) simulationPanel.SetActive(!modalOpen && currentPage == DashboardPage.Simulation);
+        if (flowInspectionPanel != null) flowInspectionPanel.SetActive(!modalOpen && currentPage == DashboardPage.FlowInspection);
+        if (processWorkflowBanner != null) processWorkflowBanner.SetActive(!modalOpen && currentPage == DashboardPage.Process);
+        if (legendPanel != null) legendPanel.SetActive(!modalOpen &&
+            (currentPage == DashboardPage.Overview || currentPage == DashboardPage.Process || currentPage == DashboardPage.FlowInspection));
+        if (plantStatusPanel != null) plantStatusPanel.SetActive(!modalOpen && currentPage == DashboardPage.Overview);
+        if (kpiStrip != null) kpiStrip.SetActive(!modalOpen &&
+            (currentPage == DashboardPage.Overview || currentPage == DashboardPage.Process || currentPage == DashboardPage.Simulation));
     }
 
     private void SetProcessStep(int index)
@@ -1132,15 +1214,16 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             "Streams\n- Hot syngas\n- Reactor effluent", "Streams\n- Reactor effluent\n- Crude methanol\n- Recycle gas",
             "Streams\n- Crude methanol\n- Water-rich bottoms\n- Methanol product", "Streams\n- Methanol product"
         };
-        int[] focus = { -1, 0, 1, 2, 6, 6, 7, 9, 10, 11 };
         processStepIndex = Mathf.Clamp(index, 0, titles.Length - 1);
         if (processStepText != null) processStepText.text = $"STEP {processStepIndex + 1} OF {titles.Length}";
         if (processTitleText != null) processTitleText.text = titles[processStepIndex].ToUpperInvariant();
         if (processBodyText != null) processBodyText.text = descriptions[processStepIndex];
         if (processStreamsText != null) processStreamsText.text = streams[processStepIndex];
-        if (previousProcessStepButton != null) previousProcessStepButton.interactable = processStepIndex > 0;
-        if (nextProcessStepButton != null) nextProcessStepButton.interactable = processStepIndex < titles.Length - 1;
-        Focus(focus[processStepIndex]);
+        if (previousProcessStepButton != null) previousProcessStepButton.gameObject.SetActive(processStepIndex > 0);
+        if (nextProcessStepButton != null) nextProcessStepButton.gameObject.SetActive(processStepIndex < titles.Length - 1);
+        // Keep enough plant context visible for the explanation panel. The dedicated
+        // Reactor Lab remains available for close inspection and control work.
+        Focus(-1);
     }
 
     private void Focus(int index)

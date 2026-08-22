@@ -65,11 +65,11 @@ public class SafetyWarningRuntime : MonoBehaviour
         GameObject panel = new GameObject("Warning Panel");
         panel.transform.SetParent(canvasObject.transform, false);
         panelRect = panel.AddComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0f, 1f);
-        panelRect.anchorMax = new Vector2(0f, 1f);
-        panelRect.pivot = new Vector2(0f, 1f);
-        panelRect.anchoredPosition = new Vector2(16f, -88f);
-        panelRect.sizeDelta = new Vector2(710f, 48f);
+        panelRect.anchorMin = new Vector2(0.18f, 1f);
+        panelRect.anchorMax = new Vector2(0.82f, 1f);
+        panelRect.pivot = new Vector2(0.5f, 1f);
+        panelRect.anchoredPosition = new Vector2(0f, -106f);
+        panelRect.sizeDelta = new Vector2(0f, 34f);
         panelImage = panel.AddComponent<Image>();
         panelImage.raycastTarget = false;
         panelImage.color = new Color(0.12f, 0.04f, 0.02f, 0.82f);
@@ -140,8 +140,8 @@ public class SafetyWarningRuntime : MonoBehaviour
         if (s.waterFeedPercent < 45f && s.electrolyzerPowerPercent > 65f)
             cautions.Add("ELECTROLYZER: water feed limits H2 production");
 
-        if (s.electrolyzerPowerPercent > 92f)
-            cautions.Add("ELECTROLYZER: high power increases H2/O2 generation");
+        if (s.electrolyzerPowerPercent > 92f && s.waterFeedPercent < 90f)
+            cautions.Add("ELECTROLYZER: high power requires adequate water feed");
     }
 
     private void AddAbsorberWarnings(PlantProcessSimulator.ProcessSnapshot s, List<string> cautions)
@@ -215,7 +215,7 @@ public class SafetyWarningRuntime : MonoBehaviour
 
         if (s.recycleRatioPercent < 25f)
             cautions.Add("SEPARATOR: low recycle reduces overall conversion");
-        else if (s.recycleRatioPercent > 90f)
+        else if (s.recycleRatioPercent > 97f)
             cautions.Add("RECYCLE LOOP: very high recycle increases compressor load");
     }
 

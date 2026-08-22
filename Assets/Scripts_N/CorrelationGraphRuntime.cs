@@ -62,6 +62,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
     private float newestDotSpawnTime;
     private GameObject tooltip;
     private Text tooltipText;
+    private Text emptyHint;
     private RectTransform tooltipRect;
     private RectTransform hoverDot;
     private PlantProcessSimulator subscribedSimulator;
@@ -113,6 +114,12 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         pointsLayer = new GameObject("Points", typeof(RectTransform)).GetComponent<RectTransform>();
         pointsLayer.SetParent(plotArea, false);
         Stretch(pointsLayer);
+
+        emptyHint = MakeText("Empty Guidance", plotArea,
+            "STARTING OPERATING POINT\nChange one process control to add a comparison point.",
+            12, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.65f, 0.75f, 0.80f, 0.85f));
+        StretchWithOffset(emptyHint.rectTransform, Vector2.zero, Vector2.one,
+            new Vector2(80f, 80f), new Vector2(-80f, -80f));
 
         BuildLegend(root);
 
@@ -213,6 +220,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
 
     private void Redraw()
     {
+        if (emptyHint != null) emptyHint.gameObject.SetActive(points.Count <= 1);
         for (int i = linesLayer.childCount - 1; i >= 0; i--) Destroy(linesLayer.GetChild(i).gameObject);
         for (int i = pointsLayer.childCount - 1; i >= 0; i--) Destroy(pointsLayer.GetChild(i).gameObject);
         pointScreenPositions.Clear();

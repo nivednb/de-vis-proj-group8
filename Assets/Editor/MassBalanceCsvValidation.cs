@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -31,8 +32,13 @@ public static class MassBalanceCsvValidation
                 "External mass-balance closure exceeds 0.001%: " +
                 balance.externalMassBalanceErrorPercent.ToString("G9", CultureInfo.InvariantCulture));
 
+            string exportedPath = MassBalanceCsvExporter.Export(simulator);
+            Require(File.Exists(exportedPath), "CSV export did not create a file.");
+            Require(new FileInfo(exportedPath).Length > 1000, "CSV export file is unexpectedly small.");
+            File.Delete(exportedPath);
+
             Debug.Log($"MASS_BALANCE_CSV_VALIDATION_OK closure={balance.externalMassBalanceErrorPercent:G6}% " +
-                $"rows={csv.Split('\n').Length - 1} maxEfficiency={simulator.Current.overallEfficiencyPercent:F2}%");
+                $"rows={csv.Split('\n').Length - 1} fileWrite=passed maxEfficiency={simulator.Current.overallEfficiencyPercent:F2}%");
         }
         finally
         {
