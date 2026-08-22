@@ -129,6 +129,7 @@ public class PlantProcessSimulator : MonoBehaviour
     private ProcessSnapshot target;
     private bool initialized;
     private bool storageInterlockLatched;
+    private RecycleMassBalanceEngine recycleMassBalance;
 
     public ProcessSnapshot Current => current;
     public event Action<ProcessSnapshot> SnapshotUpdated;
@@ -154,6 +155,9 @@ public class PlantProcessSimulator : MonoBehaviour
         }
 
         Instance = this;
+        recycleMassBalance = GetComponent<RecycleMassBalanceEngine>();
+        if (recycleMassBalance == null)
+            recycleMassBalance = gameObject.AddComponent<RecycleMassBalanceEngine>();
     }
 
     private void Start()
@@ -429,16 +433,30 @@ public class PlantProcessSimulator : MonoBehaviour
         float ratioFactor = 1f - Mathf.Clamp01(Mathf.Abs(ratio - 3f) / 3f) * 0.42f;
         float residenceFactor = Mathf.Clamp(8000f / Mathf.Max(ghsv, 1f), 0.35f, 1.35f);
         float recycleBoost = Mathf.Lerp(0.86f, 1.18f, manualRecycleRatio / 100f);
-        float reactorYield = Mathf.Clamp01(tempFactor * pressureFactor * ratioFactor * residenceFactor * recycleBoost);
+        float performanceFactor = Mathf.Clamp01(tempFactor * pressureFactor * ratioFactor * residenceFactor * recycleBoost);
+        // Commercial Cu/ZnO methanol reactors use recycle because equilibrium limits
+        // practical single-pass CO2 conversion. Keep this educational correlation in
+        // a defensible 5-35% range and let the recycle balance determine overall conversion.
+        float singlePassConversion = Mathf.Lerp(0.05f, 0.35f, performanceFactor);
 
         // Stoichiometric basis:
         // CO2 + 3H2 -> CH3OH + H2O
         // 6 kg H2 and 44 kg CO2 can form 32 kg methanol.
-        float h2ToReactor = h2Input * reactorFeedFactor;
-        float co2ToReactor = co2Captured * reactorFeedFactor;
-        float methanolLimitedByH2 = h2ToReactor * (32f / 6f);
-        float methanolLimitedByCO2 = co2ToReactor * (32f / 44f);
-        float theoreticalMethanol = Mathf.Min(methanolLimitedByH2, methanolLimitedByCO2);
+        float availableH2 = h2Input * reactorFeedFactor;
+        float availableCo2 = co2Captured * reactorFeedFactor;
+        float requestedRatio = Mathf.Max(0.1f, ratio);
+        float h2RequiredForAvailableCo2 = availableCo2 / 44.0095f * requestedRatio * 2.01588f;
+        float h2ToReactor = Mathf.Min(availableH2, h2RequiredForAvailableCo2);
+        float co2ToReactor = Mathf.Min(availableCo2, h2ToReactor / 2.01588f / requestedRatio * 44.0095f);
+
+        recycleMassBalance.ConfigureAndCalculate(
+            co2ToReactor,
+            h2ToReactor,
+            singlePassConversion,
+            manualRecycleRatio / 100f);
+        float theoreticalMethanol = Mathf.Min(
+            h2ToReactor * (32.04186f / (3f * 2.01588f)),
+            co2ToReactor * (32.04186f / 44.0095f));
 
         float coolingFactor = Mathf.Clamp01((manualCoolingWaterFlow / 100f) * Mathf.InverseLerp(45f, 8f, manualCoolingWaterTemperature));
         float condenserRecovery = Mathf.Lerp(0.55f, 0.98f, coolingFactor);
@@ -447,9 +465,11 @@ public class PlantProcessSimulator : MonoBehaviour
         float methanolPurity = Mathf.Clamp(90f + 7.2f * Mathf.InverseLerp(0.5f, 5f, manualRefluxRatio) + 2.4f * Mathf.InverseLerp(78f, 105f, manualDistillationReboilerTemp), 88f, 99.85f);
         float distillationEnergy = Mathf.Clamp(18f + manualRefluxRatio * 12f + Mathf.InverseLerp(70f, 115f, manualDistillationReboilerTemp) * 36f, 0f, 100f);
 
-        float methanol = Mathf.Min(designMethanolKgH, theoreticalMethanol) * reactorYield * condenserRecovery * separatorFactor * distillationFactor;
-        float unconverted = Mathf.Max(0f, syngasFeed - methanol);
-        float recycle = unconverted * (manualRecycleRatio / 100f) * 0.36f;
+        float reactorMethanol = recycleMassBalance.converged
+            ? recycleMassBalance.methanolProductKgHr
+            : theoreticalMethanol * singlePassConversion;
+        float methanol = Mathf.Min(designMethanolKgH, reactorMethanol) * condenserRecovery * separatorFactor * distillationFactor;
+        float recycle = recycleMassBalance.converged ? recycleMassBalance.recycleStreamKgHr : 0f;
         float efficiency = Mathf.Clamp01(methanol / Mathf.Max(theoreticalMethanol, 1f)) * 100f;
 
         ProcessSnapshot snapshot = new ProcessSnapshot
@@ -471,7 +491,7 @@ public class PlantProcessSimulator : MonoBehaviour
             compressionRatio = manualCompressionRatio,
             reactorFeedFlowPercent = manualReactorFeedFlow,
             syngasFeedKgH = syngasFeed,
-            reactorYieldPercent = reactorYield * 100f,
+            reactorYieldPercent = singlePassConversion * 100f,
             reactorTemperatureC = temperature,
             reactorPressureBar = pressure,
             h2Co2Ratio = ratio,

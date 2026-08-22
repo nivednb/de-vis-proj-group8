@@ -161,6 +161,16 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
         UpdatePlantMassBalance();
     }
 
+    /// <summary>Applies a complete operating point and solves it once.</summary>
+    public void ConfigureAndCalculate(float co2KgHr, float h2KgHr, float conversion, float recycle)
+    {
+        freshCo2KgHr = Mathf.Max(0f, co2KgHr);
+        freshH2KgHr = Mathf.Max(0f, h2KgHr);
+        singlePassCo2Conversion = Mathf.Clamp(conversion, 0f, 0.999f);
+        recycleFraction = Mathf.Clamp(recycle, 0f, 0.999f);
+        UpdatePlantMassBalance();
+    }
+
     public void SetSinglePassCo2Conversion(float value)
     {
         singlePassCo2Conversion = Mathf.Clamp(value, 0f, 0.999f);

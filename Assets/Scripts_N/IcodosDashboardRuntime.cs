@@ -41,6 +41,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private Text processTitleText;
     private Text processBodyText;
     private Text processStreamsText;
+    private Button previousProcessStepButton;
+    private Button nextProcessStepButton;
     private Text equipmentSummaryText;
     private Text simulationSummaryText;
     private Text analyticsSummaryText;
@@ -168,10 +170,10 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMax = new Vector2(0f, 1f);
         panel.pivot = new Vector2(0f, 1f);
         panel.anchoredPosition = new Vector2(14f, -90f);
-        panel.sizeDelta = new Vector2(178f, 288f);
+        panel.sizeDelta = new Vector2(208f, 340f);
 
         AddPanelTitle(panel, "PROCESS FLOW");
-        string[] names = { "Hydrogen", "CO2", "Rich amine", "Lean amine", "Mixed syngas", "Hot syngas", "Reactor effluent", "Crude methanol", "Methanol product" };
+        string[] names = { "Hydrogen (input)", "CO2 (input)", "Rich amine (capture)", "Lean amine (return)", "Mixed syngas (reactor in)", "Hot syngas (reactor in)", "Reactor effluent (output)", "Crude methanol (output)", "Methanol product (output)" };
         Color[] colors =
         {
             Hex("33FF40"), Hex("B3EBFF"), Hex("00D9B8"), Hex("00FF8C"), Hex("EBFF33"),
@@ -183,9 +185,13 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             float y = -52f - i * 24f;
             RectTransform swatch = CreatePanel(names[i] + " Swatch", panel, colors[i]);
             AnchorTopLeft(swatch, new Vector2(17f, y), new Vector2(18f, 8f));
-            Text label = CreateText(names[i], panel, names[i], 12, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
-            AnchorTopLeft(label.rectTransform, new Vector2(45f, y + 5f), new Vector2(122f, 20f));
+            Text label = CreateText(names[i], panel, names[i], 10, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
+            AnchorTopLeft(label.rectTransform, new Vector2(45f, y + 5f), new Vector2(155f, 20f));
         }
+
+        Button streamToggle = CreateButton("Stream Visibility", panel, "SHOW / HIDE STREAMS", AccentColor, 10);
+        AnchorTopLeft(streamToggle.GetComponent<RectTransform>(), new Vector2(14f, -286f), new Vector2(180f, 34f));
+        streamToggle.onClick.AddListener(ToggleStreams);
     }
 
     private void BuildPlantStatus(Transform parent)
@@ -248,12 +254,12 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Pin(processBodyText.rectTransform, new Vector2(0f, 0.18f), new Vector2(0.67f, 0.70f), new Vector2(20f, 4f), new Vector2(-10f, 0f));
         processStreamsText = CreateText("Streams", process, "", 12, FontStyle.Normal, TextAnchor.UpperLeft, MutedTextColor);
         Pin(processStreamsText.rectTransform, new Vector2(0.68f, 0.18f), new Vector2(1f, 0.70f), new Vector2(8f, 4f), new Vector2(-18f, 0f));
-        Button previous = CreateButton("Previous Step", process, "PREVIOUS STEP", HeaderColor, 11);
-        Pin(previous.GetComponent<RectTransform>(), new Vector2(0.02f, 0.03f), new Vector2(0.20f, 0.18f), Vector2.zero, Vector2.zero);
-        previous.onClick.AddListener(() => SetProcessStep(processStepIndex - 1));
-        Button next = CreateButton("Next Step", process, "NEXT STEP", AccentColor, 11);
-        Pin(next.GetComponent<RectTransform>(), new Vector2(0.80f, 0.03f), new Vector2(0.98f, 0.18f), Vector2.zero, Vector2.zero);
-        next.onClick.AddListener(() => SetProcessStep(processStepIndex + 1));
+        previousProcessStepButton = CreateButton("Previous Step", process, "PREVIOUS STEP", HeaderColor, 11);
+        Pin(previousProcessStepButton.GetComponent<RectTransform>(), new Vector2(0.02f, 0.03f), new Vector2(0.20f, 0.18f), Vector2.zero, Vector2.zero);
+        previousProcessStepButton.onClick.AddListener(() => SetProcessStep(processStepIndex - 1));
+        nextProcessStepButton = CreateButton("Next Step", process, "NEXT STEP", AccentColor, 11);
+        Pin(nextProcessStepButton.GetComponent<RectTransform>(), new Vector2(0.80f, 0.03f), new Vector2(0.98f, 0.18f), Vector2.zero, Vector2.zero);
+        nextProcessStepButton.onClick.AddListener(() => SetProcessStep(processStepIndex + 1));
 
         equipmentPanel = BuildContextPanel("Reactor Lab", parent, new Vector2(0.69f, 0.25f), new Vector2(0.985f, 0.72f), "REACTOR REACTION LAB");
         RectTransform equipment = equipmentPanel.GetComponent<RectTransform>();
@@ -343,12 +349,11 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         RectTransform footer = CreatePanel("Footer", parent, HeaderColor);
         Pin(footer, Vector2.zero, new Vector2(1f, 0f), Vector2.zero, new Vector2(0f, 62f));
-        AddFooterButton(footer, "SELECT EQUIPMENT", 0, () => ToggleModulePanels(true));
-        AddFooterButton(footer, "VIEW INFORMATION", 1, () => helpPanel.SetActive(true));
-        AddFooterButton(footer, "SHOW STREAMS", 2, ToggleStreams);
-        AddFooterButton(footer, "PREVIOUS MODULE", 3, () => cameraController?.FocusPrevious());
-        AddFooterButton(footer, "NEXT MODULE", 4, () => cameraController?.FocusNext());
-        AddFooterButton(footer, "RESET VIEW", 5, () => cameraController?.FocusOverview());
+        AddFooterButton(footer, "SELECT EQUIPMENT", 0, 5, () => ToggleModulePanels(true));
+        AddFooterButton(footer, "VIEW INFORMATION", 1, 5, () => helpPanel.SetActive(true));
+        AddFooterButton(footer, "PREVIOUS MODULE", 2, 5, () => cameraController?.FocusPrevious());
+        AddFooterButton(footer, "NEXT MODULE", 3, 5, () => cameraController?.FocusNext());
+        AddFooterButton(footer, "RESET VIEW", 4, 5, () => cameraController?.FocusOverview());
     }
 
     private void BuildHelpPanel(Transform parent)
@@ -359,7 +364,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.sizeDelta = new Vector2(620f, 390f);
         AddPanelTitle(panel, "ABOUT THIS DIGITAL TWIN");
         Text body = CreateText("Body", panel,
-            "Explore the Power-to-Methanol process from hydrogen production to methanol storage.\n\n" +
+            "PROCESS OVERVIEW\nWater + electricity -> H2 + O2\nCaptured CO2 + H2 -> reactor -> methanol + water -> separation -> storage\nReaction: CO2 + 3 H2 <-> CH3OH + H2O\n\nHOW TO USE\n" +
             "• Use the top navigation or module arrows to focus equipment.\n" +
             "• Select equipment to open educational controls and live values.\n" +
             "• Stream colours show qualitative material movement through the actual pipe routes.\n" +
@@ -511,7 +516,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             "Regenerable amine absorption separates and conditions carbon dioxide before compression.",
             "Fresh hydrogen, captured CO2 and recycled synthesis gas combine at the mixing junction.",
             "The mixed synthesis gas is brought toward reactor inlet temperature before entering the fixed bed.",
-            "The conditioned H2/CO2 mixture passes through the catalyst bed and forms methanol and water.",
+            "The conditioned mixture reacts over a catalyst: CO2 + 3 H2 <-> CH3OH + H2O. Temperature, pressure, H2/CO2 ratio, flow (GHSV) and recycle change the calculated single-pass yield.",
             "Reactor effluent is cooled so crude methanol and water condense while unreacted gas remains available for recycle.",
             "Distillation raises methanol purity by separating water and remaining light components.",
             "The product tank accumulates methanol and activates the capacity interlock near its safe operating limit."
@@ -530,6 +535,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         if (processTitleText != null) processTitleText.text = titles[processStepIndex].ToUpperInvariant();
         if (processBodyText != null) processBodyText.text = descriptions[processStepIndex];
         if (processStreamsText != null) processStreamsText.text = streams[processStepIndex];
+        if (previousProcessStepButton != null) previousProcessStepButton.interactable = processStepIndex > 0;
+        if (nextProcessStepButton != null) nextProcessStepButton.interactable = processStepIndex < titles.Length - 1;
         Focus(focus[processStepIndex]);
     }
 
@@ -577,10 +584,10 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         return value;
     }
 
-    private void AddFooterButton(RectTransform footer, string label, int index, Action action)
+    private void AddFooterButton(RectTransform footer, string label, int index, int count, Action action)
     {
         Button button = CreateButton(label, footer, label, HeaderColor, 11);
-        float width = 1f / 6f;
+        float width = 1f / count;
         Pin(button.GetComponent<RectTransform>(), new Vector2(index * width, 0f), new Vector2((index + 1) * width, 1f), new Vector2(1f, 2f), new Vector2(-1f, -2f));
         button.onClick.AddListener(() => action());
     }
