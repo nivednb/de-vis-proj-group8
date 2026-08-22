@@ -260,27 +260,43 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMax = new Vector2(0f, 1f);
         panel.pivot = new Vector2(0f, 1f);
         panel.anchoredPosition = new Vector2(14f, -90f - TitleBarHeight);
-        panel.sizeDelta = new Vector2(208f, 340f);
+        panel.sizeDelta = new Vector2(254f, 286f);
 
         AddPanelTitle(panel, "PROCESS FLOW");
-        string[] names = { "Hydrogen (input)", "CO2 (input)", "Rich amine (capture)", "Lean amine (return)", "Mixed syngas (reactor in)", "Hot syngas (reactor in)", "Reactor effluent (output)", "Crude methanol (output)", "Methanol product (output)" };
+        string[] names =
+        {
+            "Raw Water / H2 Stream",
+            "Amine Solvent / Captured CO2",
+            "Compressed Syngas (3:1 H2:CO2)",
+            "Hot Reactor Effluent",
+            "Pure Refined Methanol (>99.85%)",
+            "Gas Recycle Loop"
+        };
         Color[] colors =
         {
-            Hex("33FF40"), Hex("B3EBFF"), Hex("00D9B8"), Hex("00FF8C"), Hex("EBFF33"),
-            Hex("FF730D"), Hex("FF2E0F"), Hex("2E99FF"), Hex("B84DFF")
+            Hex("36D9FF"), Hex("0B6B4F"), Hex("FF8A1F"),
+            Hex("FF3B30"), Hex("39FF6A"), Hex("FF8A1F")
         };
 
         for (int i = 0; i < names.Length; i++)
         {
-            float y = -52f - i * 24f;
-            RectTransform swatch = CreatePanel(names[i] + " Swatch", panel, colors[i]);
-            AnchorTopLeft(swatch, new Vector2(17f, y), new Vector2(18f, 8f));
+            float y = -52f - i * 28f;
+            if (i == names.Length - 1)
+            {
+                Text dashed = CreateText("Recycle Dashed Swatch", panel, "- - -", 13, FontStyle.Bold, TextAnchor.MiddleCenter, colors[i]);
+                AnchorTopLeft(dashed.rectTransform, new Vector2(13f, y + 5f), new Vector2(30f, 20f));
+            }
+            else
+            {
+                RectTransform swatch = CreatePanel(names[i] + " Swatch", panel, colors[i]);
+                AnchorTopLeft(swatch, new Vector2(17f, y), new Vector2(18f, 8f));
+            }
             Text label = CreateText(names[i], panel, names[i], 10, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
-            AnchorTopLeft(label.rectTransform, new Vector2(45f, y + 5f), new Vector2(155f, 20f));
+            AnchorTopLeft(label.rectTransform, new Vector2(48f, y + 5f), new Vector2(198f, 20f));
         }
 
         Button streamToggle = CreateButton("Stream Visibility", panel, "SHOW / HIDE STREAMS", AccentColor, 10);
-        AnchorTopLeft(streamToggle.GetComponent<RectTransform>(), new Vector2(14f, -286f), new Vector2(180f, 34f));
+        AnchorTopLeft(streamToggle.GetComponent<RectTransform>(), new Vector2(14f, -232f), new Vector2(226f, 36f));
         streamToggle.onClick.AddListener(ToggleStreams);
     }
 
@@ -349,6 +365,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         equipmentPanel = BuildContextPanel("Reactor Lab", parent, new Vector2(0.69f, 0.25f), new Vector2(0.985f, 0.72f), "REACTOR REACTION LAB");
         RectTransform equipment = equipmentPanel.GetComponent<RectTransform>();
         equipmentSummaryText = AddContextBody(equipment,
+            "MAIN REACTION\nCO2 + 3H2 ⇌ CH3OH + H2O\n\n" +
             "Inspect the real transparent fixed-bed reactor. Conditioned H2/CO2/recycle gas enters the side feed nozzle, crosses the catalyst volume, and the methanol/water-containing effluent leaves through the top outlet.\n\n" +
             "The catalyst colour indicates operating state; particle motion is an educational species-and-conversion visualization.");
         Button focusReactor = AddContextButton(equipment, "FOCUS REACTOR", 0.20f);
@@ -893,8 +910,12 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void BuildEducationalBadge(Transform parent)
     {
-        Text badge = CreateText("Educational Badge", parent, "EDUCATIONAL VISUALIZATION • SIMPLIFIED PROCESS VALUES", 10, FontStyle.Bold, TextAnchor.MiddleCenter, MutedTextColor);
-        Pin(badge.rectTransform, new Vector2(0.33f, 1f), new Vector2(0.67f, 1f), new Vector2(0f, -98f - TitleBarHeight), new Vector2(0f, -76f - TitleBarHeight));
+        RectTransform banner = CreatePanel("Process Workflow Banner", parent, Hex("183246"));
+        Pin(banner, new Vector2(0.20f, 1f), new Vector2(0.80f, 1f), new Vector2(0f, -110f - TitleBarHeight), new Vector2(0f, -78f - TitleBarHeight));
+        Text badge = CreateText("Process Workflow", banner,
+            "WATER + ELECTRICITY  >  H2   |   CO2 CAPTURE  >  CO2   |   H2 + CO2  >  REACTOR  >  METHANOL  >  SEPARATION  >  STORAGE",
+            10, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+        Pin(badge.rectTransform, Vector2.zero, Vector2.one, new Vector2(10f, 2f), new Vector2(-10f, -2f));
     }
 
     private void Refresh()
@@ -951,7 +972,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
         if (equipmentSummaryText != null)
             equipmentSummaryText.text =
-                $"Selected process focus: Reactor R-201\n\nTemperature  {s.reactorTemperatureC:F0} °C\n" +
+                $"MAIN REACTION:  CO2 + 3H2 ⇌ CH3OH + H2O\n\nSelected process focus: Reactor R-201\n\nTemperature  {s.reactorTemperatureC:F0} °C\n" +
                 $"Pressure  {s.reactorPressureBar:F0} bar\nH2/CO2 ratio  {s.h2Co2Ratio:F2}\n" +
                 $"Yield  {s.reactorYieldPercent:F1}%\n\n" +
                 "The fixed-bed synthesis reactor converts conditioned H2/CO2 syngas to methanol and water. " +

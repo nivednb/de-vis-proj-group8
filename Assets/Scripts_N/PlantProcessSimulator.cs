@@ -364,7 +364,11 @@ public class PlantProcessSimulator : MonoBehaviour
     public void SetFlueGasFlow(float value) => manualFlueGasFlow = Mathf.Clamp(value, 0f, 130f);
     public void SetRegeneratorSteam(float value) => manualRegeneratorSteam = Mathf.Clamp(value, 0f, 100f);
     public void SetCompressionRatio(float value) => manualCompressionRatio = Mathf.Clamp(value, 1f, 6f);
-    public void SetReactorFeedFlow(float value) => manualReactorFeedFlow = Mathf.Clamp(value, 20f, 130f);
+    public void SetReactorFeedFlow(float value)
+    {
+        manualReactorFeedFlow = Mathf.Clamp(value, 20f, 130f);
+        ApplyReactorControlChange();
+    }
     public void SetCoolingWaterFlow(float value) => manualCoolingWaterFlow = Mathf.Clamp(value, 0f, 100f);
     public void SetCoolingWaterTemperature(float value) => manualCoolingWaterTemperature = Mathf.Clamp(value, 5f, 45f);
     public void SetSeparatorTemperature(float value) => manualSeparatorTemperature = Mathf.Clamp(value, 20f, 65f);
@@ -377,6 +381,7 @@ public class PlantProcessSimulator : MonoBehaviour
         manualTemperatureEnabled = true;
         manualTemperature = Mathf.Clamp(value, 200f, 300f);
         if (temperatureSlider != null) temperatureSlider.SetValueWithoutNotify(manualTemperature);
+        ApplyReactorControlChange();
     }
 
     public void SetReactorPressure(float value)
@@ -384,6 +389,7 @@ public class PlantProcessSimulator : MonoBehaviour
         manualPressureEnabled = true;
         manualPressure = Mathf.Clamp(value, 40f, 100f);
         if (pressureSlider != null) pressureSlider.SetValueWithoutNotify(manualPressure);
+        ApplyReactorControlChange();
     }
 
     public void SetH2Co2Ratio(float value)
@@ -391,6 +397,7 @@ public class PlantProcessSimulator : MonoBehaviour
         manualRatioEnabled = true;
         manualRatio = Mathf.Clamp(value, 1f, 6f);
         if (ratioSlider != null) ratioSlider.SetValueWithoutNotify(manualRatio);
+        ApplyReactorControlChange();
     }
 
     public void SetGHSV(float value)
@@ -398,6 +405,20 @@ public class PlantProcessSimulator : MonoBehaviour
         manualGhsvEnabled = true;
         manualGhsv = Mathf.Clamp(value, 1000f, 20000f);
         if (ghsvSlider != null) ghsvSlider.SetValueWithoutNotify(manualGhsv);
+        ApplyReactorControlChange();
+    }
+
+    /// <summary>
+    /// Re-evaluates the reactor response immediately after a T/P/R/V UI event.
+    /// Only the setter's own manual value changes; the other three operating
+    /// variables retain their current values (ceteris paribus).
+    /// </summary>
+    private void ApplyReactorControlChange()
+    {
+        if (!initialized) return;
+        target = CalculateSnapshot();
+        current = target;
+        Publish();
     }
 
     public void SetAmineFlow(float value)
