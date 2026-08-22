@@ -135,6 +135,7 @@ public class PlantProcessSimulator : MonoBehaviour
     private RecycleMassBalanceEngine recycleMassBalance;
 
     public ProcessSnapshot Current => current;
+    public RecycleMassBalanceEngine MassBalance => recycleMassBalance;
     public event Action<ProcessSnapshot> SnapshotUpdated;
 
     public readonly struct ManualChangeInfo
@@ -491,7 +492,9 @@ public class PlantProcessSimulator : MonoBehaviour
         SetCoolingWaterFlow(100f);
         SetCoolingWaterTemperature(8f);
         SetSeparatorTemperature(34f);
-        SetRecycleRatio(100f);
+        // A finite purge is required for a physically solvable steady-state loop.
+        // 95% recycle retains high conversion while avoiding the singular 100% case.
+        SetRecycleRatio(95f);
         SetRefluxRatio(5f);
         SetDistillationReboilerTemperature(105f);
 
