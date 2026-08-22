@@ -61,7 +61,6 @@ public class PlantProcessSimulator : MonoBehaviour
         public float storedMethanolKg;
         public float overallEfficiencyPercent;
         public float storageFillPercent;
-        public float storageTimeRemainingSeconds;
         public bool storageInterlockActive;
     }
 
@@ -97,6 +96,9 @@ public class PlantProcessSimulator : MonoBehaviour
     private Slider amineFlowSlider;
     private Slider regenTempSlider;
 
+    // Matches CreateSlider's seed values in InteractiveModulePanelRuntime and what
+    // ResetSimulation() returns to — the plant starts already at a typical operating point
+    // (not powered off) so the scene reads as "running" the moment it loads.
     private float manualTimeline = 100f;
     private float manualElectrolyzerPower = 75f;
     private float manualWaterFeed = 100f;
@@ -133,6 +135,55 @@ public class PlantProcessSimulator : MonoBehaviour
 
     public ProcessSnapshot Current => current;
     public event Action<ProcessSnapshot> SnapshotUpdated;
+
+    public readonly struct ManualChangeInfo
+    {
+        public readonly string Module;
+        public readonly string Parameter;
+        public readonly float FromValue;
+        public readonly float ToValue;
+        public readonly float Time;
+
+        public ManualChangeInfo(string module, string parameter, float fromValue, float toValue, float time)
+        {
+            Module = module;
+            Parameter = parameter;
+            FromValue = fromValue;
+            ToValue = toValue;
+            Time = time;
+        }
+    }
+
+    // The most recent manual slider adjustment across every module, so external observers
+    // (e.g. the live analytics graphs) can tell "the user just changed X from A to B in
+    // module Y" apart from the plant's own smoothed drift toward its targets, without
+    // separate per-control event wiring. Committed once per interaction (on slider release,
+    // not every intermediate drag tick) by InteractiveModulePanelRuntime's SliderCommitTracker
+    // — the only place that already knows the exact slider label, its owning module, and the
+    // value it held before this interaction started.
+    public ManualChangeInfo LastManualChange { get; private set; } = new ManualChangeInfo("", "", 0f, 0f, -1000f);
+
+    /// <summary>Fired once per committed slider interaction (see LastManualChange) — the
+    /// event other systems (e.g. the correlation graphs) should react to, rather than
+    /// polling LastManualChange every frame.</summary>
+    public event Action<ManualChangeInfo> ManualChangeCommitted;
+
+    public void CommitManualChange(string module, string parameter, float fromValue, float toValue)
+    {
+        ManualChangeInfo info = new ManualChangeInfo(module, parameter, fromValue, toValue, Time.unscaledTime);
+        LastManualChange = info;
+        ManualChangeCommitted?.Invoke(info);
+    }
+
+    // Design-capacity accessors so external UI (live analytics graphs) can scale axes to
+    // the plant's known maximums instead of re-deriving/duplicating these constants.
+    public float DesignMethanolKgH => designMethanolKgH;
+    public float StorageCapacityKg => storageCapacityKg;
+
+    public bool IsRunning { get; private set; } = true;
+
+    /// <summary>Fired after ResetSimulation() has fully applied the fresh start-of-run state.</summary>
+    public event Action ResetRequested;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
@@ -175,7 +226,7 @@ public class PlantProcessSimulator : MonoBehaviour
 
     private void Update()
     {
-        if (!initialized)
+        if (!initialized || !IsRunning)
         {
             return;
         }
@@ -229,9 +280,6 @@ public class PlantProcessSimulator : MonoBehaviour
         }
 
         current.storageFillPercent = StorageFill(current.storedMethanolKg);
-        current.storageTimeRemainingSeconds = StorageTimeRemainingSeconds(
-            current.storedMethanolKg,
-            current.methanolProductionKgH);
         if (enableStorageHighHighTrip && current.storageFillPercent >= storageHighHighPercent)
         {
             storageInterlockLatched = true;
@@ -244,10 +292,64 @@ public class PlantProcessSimulator : MonoBehaviour
     {
         current.storedMethanolKg = 0f;
         current.storageFillPercent = 0f;
-        current.storageTimeRemainingSeconds = StorageTimeRemainingSeconds(0f, current.methanolProductionKgH);
         storageInterlockLatched = false;
         current.storageInterlockActive = false;
         Publish();
+    }
+
+    public void Play() => IsRunning = true;
+    public void Pause() => IsRunning = false;
+
+    /// <summary>
+    /// Returns every manual override and the storage level to their start-of-run defaults
+    /// (the same values CreateSlider seeds each control with) and resumes the run, so the
+    /// process reads exactly as if it had just started. UI that owns the actual slider
+    /// handles (InteractiveModulePanelRuntime) should follow this with a call to reposition
+    /// its own visuals via SetValueWithoutNotify — this method is the single source of truth
+    /// for the underlying data and fires <see cref="ResetRequested"/> once it's settled.
+    /// </summary>
+    public void ResetSimulation()
+    {
+        manualTimeline = 100f;
+        manualElectrolyzerPower = 75f;
+        manualWaterFeed = 100f;
+        manualFlueGasFlow = 100f;
+        manualAmineFlow = 65f;
+        manualRegeneratorSteam = 70f;
+        manualRegenTemp = 105f;
+        manualCompressionRatio = 3f;
+        manualTemperature = 250f;
+        manualPressure = 70f;
+        manualRatio = 3f;
+        manualGhsv = 8000f;
+        manualReactorFeedFlow = 100f;
+        manualCoolingWaterFlow = 70f;
+        manualCoolingWaterTemperature = 24f;
+        manualSeparatorTemperature = 34f;
+        manualRecycleRatio = 65f;
+        manualRefluxRatio = 3.2f;
+        manualDistillationReboilerTemp = 98f;
+
+        storageInterlockLatched = false;
+        LastManualChange = new ManualChangeInfo("", "", 0f, 0f, -1000f);
+        IsRunning = true;
+
+        target = CalculateSnapshot();
+        current = target;
+        current.storedMethanolKg = 0f;
+        current.storageFillPercent = 0f;
+        current.storageInterlockActive = false;
+
+        if (temperatureSlider != null) temperatureSlider.SetValueWithoutNotify(manualTemperature);
+        if (pressureSlider != null) pressureSlider.SetValueWithoutNotify(manualPressure);
+        if (timelineSlider != null) timelineSlider.SetValueWithoutNotify(manualTimeline);
+        if (ratioSlider != null) ratioSlider.SetValueWithoutNotify(manualRatio);
+        if (ghsvSlider != null) ghsvSlider.SetValueWithoutNotify(manualGhsv);
+        if (amineFlowSlider != null) amineFlowSlider.SetValueWithoutNotify(manualAmineFlow);
+        if (regenTempSlider != null) regenTempSlider.SetValueWithoutNotify(manualRegenTemp);
+
+        Publish();
+        ResetRequested?.Invoke();
     }
 
     public void SetTimelinePercent(float value)
@@ -312,84 +414,6 @@ public class PlantProcessSimulator : MonoBehaviour
         if (regenTempSlider != null) regenTempSlider.SetValueWithoutNotify(manualRegenTemp);
     }
 
-    public float GetControlValue(string label, float fallback)
-    {
-        switch (label)
-        {
-            case "Plant load": return manualTimelineEnabled ? manualTimeline : GetSliderValue(timelineSlider, fallback);
-            case "Power": return manualElectrolyzerPower;
-            case "Water feed": return manualWaterFeed;
-            case "Amine flow": return manualAmineFlowEnabled ? manualAmineFlow : GetSliderValue(amineFlowSlider, fallback);
-            case "Flue gas": return manualFlueGasFlow;
-            case "Steam flow": return manualRegeneratorSteam;
-            case "Regen temp": return manualRegenTempEnabled ? manualRegenTemp : GetSliderValue(regenTempSlider, fallback);
-            case "Comp. ratio": return manualCompressionRatio;
-            case "Outlet press.":
-            case "Pressure": return manualPressureEnabled ? manualPressure : GetSliderValue(pressureSlider, fallback);
-            case "Temp": return manualTemperatureEnabled ? manualTemperature : GetSliderValue(temperatureSlider, fallback);
-            case "H2/CO2": return manualRatioEnabled ? manualRatio : GetSliderValue(ratioSlider, fallback);
-            case "GHSV": return manualGhsvEnabled ? manualGhsv : GetSliderValue(ghsvSlider, fallback);
-            case "Feed flow": return manualReactorFeedFlow;
-            case "Cooling flow": return manualCoolingWaterFlow;
-            case "Cooling temp": return manualCoolingWaterTemperature;
-            case "Recycle ratio": return manualRecycleRatio;
-            case "Sep. temp": return manualSeparatorTemperature;
-            case "Reflux ratio": return manualRefluxRatio;
-            case "Reboiler temp": return manualDistillationReboilerTemp;
-            default: return fallback;
-        }
-    }
-
-    public bool ApplyMaximumEfficiencyOperatingPoint()
-    {
-        // A full product tank is a hard safety constraint. Optimisation must never
-        // silently clear or bypass the storage high-high interlock.
-        if (storageInterlockLatched)
-            return false;
-
-        SetTimelinePercent(100f);
-        SetElectrolyzerPower(100f);
-        SetWaterFeed(100f);
-        SetFlueGasFlow(100f);
-        SetAmineFlow(100f);
-        SetRegeneratorSteam(100f);
-        SetRegeneratorTemperature(118f);
-        SetCompressionRatio(3f);
-        SetReactorFeedFlow(100f);
-        SetReactorTemperature(255f);
-        SetReactorPressure(70f);
-        SetH2Co2Ratio(3f);
-        SetGHSV(5900f);
-        SetCoolingWaterFlow(100f);
-        SetCoolingWaterTemperature(8f);
-        SetSeparatorTemperature(34f);
-        SetRecycleRatio(100f);
-        SetRefluxRatio(5f);
-        SetDistillationReboilerTemperature(105f);
-
-        SyncVisibleControlSliders();
-        current = CalculateSnapshot();
-        initialized = true;
-        Publish();
-        return true;
-    }
-
-    private void SyncVisibleControlSliders()
-    {
-        const string suffix = " Slider";
-        Slider[] sliders = FindObjectsByType<Slider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        foreach (Slider slider in sliders)
-        {
-            if (slider == null || !slider.name.EndsWith(suffix, StringComparison.Ordinal))
-                continue;
-
-            string label = slider.name.Substring(0, slider.name.Length - suffix.Length);
-            float value = GetControlValue(label, float.NaN);
-            if (!float.IsNaN(value))
-                slider.value = value;
-        }
-    }
-
     private void Publish()
     {
         UpdateOptionalLabels();
@@ -434,9 +458,6 @@ public class PlantProcessSimulator : MonoBehaviour
         float residenceFactor = Mathf.Clamp(8000f / Mathf.Max(ghsv, 1f), 0.35f, 1.35f);
         float recycleBoost = Mathf.Lerp(0.86f, 1.18f, manualRecycleRatio / 100f);
         float performanceFactor = Mathf.Clamp01(tempFactor * pressureFactor * ratioFactor * residenceFactor * recycleBoost);
-        // Commercial Cu/ZnO methanol reactors use recycle because equilibrium limits
-        // practical single-pass CO2 conversion. Keep this educational correlation in
-        // a defensible 5-35% range and let the recycle balance determine overall conversion.
         float singlePassConversion = Mathf.Lerp(0.05f, 0.35f, performanceFactor);
 
         // Stoichiometric basis:
@@ -448,12 +469,7 @@ public class PlantProcessSimulator : MonoBehaviour
         float h2RequiredForAvailableCo2 = availableCo2 / 44.0095f * requestedRatio * 2.01588f;
         float h2ToReactor = Mathf.Min(availableH2, h2RequiredForAvailableCo2);
         float co2ToReactor = Mathf.Min(availableCo2, h2ToReactor / 2.01588f / requestedRatio * 44.0095f);
-
-        recycleMassBalance.ConfigureAndCalculate(
-            co2ToReactor,
-            h2ToReactor,
-            singlePassConversion,
-            manualRecycleRatio / 100f);
+        recycleMassBalance.ConfigureAndCalculate(co2ToReactor, h2ToReactor, singlePassConversion, manualRecycleRatio / 100f);
         float theoreticalMethanol = Mathf.Min(
             h2ToReactor * (32.04186f / (3f * 2.01588f)),
             co2ToReactor * (32.04186f / 44.0095f));
@@ -513,9 +529,6 @@ public class PlantProcessSimulator : MonoBehaviour
         };
 
         snapshot.storageFillPercent = StorageFill(snapshot.storedMethanolKg);
-        snapshot.storageTimeRemainingSeconds = StorageTimeRemainingSeconds(
-            snapshot.storedMethanolKg,
-            snapshot.methanolProductionKgH);
         return snapshot;
     }
 
@@ -547,20 +560,6 @@ public class PlantProcessSimulator : MonoBehaviour
     private float StorageFill(float storedKg)
     {
         return storageCapacityKg <= 0f ? 0f : Mathf.Clamp01(storedKg / storageCapacityKg) * 100f;
-    }
-
-    private float StorageTimeRemainingSeconds(float storedKg, float productionKgH)
-    {
-        float operationalFullKg = enableStorageHighHighTrip
-            ? storageCapacityKg * storageHighHighPercent / 100f
-            : storageCapacityKg;
-        float remainingKg = Mathf.Max(0f, operationalFullKg - storedKg);
-        float accumulationKgPerSecond = productionKgH * storageSimulationHoursPerSecond;
-
-        if (remainingKg <= 0.01f) return 0f;
-        return accumulationKgPerSecond > 0.0001f
-            ? remainingKg / accumulationKgPerSecond
-            : float.PositiveInfinity;
     }
 
     private float GetSliderValue(Slider slider, float fallback)

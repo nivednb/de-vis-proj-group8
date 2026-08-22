@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using TMPro;
+using UnityEngine.EventSystems;
 
 /// <summary>
 /// Orbits the camera around a fixed pivot point on the surface of an imaginary sphere.
@@ -49,6 +50,19 @@ public class OrbitCameraController : MonoBehaviour
     [Tooltip("World-space lateral pan speed for A/D. Orthographic views scale this with zoom so movement stays readable.")]
     public float panSpeed = 24f;
 
+    [Header("Mouse Controls")]
+    [Tooltip("Mouse sensitivity for left-click drag rotation (degrees per pixel).")]
+    public float mouseLookSensitivity = 0.15f;
+    [Tooltip("Scroll wheel zoom multiplier (units per scroll tick).")]
+    public float scrollZoomMultiplier = 10f;
+    [Tooltip("Zoom range for scroll wheel.")]
+    public float scrollMinDistance = 0.00001f;
+    public float scrollMaxDistance = 250f;
+    [Tooltip("Mouse sensitivity for Shift + drag pan (units per pixel).")]
+    public float panMouseSensitivity = 2000.0f;
+    [Tooltip("Smooth acceleration for pan dragging.")]
+    public float panSmoothSpeed = 8f;
+
     [Header("Elevation clamp (degrees, avoids flipping over the poles)")]
     [Tooltip("Keep a degree or two short of 90 (e.g. 89) to avoid gimbal-flip at the exact pole.")]
     public float minElevation = -89f;
@@ -58,6 +72,9 @@ public class OrbitCameraController : MonoBehaviour
     [Tooltip("True isometric/3D-scanner look: orthographic removes perspective foreshortening so the orbit reads as pure rotation around the object rather than depth-based movement.")]
     public bool useOrthographic = true;
     public float orthographicSize = 40f;
+    [Tooltip("Automatically centers and frames the complete process model for the home view.")]
+    public bool autoFrameWholePlant = true;
+    [Range(1f, 2f)] public float wholePlantFramePadding = 1.2f;
 
     [Header("Starting angles (degrees)")]
     public float startAzimuth = 0f;
@@ -66,6 +83,11 @@ public class OrbitCameraController : MonoBehaviour
     private float _azimuth;
     private float _elevation;
     private Camera _cam;
+
+    // Mouse state
+    private Vector2 _lastMousePos;
+    private bool _leftMouseDragThisFrame;
+    private Vector3 _panVelocity;
 
     // Smoothed focus target — lets the camera glide between modules instead of snapping
     private Vector3 _currentTarget;
@@ -92,8 +114,16 @@ public class OrbitCameraController : MonoBehaviour
     private float _homeDistance;
     private float _homeOrthoSize;
 
+    /// <summary>Fired on a plain left-click that lands on the 3D scene rather than any UI.</summary>
+    public event System.Action BackgroundClicked;
+
     void Start()
     {
+        if (autoFrameWholePlant)
+        {
+            FrameWholePlantFromRenderers();
+        }
+
         _azimuth = startAzimuth;
         _elevation = startElevation;
         _cam = GetComponent<Camera>();
@@ -124,6 +154,45 @@ public class OrbitCameraController : MonoBehaviour
 
         UpdateModuleNameLabel();
         UpdateCameraPosition();
+    }
+
+    private void FrameWholePlantFromRenderers()
+    {
+        Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+        bool found = false;
+        Bounds bounds = default;
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || ShouldIgnoreForWholePlantFrame(renderer)) continue;
+            Bounds candidate = renderer.bounds;
+            bool oversizedFloor = candidate.size.x > 120f && candidate.size.z > 80f && candidate.size.y < 2f;
+            if (oversizedFloor || renderer.gameObject.name == "Plane") continue;
+            if (!found) { bounds = candidate; found = true; }
+            else bounds.Encapsulate(candidate);
+        }
+
+        if (!found) return;
+        worldOrigin = bounds.center;
+        float aspect = _cam != null ? _cam.aspect : (Screen.height > 0 ? (float)Screen.width / Screen.height : 16f / 9f);
+        float halfHeightForWidth = bounds.extents.x / Mathf.Max(0.5f, aspect);
+        orthographicSize = Mathf.Max(bounds.extents.y, halfHeightForWidth, bounds.extents.z) * wholePlantFramePadding;
+        orthographicSize = Mathf.Max(orthographicSize, 20f);
+        Debug.Log($"OrbitCameraController: framed plant at {worldOrigin}, ortho {orthographicSize:F1}, bounds {bounds.size}.");
+    }
+
+    private static bool ShouldIgnoreForWholePlantFrame(Renderer renderer)
+    {
+        Transform current = renderer.transform;
+        while (current != null)
+        {
+            string value = current.name;
+            if (value.Contains("Generated_Plant_Environment") || value.Contains("Generated Whole Plant Flow") ||
+                value.Contains("Generated Interactive Module") || value.Contains("Generated Reactor Detail") ||
+                value.Contains("FlowParticle") || value.Contains("ThinGuide_") || value.Contains("Canvas") ||
+                value.Contains("Label") || value.Contains("TMP")) return true;
+            current = current.parent;
+        }
+        return false;
     }
 
     /// <summary>
@@ -233,7 +302,7 @@ public class OrbitCameraController : MonoBehaviour
 
         if (useOrthographic && _cam != null)
         {
-            float minOrtho = _focusIndex >= 0 ? 7f : 24f;
+            float minOrtho = _focusIndex >= 0 ? 0.1f : 0.1f;
             float maxOrtho = _focusIndex >= 0 ? Mathf.Max(18f, defaultFocusOrthoSize * 1.75f) : 52f;
             orthographicSize = Mathf.Clamp(orthographicSize + zoomDelta * 0.5f, minOrtho, maxOrtho);
             _cam.orthographicSize = orthographicSize;
@@ -243,6 +312,7 @@ public class OrbitCameraController : MonoBehaviour
             distance = Mathf.Clamp(distance + zoomDelta, minDistance, maxDistance);
         }
 
+        HandleMouseInput();
         UpdateCameraPosition();
     }
 
@@ -258,6 +328,122 @@ public class OrbitCameraController : MonoBehaviour
 
         transform.position = _currentTarget + new Vector3(x, y, z);
         transform.LookAt(_currentTarget);
+    }
+
+    Vector3 ScreenToWorldPoint(Vector2 screenPos, Vector3 targetPos)
+    {
+        if (_cam == null || !useOrthographic) return targetPos;
+
+        Vector3 screenToWorld = _cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 0f));
+        return new Vector3(screenToWorld.x, screenToWorld.y, targetPos.z);
+    }
+
+    void HandleMouseInput()
+    {
+        var mouse = Mouse.current;
+        if (mouse == null) return;
+
+        var kb = Keyboard.current;
+        bool shiftHeld = kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed);
+
+        // Don't accept mouse input if cursor is over UI
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
+
+        // Belt-and-suspenders exact check against the analytics window's live rect (it's
+        // draggable) in case the EventSystem's UI hover check above doesn't cover it for
+        // any reason — only the pixels the window actually currently covers block camera
+        // input; everywhere else stays interactive even while it's open.
+        if (IcodosDashboardRuntime.Instance != null && IcodosDashboardRuntime.Instance.IsPointerOverAnalyticsWindow(mouse.position.ReadValue()))
+            return;
+
+        // A plain click that lands on the 3D scene itself (not any UI) — lets listeners
+        // (e.g. the dashboard) treat it as "focus moved to the main simulation view" and
+        // dismiss whatever context panel/page is currently open, the way clicking outside
+        // a popover closes it in most apps.
+        if (mouse.leftButton.wasPressedThisFrame) BackgroundClicked?.Invoke();
+
+        Vector2 mousePos = mouse.position.ReadValue();
+        bool leftMouseDown = mouse.leftButton.isPressed;
+
+        // Left-click drag for rotation or pan
+        if (leftMouseDown)
+        {
+            if (!_leftMouseDragThisFrame)
+            {
+                // Mouse button just pressed this frame
+                _lastMousePos = mousePos;
+                _leftMouseDragThisFrame = true;
+            }
+            else
+            {
+                // Dragging continues
+                Vector2 mouseDelta = mousePos - _lastMousePos;
+
+                if (shiftHeld)
+                {
+                    // Shift + drag: pan camera with high responsiveness
+                    Vector3 panDelta = new Vector3(-mouseDelta.x, -mouseDelta.y, 0f) * panMouseSensitivity;
+                    _currentTarget += panDelta;
+                    _targetFrom += panDelta;
+                    _targetTo += panDelta;
+                }
+                else
+                {
+                    // Regular drag: orbit
+                    _azimuth += mouseDelta.x * mouseLookSensitivity;
+                    _elevation -= mouseDelta.y * mouseLookSensitivity;
+                    _elevation = Mathf.Clamp(_elevation, minElevation, maxElevation);
+                }
+
+                _lastMousePos = mousePos;
+            }
+        }
+        else
+        {
+            _leftMouseDragThisFrame = false;
+        }
+
+        // Apply smoothed pan velocity
+        if (_panVelocity.sqrMagnitude > 0.001f)
+        {
+            _currentTarget += _panVelocity * Time.deltaTime;
+            _targetFrom += _panVelocity * Time.deltaTime;
+            _targetTo += _panVelocity * Time.deltaTime;
+
+            _panVelocity = Vector3.Lerp(_panVelocity, Vector3.zero, panSmoothSpeed * Time.deltaTime);
+        }
+
+        // Scroll wheel zoom with zoom-to-mouse
+        float scrollValue = mouse.scroll.ReadValue().y;
+        if (!Mathf.Approximately(scrollValue, 0f))
+        {
+            float zoomDelta = scrollValue * scrollZoomMultiplier;
+
+            if (useOrthographic && _cam != null)
+            {
+                // Calculate world position under mouse cursor BEFORE zoom
+                Vector3 mouseWorldPosBefore = ScreenToWorldPoint(mousePos, _currentTarget);
+
+                float minOrtho = _focusIndex >= 0 ? 0.1f : 0.1f;
+                float maxOrtho = _focusIndex >= 0 ? Mathf.Max(18f, defaultFocusOrthoSize * 1.75f) : 52f;
+                orthographicSize = Mathf.Clamp(orthographicSize - zoomDelta, minOrtho, maxOrtho);
+                _cam.orthographicSize = orthographicSize;
+
+                // Calculate world position under mouse cursor AFTER zoom
+                Vector3 mouseWorldPosAfter = ScreenToWorldPoint(mousePos, _currentTarget);
+
+                // Adjust camera target so the point under the cursor doesn't move
+                Vector3 adjustment = mouseWorldPosBefore - mouseWorldPosAfter;
+                _currentTarget += adjustment;
+                _targetFrom += adjustment;
+                _targetTo += adjustment;
+            }
+            else
+            {
+                distance = Mathf.Clamp(distance - zoomDelta, scrollMinDistance, scrollMaxDistance);
+            }
+        }
     }
 
     /// <summary>Hook this up to your "Next" button's OnClick() in the Inspector.</summary>

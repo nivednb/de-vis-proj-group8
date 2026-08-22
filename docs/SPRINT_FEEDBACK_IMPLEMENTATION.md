@@ -24,9 +24,21 @@
 
 `chaitanya-dev` contains additional Sprint 7 analytics and UI work, including correlation/live graph classes and expanded dashboard behavior. Those files are being treated as design and behavior references. The branch also contains large MCP/tooling, backup, and screenshot payloads that are not application runtime requirements and should not be merged wholesale.
 
+The complete Sprint 7 application layer has now been ported: correlation graphs, live progress graphs, committed slider-change tracking, expanded analytics window, dashboard interactions, mouse camera controls, flow runtime, environment behavior, and the submitted scene configuration. Non-product tooling and archival payloads remain excluded.
+
 ## Validation
 
 Unity 6000.4.7f1 compiled the integrated branch in batch mode. The recycle balance validation passed its default, hydrogen-limited, and zero-recycle cases with external mass closure below 0.001%.
+
+- Release-scene validation passed with 480 scene objects, 35 required process-route segments, no missing scripts, reactor catalyst/shell checks, pipe shader, and camera controls.
+- Professor-feedback control validation passed: temperature, pressure, H2/CO2 ratio, and feed flow each changed the calculated result with the other test parameters held constant.
+- Windows x86_64 build succeeded with zero errors.
+- Player startup and front whole-plant framing were visually inspected at 1280x720 and 1920x1080.
+- Non-readable imported meshes now use bounds colliders for equipment hover selection, removing repeated runtime collision-mesh errors.
+
+## Release artifact
+
+`outputs/PtMeOH-Sprint7-Professor-Improvements/PtMeOH-DigitalTwin.exe` together with its adjacent data/runtime folders.
 
 ## Model limitations
 

@@ -14,7 +14,12 @@ public sealed class RuntimeValidationCapture : MonoBehaviour
         string[] args = System.Environment.GetCommandLineArgs();
         string environmentPath = System.Environment.GetEnvironmentVariable("PTMEOH_CAPTURE_PATH");
         int environmentFocus = -1;
-        int.TryParse(System.Environment.GetEnvironmentVariable("PTMEOH_CAPTURE_FOCUS"), out environmentFocus);
+        string environmentFocusValue = System.Environment.GetEnvironmentVariable("PTMEOH_CAPTURE_FOCUS");
+        if (!string.IsNullOrWhiteSpace(environmentFocusValue) &&
+            int.TryParse(environmentFocusValue, out int parsedEnvironmentFocus))
+        {
+            environmentFocus = parsedEnvironmentFocus;
+        }
         int focusIndex = -1;
         for (int i = 0; i < args.Length - 1; i++)
         {

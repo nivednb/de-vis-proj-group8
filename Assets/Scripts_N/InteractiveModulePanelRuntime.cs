@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 /// <summary>
@@ -7,6 +10,8 @@ using UnityEngine.UI;
 /// It adds compact eye buttons near process modules. Each opened panel contains
 /// module-specific controls, and those controls feed PlantProcessSimulator so
 /// flow visuals and production/storage values respond in real time.
+///
+/// Info buttons appear on hover over modules and disappear when the mouse leaves.
 /// </summary>
 [DisallowMultipleComponent]
 public class InteractiveModulePanelRuntime : MonoBehaviour
@@ -20,6 +25,46 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     private Canvas canvas;
     private Camera mainCamera;
     private Font font;
+    private List<ModuleAnchor> allAnchors = new List<ModuleAnchor>();
+    private readonly List<RegisteredSlider> registeredSliders = new List<RegisteredSlider>();
+
+    private struct RegisteredSlider
+    {
+        public Slider Slider;
+        public float DefaultValue;
+        public Text ValueText;
+        public int Decimals;
+        public string Unit;
+        public SliderCommitTracker Tracker;
+    }
+
+    /// <summary>
+    /// Fires PlantProcessSimulator.CommitManualChange exactly once per interaction — on
+    /// pointer-up, comparing against the value the slider held before that interaction —
+    /// instead of on every intermediate onValueChanged tick while dragging. This is what
+    /// lets graphs show a single "changed from A to B" point per user action instead of a
+    /// flood of points for one drag gesture.
+    /// </summary>
+    private sealed class SliderCommitTracker : MonoBehaviour, IPointerUpHandler
+    {
+        public Slider Slider;
+        public string Module;
+        public string Parameter;
+        public float LastCommittedValue;
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            float current = Slider.value;
+            if (Mathf.Approximately(current, LastCommittedValue)) return;
+            PlantProcessSimulator.Instance?.CommitManualChange(Module, Parameter, LastCommittedValue, current);
+            LastCommittedValue = current;
+        }
+    }
+    private GraphicRaycaster graphicRaycaster;
+    // The plant meshes ship without colliders, so hover cannot rely on Physics.Raycast out of
+    // the box. We add MeshColliders to each module's renderers at runtime purely for hover
+    // picking (not physics simulation) and map them back to their owning anchor here.
+    private readonly Dictionary<Collider, ModuleAnchor> colliderToAnchor = new Dictionary<Collider, ModuleAnchor>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
@@ -40,27 +85,67 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         Build();
-        SetSelectionVisible(false);
+        canvas.gameObject.SetActive(true);
     }
 
     private void LateUpdate()
     {
         if (mainCamera == null || canvas == null) return;
 
-        foreach (Transform child in canvas.transform)
+        var mouse = Mouse.current;
+        if (mouse == null) return;
+        Vector2 mousePos = mouse.position.ReadValue();
+
+        // Exact geometric test against the analytics window's live rect (it's draggable) —
+        // only the pixels it actually currently covers are excluded from hover; everywhere
+        // else on screen stays interactive even while the window is open.
+        if (IcodosDashboardRuntime.Instance != null && IcodosDashboardRuntime.Instance.IsPointerOverAnalyticsWindow(mousePos))
         {
-            ModuleAnchor anchor = child.GetComponent<ModuleAnchor>();
+            foreach (ModuleAnchor blockedAnchor in allAnchors)
+            {
+                if (blockedAnchor != null && blockedAnchor.ButtonRoot != null) blockedAnchor.ButtonRoot.SetActive(false);
+            }
+            return;
+        }
+
+        // Hover is decided by raycasting the cursor against the runtime-added MeshColliders
+        // (see RegisterColliders) — this hits the module's actual geometry directly, so it
+        // works correctly at any zoom level and for any module shape, unlike a screen-space
+        // distance heuristic against a single anchor point.
+        ModuleAnchor closestAnchor = null;
+        Ray ray = mainCamera.ScreenPointToRay(mousePos);
+        if (Physics.Raycast(ray, out RaycastHit hit, 5000f))
+        {
+            colliderToAnchor.TryGetValue(hit.collider, out closestAnchor);
+        }
+
+        foreach (ModuleAnchor anchor in allAnchors)
+        {
+            if (anchor == null || anchor.Target == null) continue;
+            Vector3 screenPos = mainCamera.WorldToScreenPoint(anchor.Target.position + anchor.WorldOffset);
+            anchor.CachedScreen = screenPos;
+            anchor.IsInFrustum = screenPos.z > 0f;
+        }
+
+        foreach (ModuleAnchor anchor in allAnchors)
+        {
             if (anchor == null || anchor.Target == null) continue;
 
-            Vector3 screen = mainCamera.WorldToScreenPoint(anchor.Target.position + anchor.WorldOffset);
-            bool visible = screen.z > 0f;
-            anchor.ButtonRoot.SetActive(visible);
-            if (!visible)
+            // The 3D raycast alone loses hover the instant the cursor crosses in front of
+            // something else (e.g. a pipe passing between the camera and the H2 tank / heat
+            // exchanger), hiding the button right as the user moves toward it to click. Also
+            // treat the cursor being over the button's own screen rect as hovered so it stays
+            // up long enough to be clicked.
+            bool isHovered = anchor == closestAnchor || IsNearButton(anchor.ButtonRect, mousePos);
+            anchor.ButtonRoot.SetActive(anchor.IsInFrustum && isHovered);
+
+            if (!anchor.IsInFrustum)
             {
                 anchor.PanelRoot.SetActive(false);
                 continue;
             }
 
+            Vector3 screen = anchor.CachedScreen;
             anchor.ButtonRect.position = screen;
             Vector3 unclampedPanelPosition = screen + new Vector3(panelOffset.x, panelOffset.y, 0f);
             float halfWidth = panelSize.x * 0.5f;
@@ -77,6 +162,23 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         }
     }
 
+    // Padded hit test around a button's screen rect. The plain RectangleContainsScreenPoint
+    // check has zero margin, so a cursor moving fast toward a small (28px) button can land
+    // a pixel outside it on the frame the mesh raycast has already lost the module (e.g. a
+    // pipe occluding the H2 tank / heat exchanger from that exact angle), hiding the button
+    // just before the click registers. A few pixels of padding gives that transition slack.
+    private const float ButtonHoverPadding = 10f;
+
+    private static bool IsNearButton(RectTransform buttonRect, Vector2 screenPoint)
+    {
+        if (buttonRect == null) return false;
+        Vector3 center = buttonRect.position;
+        Vector2 size = buttonRect.rect.size;
+        float halfW = size.x * 0.5f + ButtonHoverPadding;
+        float halfH = size.y * 0.5f + ButtonHoverPadding;
+        return Mathf.Abs(screenPoint.x - center.x) <= halfW && Mathf.Abs(screenPoint.y - center.y) <= halfH;
+    }
+
     [ContextMenu("Build Interactive Module Panels")]
     public void Build()
     {
@@ -88,28 +190,34 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         AddModule("desorber", "Desorber / Regenerator", new[] { "deabsorber column", "Desorber", "Regenerator" }, new Vector3(0f, 5.8f, 0f));
         AddModule("compressor", "Compressor", new[] { "compressor_block", "Compressor" }, new Vector3(0f, 3.2f, 0f));
         AddModule("reactor", "Methanol Reactor", new[] { "Reactor Bed", "Reactor base model", "reactor steel skirt" }, new Vector3(0f, 5.4f, 0f));
+        // HX_Shell lives inside the "Reactor base model" hierarchy (feed/effluent heat-exchanger
+        // sub-assembly) — registered after "reactor" so RegisterColliders below reassigns its
+        // specific mesh collider to this dedicated anchor, overriding the reactor's broader claim.
+        AddModule("heatexchanger", "Feed/Effluent Heat Exchanger", new[] { "HX_Shell" }, new Vector3(0f, 1.4f, 0f));
         AddModule("condenser", "Condenser", new[] { "Condenser", "condenser" }, new Vector3(0f, 3.5f, 0f));
         AddModule("separator", "Separator + Recycle", new[] { "flash separator", "Separator" }, new Vector3(0f, 4.0f, 0f));
         AddModule("distillation", "Distillation Column", new[] { "distillation column", "Distillation" }, new Vector3(0f, 5.8f, 0f));
         AddModule("storage", "Methanol Storage", new[] { "methanol tank", "Methanol Storage" }, new Vector3(0f, 3.2f, 0f));
+        AddModule("co2tank", "CO2 Buffer Tank", new[] { "co2 tank" }, new Vector3(0f, 2.6f, 0f));
+        AddModule("h2tank", "H2 Buffer Tank", new[] { "h2 tank" }, new Vector3(0f, 2.6f, 0f));
     }
 
     [ContextMenu("Clear Interactive Module Panels")]
     public void Clear()
     {
+        allAnchors.Clear();
+        registeredSliders.Clear();
         if (canvas != null)
         {
-            DestroyPanelObject(canvas.gameObject);
+            DestroyObject(canvas.gameObject);
             canvas = null;
         }
     }
 
     public void SetSelectionVisible(bool visible)
     {
-        if (canvas != null)
-        {
-            canvas.gameObject.SetActive(visible);
-        }
+        // Buttons now appear on hover, so this method is kept for compatibility but has no effect
+        // The canvas remains active to allow hover detection
     }
 
     private void CreateCanvas()
@@ -123,7 +231,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1536f, 1024f);
         scaler.matchWidthOrHeight = 0.5f;
-        canvasObject.AddComponent<GraphicRaycaster>();
+        graphicRaycaster = canvasObject.AddComponent<GraphicRaycaster>();
     }
 
     private void RemoveOldStaticEyeUi()
@@ -160,12 +268,16 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         anchor.ModuleId = id;
         anchor.Target = target;
         anchor.WorldOffset = offset;
+        RegisterColliders(target, anchor);
 
         anchor.ButtonRoot = CreateEyeButton(anchorObject.transform, title, out anchor.ButtonRect, out Button eyeButton);
         anchor.PanelRoot = CreatePanel(anchorObject.transform, title, id, out anchor.PanelRect, out anchor.LiveText);
         anchor.PanelRoot.SetActive(false);
 
         eyeButton.onClick.AddListener(() => anchor.PanelRoot.SetActive(!anchor.PanelRoot.activeSelf));
+
+        // Register anchor for hover detection
+        allAnchors.Add(anchor);
     }
 
     private GameObject CreateEyeButton(Transform parent, string title, out RectTransform rect, out Button button)
@@ -211,49 +323,49 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         liveText.rectTransform.offsetMin = new Vector2(14f, -118f);
         liveText.rectTransform.offsetMax = new Vector2(-14f, -46f);
 
-        CreateControls(root.transform, id);
+        CreateControls(root.transform, id, title);
         return root;
     }
 
-    private void CreateControls(Transform parent, string id)
+    private void CreateControls(Transform parent, string id, string moduleTitle)
     {
         switch (id)
         {
             case "electrolyzer":
-                CreateSlider(parent, "Plant load", 0f, 100f, 100f, 0, "%", v => Simulator()?.SetTimelinePercent(v), -136f);
-                CreateSlider(parent, "Power", 0f, 100f, 75f, 0, "%", v => Simulator()?.SetElectrolyzerPower(v), -168f);
-                CreateSlider(parent, "Water feed", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetWaterFeed(v), -200f);
+                CreateSlider(parent, "Plant load", 0f, 100f, 100f, 0, "%", v => Simulator()?.SetTimelinePercent(v), -136f, moduleTitle);
+                CreateSlider(parent, "Power", 0f, 100f, 75f, 0, "%", v => Simulator()?.SetElectrolyzerPower(v), -168f, moduleTitle);
+                CreateSlider(parent, "Water feed", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetWaterFeed(v), -200f, moduleTitle);
                 break;
             case "absorber":
-                CreateSlider(parent, "Amine flow", 10f, 100f, 65f, 0, "%", v => Simulator()?.SetAmineFlow(v), -136f);
-                CreateSlider(parent, "Flue gas", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetFlueGasFlow(v), -168f);
+                CreateSlider(parent, "Amine flow", 10f, 100f, 65f, 0, "%", v => Simulator()?.SetAmineFlow(v), -136f, moduleTitle);
+                CreateSlider(parent, "Flue gas", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetFlueGasFlow(v), -168f, moduleTitle);
                 break;
             case "desorber":
-                CreateSlider(parent, "Steam flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetRegeneratorSteam(v), -136f);
-                CreateSlider(parent, "Regen temp", 80f, 130f, 105f, 0, " C", v => Simulator()?.SetRegeneratorTemperature(v), -168f);
+                CreateSlider(parent, "Steam flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetRegeneratorSteam(v), -136f, moduleTitle);
+                CreateSlider(parent, "Regen temp", 80f, 130f, 105f, 0, " C", v => Simulator()?.SetRegeneratorTemperature(v), -168f, moduleTitle);
                 break;
             case "compressor":
-                CreateSlider(parent, "Comp. ratio", 1f, 6f, 3f, 1, "", v => Simulator()?.SetCompressionRatio(v), -136f);
-                CreateSlider(parent, "Outlet press.", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -168f);
+                CreateSlider(parent, "Comp. ratio", 1f, 6f, 3f, 1, "", v => Simulator()?.SetCompressionRatio(v), -136f, moduleTitle);
+                CreateSlider(parent, "Outlet press.", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -168f, moduleTitle);
                 break;
             case "reactor":
-                CreateSlider(parent, "Temp", 200f, 300f, 250f, 0, " C", v => Simulator()?.SetReactorTemperature(v), -126f);
-                CreateSlider(parent, "Pressure", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -158f);
-                CreateSlider(parent, "H2/CO2", 1f, 6f, 3f, 1, "", v => Simulator()?.SetH2Co2Ratio(v), -190f);
-                CreateSlider(parent, "GHSV", 1000f, 20000f, 8000f, 0, " h-1", v => Simulator()?.SetGHSV(v), -222f);
-                CreateSlider(parent, "Feed flow", 20f, 130f, 100f, 0, "%", v => Simulator()?.SetReactorFeedFlow(v), -254f);
+                CreateSlider(parent, "Temp", 200f, 300f, 250f, 0, " C", v => Simulator()?.SetReactorTemperature(v), -126f, moduleTitle);
+                CreateSlider(parent, "Pressure", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -158f, moduleTitle);
+                CreateSlider(parent, "H2/CO2", 1f, 6f, 3f, 1, "", v => Simulator()?.SetH2Co2Ratio(v), -190f, moduleTitle);
+                CreateSlider(parent, "GHSV", 1000f, 20000f, 8000f, 0, " h-1", v => Simulator()?.SetGHSV(v), -222f, moduleTitle);
+                CreateSlider(parent, "Feed flow", 20f, 130f, 100f, 0, "%", v => Simulator()?.SetReactorFeedFlow(v), -254f, moduleTitle);
                 break;
             case "condenser":
-                CreateSlider(parent, "Cooling flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetCoolingWaterFlow(v), -136f);
-                CreateSlider(parent, "Cooling temp", 5f, 45f, 24f, 0, " C", v => Simulator()?.SetCoolingWaterTemperature(v), -168f);
+                CreateSlider(parent, "Cooling flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetCoolingWaterFlow(v), -136f, moduleTitle);
+                CreateSlider(parent, "Cooling temp", 5f, 45f, 24f, 0, " C", v => Simulator()?.SetCoolingWaterTemperature(v), -168f, moduleTitle);
                 break;
             case "separator":
-                CreateSlider(parent, "Recycle ratio", 0f, 100f, 65f, 0, "%", v => Simulator()?.SetRecycleRatio(v), -136f);
-                CreateSlider(parent, "Sep. temp", 20f, 65f, 34f, 0, " C", v => Simulator()?.SetSeparatorTemperature(v), -168f);
+                CreateSlider(parent, "Recycle ratio", 0f, 100f, 65f, 0, "%", v => Simulator()?.SetRecycleRatio(v), -136f, moduleTitle);
+                CreateSlider(parent, "Sep. temp", 20f, 65f, 34f, 0, " C", v => Simulator()?.SetSeparatorTemperature(v), -168f, moduleTitle);
                 break;
             case "distillation":
-                CreateSlider(parent, "Reflux ratio", 0.5f, 5f, 3.2f, 1, "", v => Simulator()?.SetRefluxRatio(v), -136f);
-                CreateSlider(parent, "Reboiler temp", 70f, 115f, 98f, 0, " C", v => Simulator()?.SetDistillationReboilerTemperature(v), -168f);
+                CreateSlider(parent, "Reflux ratio", 0.5f, 5f, 3.2f, 1, "", v => Simulator()?.SetRefluxRatio(v), -136f, moduleTitle);
+                CreateSlider(parent, "Reboiler temp", 70f, 115f, 98f, 0, " C", v => Simulator()?.SetDistillationReboilerTemperature(v), -168f, moduleTitle);
                 break;
             case "storage":
                 Button reset = CreateWideButton(parent, "Reset stored methanol", new Vector2(0f, 50f), new Vector2(235f, 30f));
@@ -262,12 +374,8 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         }
     }
 
-    private void CreateSlider(Transform parent, string label, float min, float max, float value, int decimals, string unit, Action<float> onChanged, float y)
+    private void CreateSlider(Transform parent, string label, float min, float max, float value, int decimals, string unit, Action<float> onChanged, float y, string moduleTitle)
     {
-        PlantProcessSimulator simulator = Simulator();
-        if (simulator != null)
-            value = simulator.GetControlValue(label, value);
-
         Text labelText = CreateText(label + " Label", parent, label, 12, TextAnchor.MiddleLeft, new Color(0.75f, 0.88f, 0.95f, 1f));
         labelText.rectTransform.anchorMin = new Vector2(0f, 1f);
         labelText.rectTransform.anchorMax = new Vector2(0f, 1f);
@@ -313,6 +421,37 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         });
 
         onChanged?.Invoke(value);
+
+        SliderCommitTracker tracker = sliderObject.AddComponent<SliderCommitTracker>();
+        tracker.Slider = slider;
+        tracker.Module = moduleTitle;
+        tracker.Parameter = label;
+        tracker.LastCommittedValue = value;
+
+        registeredSliders.Add(new RegisteredSlider { Slider = slider, DefaultValue = value, ValueText = valueText, Decimals = decimals, Unit = unit, Tracker = tracker });
+    }
+
+    /// <summary>
+    /// Repositions every control back to its start-of-run default without re-triggering the
+    /// onValueChanged -> Simulator().SetXxx cascade — PlantProcessSimulator.ResetSimulation()
+    /// has already applied the equivalent data reset, so this only needs to catch the visual
+    /// slider handles/labels up to match. Also closes any open module control panels so the
+    /// scene reads as freshly started.
+    /// </summary>
+    public void ResetControlVisuals()
+    {
+        foreach (RegisteredSlider entry in registeredSliders)
+        {
+            if (entry.Slider == null) continue;
+            entry.Slider.SetValueWithoutNotify(entry.DefaultValue);
+            if (entry.ValueText != null) entry.ValueText.text = Format(entry.DefaultValue, entry.Decimals, entry.Unit);
+            if (entry.Tracker != null) entry.Tracker.LastCommittedValue = entry.DefaultValue;
+        }
+
+        foreach (ModuleAnchor anchor in allAnchors)
+        {
+            if (anchor != null && anchor.PanelRoot != null) anchor.PanelRoot.SetActive(false);
+        }
     }
 
     private string BuildLiveText(string id)
@@ -332,12 +471,18 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
                 return $"Status: {BuildReactorStatus(s)}\nYield: {s.reactorYieldPercent:F1}%  Methanol: {s.methanolProductionKgH:F0} kg/h\nTemp: {s.reactorTemperatureC:F0} C  Pressure: {s.reactorPressureBar:F0} bar\nRatio: {s.h2Co2Ratio:F1}  GHSV: {s.ghsv:F0} h-1";
             case "condenser":
                 return $"Cooling water: {s.coolingWaterFlowPercent:F0}% at {s.coolingWaterTemperatureC:F0} C\nCondensation recovery: {s.condenserRecoveryPercent:F0}%\nRecovered liquid methanol: {s.methanolProductionKgH:F0} kg/h";
+            case "heatexchanger":
+                return $"Syngas feed: {s.syngasFeedKgH:F0} kg/h\nReactor effluent temp: {s.reactorTemperatureC:F0} C\nPreheats cold reactor feed against hot reactor effluent before the fixed bed, reducing external heating duty.";
             case "separator":
                 return $"Recycle ratio: {s.recycleRatioPercent:F0}%\nRecycle gas: {s.recycleGasKgH:F0} kg/h\nSeparator temp: {s.separatorTemperatureC:F0} C\nMore recycle raises overall conversion and compressor load.";
             case "distillation":
                 return $"Reflux ratio: {s.refluxRatio:F1}\nReboiler temp: {s.distillationReboilerTemperatureC:F0} C\nMethanol purity: {s.methanolPurityPercent:F2}%\nEnergy demand: {s.distillationEnergyPercent:F0}%";
             case "storage":
                 return $"Stored methanol: {s.storedMethanolKg:F0} kg\nTank fill: {s.storageFillPercent:F0}%\nCurrent product rate: {s.methanolProductionKgH:F0} kg/h\nPurity: {s.methanolPurityPercent:F2}%";
+            case "co2tank":
+                return $"Captured CO2 inflow: {s.co2CapturedKgH:F0} kg/h\nCapture efficiency: {s.captureEfficiencyPercent:F0}%\nBuffers conditioned CO2 ahead of the synthesis gas mixing junction.";
+            case "h2tank":
+                return $"Hydrogen inflow: {s.h2InputKgH:F0} kg/h\nElectrolyzer power: {s.electrolyzerPowerPercent:F0}%\nDecouples variable electrolyzer output from steady synthesis-loop demand.";
             default:
                 return $"H2: {s.h2InputKgH:F0} kg/h\nCO2: {s.co2CapturedKgH:F0} kg/h\nMeOH: {s.methanolProductionKgH:F0} kg/h";
         }
@@ -355,6 +500,48 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         if (s.h2Co2Ratio < 2.5f) return "Hydrogen deficiency";
         if (s.ghsv > 9500f) return "Low residence time";
         return "Normal";
+    }
+
+    /// <summary>
+    /// Adds a MeshCollider (hover picking only, not physics) to every renderer under target
+    /// that doesn't already have one, and records which anchor each collider belongs to so
+    /// LateUpdate's raycast can resolve "which module is the cursor over" directly against
+    /// the actual mesh geometry.
+    /// </summary>
+    private void RegisterColliders(Transform target, ModuleAnchor anchor)
+    {
+        MeshFilter[] meshFilters = target.GetComponentsInChildren<MeshFilter>(true);
+        foreach (MeshFilter meshFilter in meshFilters)
+        {
+            Mesh mesh = meshFilter.sharedMesh;
+            if (mesh == null) continue;
+
+            GameObject go = meshFilter.gameObject;
+            Collider existing = go.GetComponent<Collider>();
+            if (existing is MeshCollider existingMeshCollider)
+            {
+                colliderToAnchor[existingMeshCollider] = anchor;
+                continue;
+            }
+            if (existing != null) continue; // some other collider type already present; leave it alone
+
+            if (!mesh.isReadable)
+            {
+                // Imported plant meshes intentionally have Read/Write disabled. A bounds
+                // collider preserves hover selection without forcing CPU mesh copies or
+                // generating thousands of CollisionMeshData warnings in the player.
+                BoxCollider boundsCollider = go.AddComponent<BoxCollider>();
+                boundsCollider.center = mesh.bounds.center;
+                boundsCollider.size = mesh.bounds.size;
+                colliderToAnchor[boundsCollider] = anchor;
+                continue;
+            }
+
+            MeshCollider meshCollider = go.AddComponent<MeshCollider>();
+            meshCollider.sharedMesh = mesh;
+            meshCollider.convex = false;
+            colliderToAnchor[meshCollider] = anchor;
+        }
     }
 
     private Transform FindTarget(string[] names)
@@ -456,7 +643,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         rect.offsetMax = Vector2.zero;
     }
 
-    private void DestroyPanelObject(UnityEngine.Object target)
+    private void DestroyObject(UnityEngine.Object target)
     {
         if (target == null) return;
         if (Application.isPlaying) Destroy(target);
@@ -473,5 +660,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         public GameObject PanelRoot;
         public RectTransform PanelRect;
         public Text LiveText;
+        public Vector3 CachedScreen;
+        public bool IsInFrustum;
     }
 }
