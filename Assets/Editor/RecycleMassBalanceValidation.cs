@@ -42,7 +42,20 @@ public static class RecycleMassBalanceValidation
             RequireNear(engine.overallCo2ConversionPercent, 20f, 0.01f, "Zero-recycle conversion");
             Require(engine.externalMassBalanceErrorPercent < 0.001f, "Zero-recycle mass balance does not close.");
 
-            Debug.Log("RecycleMassBalanceValidation: PASS (default, H2-limited, and zero-recycle cases).");
+            engine.SetFeedFromTotalFlowAndRatio(1000f, 3f);
+            RequireNear(engine.freshCo2KgHr + engine.freshH2KgHr, 1000f, 0.01f, "UI feed split total");
+            RequireNear((engine.freshH2KgHr / 2.01588f) / (engine.freshCo2KgHr / 44.0095f), 3f, 0.001f, "UI feed split molar ratio");
+
+            engine.SetReactorOperatingConditions(240f, 70f, 3f, 8000f);
+            RequireNear(engine.singlePassCo2Conversion, 0.25f, 0.001f, "Operating-condition design conversion");
+            float designConversion = engine.singlePassCo2Conversion;
+            engine.SetReactorOperatingConditions(300f, 70f, 3f, 8000f);
+            Require(engine.singlePassCo2Conversion < designConversion, "Temperature response does not fall above its optimum.");
+            engine.SetReactorOperatingConditions(240f, 70f, 2f, 8000f);
+            Require(engine.singlePassCo2Conversion < designConversion, "Ratio response does not penalize off-stoichiometric feed.");
+            Require(!engine.IsHotspotAlarmActive(260f) && engine.IsHotspotAlarmActive(260.1f), "Hotspot threshold is incorrect.");
+
+            Debug.Log("RecycleMassBalanceValidation: PASS (balance, UI feed split, operating correlation, and hotspot cases).");
         }
         finally
         {

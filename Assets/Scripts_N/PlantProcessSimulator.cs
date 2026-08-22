@@ -450,15 +450,8 @@ public class PlantProcessSimulator : MonoBehaviour
         float reactorFeedFactor = Mathf.Clamp01(manualReactorFeedFlow / 100f);
         float syngasFeed = (h2Input + co2Captured) * reactorFeedFactor;
 
-        float tempRateFactor = Mathf.InverseLerp(210f, 255f, temperature);
-        float tempEquilibriumFactor = 1f - Mathf.Clamp01((temperature - 255f) / 55f) * 0.32f;
-        float tempFactor = Mathf.Clamp01(tempRateFactor * tempEquilibriumFactor);
-        float pressureFactor = Mathf.Clamp01(pressure / 100f);
-        float ratioFactor = 1f - Mathf.Clamp01(Mathf.Abs(ratio - 3f) / 3f) * 0.42f;
-        float residenceFactor = Mathf.Clamp(8000f / Mathf.Max(ghsv, 1f), 0.35f, 1.35f);
-        float recycleBoost = Mathf.Lerp(0.86f, 1.18f, manualRecycleRatio / 100f);
-        float performanceFactor = Mathf.Clamp01(tempFactor * pressureFactor * ratioFactor * residenceFactor * recycleBoost);
-        float singlePassConversion = Mathf.Lerp(0.05f, 0.35f, performanceFactor);
+        float singlePassConversion = RecycleMassBalanceEngine.CalculateSinglePassConversion(
+            temperature, pressure, ratio, ghsv);
 
         // Stoichiometric basis:
         // CO2 + 3H2 -> CH3OH + H2O

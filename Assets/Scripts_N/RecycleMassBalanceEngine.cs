@@ -171,6 +171,45 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
         UpdatePlantMassBalance();
     }
 
+    /// <summary>
+    /// Splits a total fresh-feed mass flow using the requested H2/CO2 molar ratio.
+    /// Suitable for direct calls from paired flow and ratio UI controls.
+    /// </summary>
+    public void SetFeedFromTotalFlowAndRatio(float totalFeedKgHr, float molarRatioH2Co2)
+    {
+        double totalFeed = Math.Max(0d, totalFeedKgHr);
+        double ratio = Math.Max(0.1d, molarRatioH2Co2);
+        double hydrogenToCo2MassRatio = ratio * M_H2 / M_CO2;
+        double co2KgHr = totalFeed / (1d + hydrogenToCo2MassRatio);
+
+        freshCo2KgHr = ToFloat(co2KgHr);
+        freshH2KgHr = ToFloat(totalFeed - co2KgHr);
+        UpdatePlantMassBalance();
+    }
+
+    /// <summary>
+    /// Updates the educational single-pass conversion correlation from reactor controls.
+    /// The ratio penalty peaks at the stoichiometric H2/CO2 value of 3.0.
+    /// </summary>
+    public void SetReactorOperatingConditions(float tempCelsius, float pressureBar, float molarRatio, float ghsv)
+    {
+        singlePassCo2Conversion = CalculateSinglePassConversion(tempCelsius, pressureBar, molarRatio, ghsv);
+        UpdatePlantMassBalance();
+    }
+
+    public static float CalculateSinglePassConversion(float tempCelsius, float pressureBar, float molarRatio, float ghsv)
+    {
+        float tempKelvin = tempCelsius + 273.15f;
+        const float optimumTemperatureKelvin = 513.15f;
+        float temperatureFactor = Mathf.Exp(-0.0005f * Mathf.Pow(tempKelvin - optimumTemperatureKelvin, 2f));
+        float pressureFactor = Mathf.Pow(Mathf.Max(1f, pressureBar) / 70f, 0.35f);
+        float velocityFactor = Mathf.Pow(8000f / Mathf.Max(1000f, ghsv), 0.2f);
+        float ratioFactor = 1f - Mathf.Clamp01(Mathf.Abs(molarRatio - 3f) / 3f) * 0.42f;
+        return Mathf.Clamp(0.25f * temperatureFactor * pressureFactor * velocityFactor * ratioFactor, 0.05f, 0.35f);
+    }
+
+    public bool IsHotspotAlarmActive(float tempCelsius) => tempCelsius > 260f;
+
     public void SetSinglePassCo2Conversion(float value)
     {
         singlePassCo2Conversion = Mathf.Clamp(value, 0f, 0.999f);
