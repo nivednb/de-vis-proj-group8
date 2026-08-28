@@ -30,7 +30,7 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
     private const float SampleIntervalSeconds = 0.4f;
     private const float WindowSeconds = 30f;
-    private const int CurveSubdivisions = 8;
+    private const int CurveSubdivisions = 14;
     private const float HoverRadiusPixels = 16f;
     private const float DotGrowSeconds = 0.3f;
     private const float ChangeMarkerWindowSeconds = 1.2f;
@@ -46,6 +46,7 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
     public Color LineColor = new Color(0.08f, 0.62f, 0.9f, 1f);
     public Color PointColor = new Color(0.86f, 0.82f, 0.95f, 1f);
     public Color AxisColor = new Color(0.7f, 0.75f, 0.8f, 1f);
+    public Color AxisNameColor = new Color(0.86f, 0.92f, 0.98f, 1f);
 
     // When true, the area between the curve and the Y=0 baseline is filled — used for the
     // methanol-output mode to visually read as "the tank filling up" alongside the line.
@@ -82,6 +83,9 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
     private RectTransform newestDot;
     private float newestDotSpawnTime;
     private PlantProcessSimulator subscribedSimulator;
+    private UIGraphLine lineGraphic;
+    private UIGraphFill fillGraphic;
+    private readonly List<Vector2> curveBuffer = new List<Vector2>();
 
     // Drives the time axis instead of Time.unscaledTime directly — real time keeps
     // advancing while paused, but sampling doesn't, which left a gap on the timeline where
@@ -116,15 +120,15 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         // about its own center so it reads bottom-to-top along the left edge — rotating
         // first and sizing to a narrow fixed width instead wraps the text letter-by-letter
         // because Text wrapping is computed from the unrotated rect width.
-        yAxisNameLabel = MakeText("Y Axis Name", root, YLabel, 10, FontStyle.Normal, TextAnchor.MiddleCenter, AxisColor);
+        yAxisNameLabel = MakeText("Y Axis Name", root, "Y:  " + YLabel, 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
         yAxisNameLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
         yAxisNameLabel.rectTransform.anchorMin = yAxisNameLabel.rectTransform.anchorMax = new Vector2(0f, 0.5f);
         yAxisNameLabel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-        yAxisNameLabel.rectTransform.anchoredPosition = new Vector2(12f, 12f);
-        yAxisNameLabel.rectTransform.sizeDelta = new Vector2(220f, 16f);
+        yAxisNameLabel.rectTransform.anchoredPosition = new Vector2(11f, 12f);
+        yAxisNameLabel.rectTransform.sizeDelta = new Vector2(240f, 16f);
         yAxisNameLabel.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f);
 
-        Text xAxisNameLabel = MakeText("X Axis Name", root, "Time", 10, FontStyle.Normal, TextAnchor.MiddleCenter, AxisColor);
+        Text xAxisNameLabel = MakeText("X Axis Name", root, "X:  Time", 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
         StretchWithOffset(xAxisNameLabel.rectTransform, Vector2.zero, Vector2.one, new Vector2(58f, 4f), new Vector2(-8f, 34f));
 
         GameObject plotObject = new GameObject("Plot Area", typeof(RectTransform));
@@ -143,9 +147,24 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         shadeLayer.SetParent(plotArea, false);
         Stretch(shadeLayer);
 
+        GameObject fillObject = new GameObject("Fill Mesh", typeof(RectTransform));
+        fillObject.transform.SetParent(shadeLayer, false);
+        Stretch(fillObject.GetComponent<RectTransform>());
+        fillGraphic = fillObject.AddComponent<UIGraphFill>();
+        fillGraphic.color = ShadeColor;
+        fillGraphic.raycastTarget = false;
+
         linesLayer = new GameObject("Lines", typeof(RectTransform)).GetComponent<RectTransform>();
         linesLayer.SetParent(plotArea, false);
         Stretch(linesLayer);
+
+        GameObject lineObject = new GameObject("Line Mesh", typeof(RectTransform));
+        lineObject.transform.SetParent(linesLayer, false);
+        Stretch(lineObject.GetComponent<RectTransform>());
+        lineGraphic = lineObject.AddComponent<UIGraphLine>();
+        lineGraphic.color = LineColor;
+        lineGraphic.Thickness = 2.4f;
+        lineGraphic.raycastTarget = false;
 
         pointsLayer = new GameObject("Points", typeof(RectTransform)).GetComponent<RectTransform>();
         pointsLayer.SetParent(plotArea, false);
@@ -374,9 +393,9 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
     private void RebuildVisible()
     {
-        for (int i = linesLayer.childCount - 1; i >= 0; i--) Destroy(linesLayer.GetChild(i).gameObject);
+        // Only the sparse marker dots are GameObjects now; the line and fill are persistent
+        // meshes updated in place further down.
         for (int i = pointsLayer.childCount - 1; i >= 0; i--) Destroy(pointsLayer.GetChild(i).gameObject);
-        for (int i = shadeLayer.childCount - 1; i >= 0; i--) Destroy(shadeLayer.GetChild(i).gameObject);
         pointScreenPositions.Clear();
         visiblePointSamples.Clear();
         newestDot = null;
@@ -386,6 +405,8 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
             xAxisMinLabel.text = $"-{WindowSeconds:F0}s";
             xAxisMaxLabel.text = "now";
             if (scrollbar != null) scrollbar.size = 1f;
+            if (lineGraphic != null) lineGraphic.ClearPoints();
+            if (fillGraphic != null) fillGraphic.ClearCurve();
             return;
         }
 
@@ -430,22 +451,16 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
             controlSamples.Add(sample);
         }
 
-        // Smooth Catmull-Rom curve through the control points instead of straight segments.
-        for (int i = 0; i < controlPoints.Count - 1; i++)
+        // One smooth Catmull-Rom curve fed into a single persistent line mesh (and, for the
+        // shaded modes, a single fill mesh). Updating two meshes in place here — rather than
+        // destroying and recreating dozens of rotated Image rects and shade bars on every
+        // sample tick and every scrollbar-drag frame — is what removes the scroll jitter.
+        GraphCurve.CatmullRom(controlPoints, CurveSubdivisions, curveBuffer);
+        if (lineGraphic != null) lineGraphic.SetPoints(curveBuffer);
+        if (fillGraphic != null)
         {
-            Vector2 p0 = i > 0 ? controlPoints[i - 1] : controlPoints[i];
-            Vector2 p1 = controlPoints[i];
-            Vector2 p2 = controlPoints[i + 1];
-            Vector2 p3 = i + 2 < controlPoints.Count ? controlPoints[i + 2] : p2;
-            Vector2 previous = p1;
-            for (int step = 1; step <= CurveSubdivisions; step++)
-            {
-                float t = step / (float)CurveSubdivisions;
-                Vector2 point = CatmullRom(p0, p1, p2, p3, t);
-                if (ShadeArea) CreateShadeBar(previous, point, plotRect.yMin);
-                CreateLineSegment(previous, point, LineColor);
-                previous = point;
-            }
+            if (ShadeArea && curveBuffer.Count >= 2) fillGraphic.SetCurve(curveBuffer, plotRect.yMin);
+            else fillGraphic.ClearCurve();
         }
 
         // Every sample in view is hoverable, but only manual-change samples (color-coded by
@@ -463,7 +478,7 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
             // Kept small so a run of manual adjustments doesn't turn into an illegible
             // cluster — the hover dot (see BuildHoverDot) is what visually "grows" a point.
-            float size = changed ? 7f : 8f;
+            float size = changed ? 4.5f : 5.5f;
             Color markerColor = changed ? GraphVisualUtils.GetModuleColor(controlSamples[i].ChangeModule) : PointColor;
             RectTransform dot = MakePanel("Point " + i, pointsLayer, markerColor);
             Image dotImage = dot.GetComponent<Image>();
@@ -484,52 +499,9 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         }
     }
 
-    private static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
-    {
-        float t2 = t * t;
-        float t3 = t2 * t;
-        return 0.5f * (2f * p1 + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
-    }
-
     private static string FormatRelative(float secondsFromNow)
     {
         return secondsFromNow >= -0.05f ? "now" : $"-{Mathf.Abs(secondsFromNow):F0}s";
-    }
-
-    private void CreateLineSegment(Vector2 from, Vector2 to, Color color)
-    {
-        RectTransform line = MakePanel("Segment", linesLayer, color);
-        line.GetComponent<Image>().raycastTarget = false;
-        // Anchored at the layer's center (0.5, 0.5) to match the coordinate space the point
-        // positions are computed in (plotArea.rect, centered on its own pivot).
-        line.anchorMin = line.anchorMax = new Vector2(0.5f, 0.5f);
-        line.pivot = new Vector2(0f, 0.5f);
-        Vector2 delta = to - from;
-        float length = delta.magnitude;
-        float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
-        line.sizeDelta = new Vector2(length + 1f, 3f);
-        line.anchoredPosition = from;
-        line.localRotation = Quaternion.Euler(0f, 0f, angle);
-    }
-
-    /// <summary>
-    /// One thin vertical bar from the Y=0 baseline up to the curve, for the segment between
-    /// two adjacent (already-subdivided) curve points — approximates a filled area-under-
-    /// curve using only axis-aligned rects (no custom mesh needed), reading as a smooth
-    /// shaded fill at the subdivision density already used for the curve itself.
-    /// </summary>
-    private void CreateShadeBar(Vector2 from, Vector2 to, float baselineY)
-    {
-        RectTransform bar = MakePanel("Shade Bar", shadeLayer, ShadeColor);
-        bar.GetComponent<Image>().raycastTarget = false;
-        bar.anchorMin = bar.anchorMax = new Vector2(0.5f, 0.5f);
-        bar.pivot = new Vector2(0.5f, 0f);
-        float midX = (from.x + to.x) * 0.5f;
-        float curveY = Mathf.Max(from.y, to.y);
-        float width = Mathf.Abs(to.x - from.x) + 1f;
-        float height = Mathf.Max(0f, curveY - baselineY);
-        bar.sizeDelta = new Vector2(width, height);
-        bar.anchoredPosition = new Vector2(midX, baselineY);
     }
 
     public void OnPointerMove(PointerEventData eventData)

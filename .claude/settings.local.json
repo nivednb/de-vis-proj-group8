@@ -4,7 +4,16 @@
       "mcp__unityMCP__manage_editor",
       "mcp__unityMCP__manage_scene",
       "mcp__unityMCP__manage_camera",
-      "mcp__unityMCP__read_console"
+      "mcp__unityMCP__read_console",
+      "mcp__unityMCP__validate_script",
+      "mcp__unityMCP__refresh_unity",
+      "mcp__unityMCP__find_gameobjects",
+      "mcp__unityMCP__execute_code",
+      "Bash(git checkout *)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git tag *)"
     ]
   }
 }

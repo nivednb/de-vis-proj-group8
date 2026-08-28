@@ -37,6 +37,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
     public Color LineColor = new Color(0.08f, 0.62f, 0.9f, 1f);
     public Color SeedPointColor = new Color(0.86f, 0.82f, 0.95f, 1f);
     public Color AxisColor = new Color(0.7f, 0.75f, 0.8f, 1f);
+    public Color AxisNameColor = new Color(0.86f, 0.92f, 0.98f, 1f);
 
     // Fixed domain on both axes — the actual slider range for X, the real ceiling for Y —
     // so the scale never jumps as points are added; a point's position always reads as
@@ -65,11 +66,23 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
     private RectTransform tooltipRect;
     private RectTransform hoverDot;
     private PlantProcessSimulator subscribedSimulator;
+    private UIGraphLine lineGraphic;
+
+    // The axes auto-fit to the data (plus padding) rather than always spanning the full
+    // physical slider range — see ComputeViewRange.
+    private float viewXMin;
+    private float viewXMax;
+    private float viewYMin;
+    private float viewYMax;
 
     public void Initialize(RectTransform container, Canvas canvas, Font font)
     {
         ownerCanvas = canvas;
         LabelFont = font;
+        viewXMin = XMin;
+        viewXMax = XMax;
+        viewYMin = YMin;
+        viewYMax = YMax;
 
         Image background = gameObject.GetComponent<Image>();
         if (background == null) background = gameObject.AddComponent<Image>();
@@ -85,16 +98,16 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         Text titleText = MakeText("Title", root, Title, 14, FontStyle.Bold, TextAnchor.UpperLeft, Color.white);
         StretchWithOffset(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -30f), new Vector2(-14f, -6f));
 
-        Text yAxisNameLabel = MakeText("Y Axis Name", root, YLabel, 10, FontStyle.Normal, TextAnchor.MiddleCenter, AxisColor);
+        Text yAxisNameLabel = MakeText("Y Axis Name", root, "Y:  " + YLabel, 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
         yAxisNameLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
         yAxisNameLabel.rectTransform.anchorMin = yAxisNameLabel.rectTransform.anchorMax = new Vector2(0f, 0.5f);
         yAxisNameLabel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-        yAxisNameLabel.rectTransform.anchoredPosition = new Vector2(12f, 8f);
-        yAxisNameLabel.rectTransform.sizeDelta = new Vector2(220f, 16f);
+        yAxisNameLabel.rectTransform.anchoredPosition = new Vector2(11f, 8f);
+        yAxisNameLabel.rectTransform.sizeDelta = new Vector2(240f, 16f);
         yAxisNameLabel.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f);
 
-        Text xAxisNameLabel = MakeText("X Axis Name", root, XLabel, 10, FontStyle.Normal, TextAnchor.MiddleCenter, AxisColor);
-        StretchWithOffset(xAxisNameLabel.rectTransform, Vector2.zero, Vector2.one, new Vector2(58f, 4f), new Vector2(-8f, 18f));
+        Text xAxisNameLabel = MakeText("X Axis Name", root, "X:  " + XLabel, 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
+        StretchWithOffset(xAxisNameLabel.rectTransform, Vector2.zero, Vector2.one, new Vector2(58f, 2f), new Vector2(-8f, 18f));
 
         GameObject plotObject = new GameObject("Plot Area", typeof(RectTransform));
         plotArea = plotObject.GetComponent<RectTransform>();
@@ -109,6 +122,14 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         linesLayer = new GameObject("Lines", typeof(RectTransform)).GetComponent<RectTransform>();
         linesLayer.SetParent(plotArea, false);
         Stretch(linesLayer);
+
+        GameObject lineObject = new GameObject("Line Mesh", typeof(RectTransform));
+        lineObject.transform.SetParent(linesLayer, false);
+        Stretch(lineObject.GetComponent<RectTransform>());
+        lineGraphic = lineObject.AddComponent<UIGraphLine>();
+        lineGraphic.color = LineColor;
+        lineGraphic.Thickness = 2.4f;
+        lineGraphic.raycastTarget = false;
 
         pointsLayer = new GameObject("Points", typeof(RectTransform)).GetComponent<RectTransform>();
         pointsLayer.SetParent(plotArea, false);
@@ -206,27 +227,30 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
     private Vector2 ToAnchored(Point p)
     {
         Rect plotRect = plotArea.rect;
-        float nx = Mathf.InverseLerp(XMin, XMax, p.X);
-        float ny = Mathf.InverseLerp(YMin, YMax, p.Y);
+        float nx = Mathf.InverseLerp(viewXMin, viewXMax, p.X);
+        float ny = Mathf.InverseLerp(viewYMin, viewYMax, p.Y);
         return new Vector2(plotRect.xMin + nx * plotRect.width, plotRect.yMin + ny * plotRect.height);
     }
 
     private void Redraw()
     {
-        for (int i = linesLayer.childCount - 1; i >= 0; i--) Destroy(linesLayer.GetChild(i).gameObject);
         for (int i = pointsLayer.childCount - 1; i >= 0; i--) Destroy(pointsLayer.GetChild(i).gameObject);
         pointScreenPositions.Clear();
         newestDot = null;
 
-        if (points.Count == 0) return;
+        if (points.Count == 0)
+        {
+            if (lineGraphic != null) lineGraphic.ClearPoints();
+            return;
+        }
+
+        ComputeViewRange();
+        UpdateAxisLabels();
 
         var anchored = new List<Vector2>(points.Count);
         foreach (Point p in points) anchored.Add(ToAnchored(p));
 
-        for (int i = 1; i < anchored.Count; i++)
-        {
-            CreateLineSegment(anchored[i - 1], anchored[i], LineColor);
-        }
+        if (lineGraphic != null) lineGraphic.SetPoints(anchored);
 
         int last = anchored.Count - 1;
         for (int i = 0; i <= last; i++)
@@ -236,7 +260,9 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
             bool isSeed = string.IsNullOrEmpty(points[i].Module);
             bool isNewest = i == last;
             Color color = isSeed ? SeedPointColor : GraphVisualUtils.GetModuleColor(points[i].Module);
-            float size = isSeed ? 8f : 9f;
+            // Small at rest so dense clusters stay legible — the hover dot (see BuildHoverDot)
+            // is what visibly "pops" a point when the cursor is near it.
+            float size = isSeed ? 4.5f : 5.5f;
 
             RectTransform dot = MakePanel("Point " + i, pointsLayer, color);
             Image dotImage = dot.GetComponent<Image>();
@@ -250,8 +276,8 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
             if (!isSeed)
             {
                 Outline outline = dot.gameObject.AddComponent<Outline>();
-                outline.effectColor = Color.white;
-                outline.effectDistance = new Vector2(1f, -1f);
+                outline.effectColor = new Color(1f, 1f, 1f, 0.55f);
+                outline.effectDistance = new Vector2(0.5f, -0.5f);
             }
 
             if (isNewest)
@@ -263,18 +289,63 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         }
     }
 
-    private void CreateLineSegment(Vector2 from, Vector2 to, Color color)
+    /// <summary>
+    /// Auto-fits both axes to the data (plus padding) rather than always spanning the full
+    /// physical slider range. A handful of changes only a few units apart were previously
+    /// squashed into one corner of a window that spanned the entire operating range.
+    /// </summary>
+    private void ComputeViewRange()
     {
-        RectTransform line = MakePanel("Segment", linesLayer, color);
-        line.GetComponent<Image>().raycastTarget = false;
-        line.anchorMin = line.anchorMax = new Vector2(0.5f, 0.5f);
-        line.pivot = new Vector2(0f, 0.5f);
-        Vector2 delta = to - from;
-        float length = delta.magnitude;
-        float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
-        line.sizeDelta = new Vector2(length + 1f, 3f);
-        line.anchoredPosition = from;
-        line.localRotation = Quaternion.Euler(0f, 0f, angle);
+        float fullX = Mathf.Max(1e-4f, XMax - XMin);
+        float fullY = Mathf.Max(1e-4f, YMax - YMin);
+
+        if (points.Count == 0)
+        {
+            viewXMin = XMin;
+            viewXMax = XMax;
+            viewYMin = YMin;
+            viewYMax = YMax;
+            return;
+        }
+
+        float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+        foreach (Point p in points)
+        {
+            if (p.X < minX) minX = p.X;
+            if (p.X > maxX) maxX = p.X;
+            if (p.Y < minY) minY = p.Y;
+            if (p.Y > maxY) maxY = p.Y;
+        }
+
+        // Floor on the window size so a single point (or near-identical points) still gets
+        // real context instead of an infinitely zoomed axis.
+        float spanX = Mathf.Max(maxX - minX, fullX * 0.12f);
+        float spanY = Mathf.Max(maxY - minY, fullY * 0.12f);
+        float cx = (minX + maxX) * 0.5f;
+        float cy = (minY + maxY) * 0.5f;
+        float halfX = spanX * 0.62f; // ~24% padding each side
+        float halfY = spanY * 0.62f;
+
+        viewXMin = cx - halfX;
+        viewXMax = cx + halfX;
+        viewYMin = cy - halfY;
+        viewYMax = cy + halfY;
+    }
+
+    private void UpdateAxisLabels()
+    {
+        if (xAxisMinLabel != null) xAxisMinLabel.text = FormatAxis(viewXMin);
+        if (xAxisMaxLabel != null) xAxisMaxLabel.text = FormatAxis(viewXMax);
+        if (yAxisMinLabel != null) yAxisMinLabel.text = FormatAxis(viewYMin);
+        if (yAxisMaxLabel != null) yAxisMaxLabel.text = FormatAxis(viewYMax);
+    }
+
+    private static string FormatAxis(float v)
+    {
+        float a = Mathf.Abs(v);
+        if (a >= 100f) return v.ToString("F0");
+        if (a >= 10f) return v.ToString("F1");
+        return v.ToString("F2");
     }
 
     public void OnPointerMove(PointerEventData eventData)

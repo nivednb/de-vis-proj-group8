@@ -51,9 +51,17 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private readonly List<CanvasGroup> graphCanvasGroups = new List<CanvasGroup>();
     private readonly List<Button> runToggleButtons = new List<Button>();
     private int selectedGraphIndex;
+    // Named Y-vs-X. Order here must match the BuildCorrelationGraph / BuildLiveProgressGraph
+    // call order in BuildAnalyticsWindow (index -> graphCanvasGroups slot).
     private static readonly string[] GraphNames =
     {
-        "Temp vs Methanol Output", "Temp vs Efficiency", "Pressure vs Efficiency", "Live Progress"
+        "Efficiency vs Temp",
+        "Efficiency vs Pressure",
+        "Efficiency vs H2/CO2 Ratio",
+        "Efficiency vs GHSV",
+        "Efficiency vs Feed Flow",
+        "Methanol vs Temp",
+        "Live Progress"
     };
     private LiveGraphRuntime liveProgressEfficiencyGraph;
     private LiveGraphRuntime liveProgressOutputGraph;
@@ -602,14 +610,18 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Pin(graphSidebar, new Vector2(0f, 0f), new Vector2(0.26f, 1f), new Vector2(0f, 0f), new Vector2(-6f, 0f));
 
         graphButtons.Clear();
-        float buttonHeight = 1f / GraphNames.Length;
+        const float graphButtonHeight = 46f;
+        const float graphButtonGap = 4f;
         for (int i = 0; i < GraphNames.Length; i++)
         {
             int index = i;
-            float top = 1f - buttonHeight * i;
-            float bottom = top - buttonHeight;
             Button graphButton = CreateButton("Graph Button " + i, graphSidebar, GraphNames[i], HeaderColor, 12);
-            Pin(graphButton.GetComponent<RectTransform>(), new Vector2(0f, bottom), new Vector2(1f, top), new Vector2(2f, 2f), new Vector2(-2f, -2f));
+            RectTransform r = graphButton.GetComponent<RectTransform>();
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(1f, 1f);
+            r.pivot = new Vector2(0.5f, 1f);
+            r.anchoredPosition = new Vector2(0f, -6f - i * (graphButtonHeight + graphButtonGap));
+            r.sizeDelta = new Vector2(-8f, graphButtonHeight);
             graphButton.onClick.AddListener(() => SelectGraph(index));
             graphButtons.Add(graphButton);
         }
@@ -620,27 +632,39 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         RectTransform graphDisplay = CreatePanel("Graph Display", visRect, PanelLightColor);
         Pin(graphDisplay, new Vector2(0.28f, 0f), Vector2.one, Vector2.zero, Vector2.zero);
 
-        // The first three are static entity-vs-entity graphs (X = the changing quantity,
-        // Y = the dependent quantity — NOT time): one seed point at the current state, then
-        // exactly one more point per committed manual change anywhere in the plant, joined
-        // by straight lines (see CorrelationGraphRuntime). The fourth is the live
-        // time-series "Live Progress" graph (see BuildLiveProgressGraph) with its own
-        // Efficiency/Methanol Output toggle.
+        // All but the last are static entity-vs-entity graphs (X = a changing reactor
+        // quantity, Y = the dependent quantity — NOT time): one seed point at the current
+        // state, then one more point per committed manual change anywhere in the plant,
+        // joined by lines (see CorrelationGraphRuntime — it auto-fits its axes to the data).
+        // The last is the live time-series "Live Progress" graph (see BuildLiveProgressGraph)
+        // with its own Efficiency/Methanol Output toggle.
         float designMethanol = PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance.DesignMethanolKgH : 1250f;
         graphCanvasGroups.Clear();
         BuildCorrelationGraph(graphDisplay, GraphNames[0],
-            "Reactor Temp (C)", "Methanol Output (kg/h)",
-            s => s.reactorTemperatureC, s => s.methanolProductionKgH,
-            200f, 300f, 0f, designMethanol);
-        BuildCorrelationGraph(graphDisplay, GraphNames[1],
             "Reactor Temp (C)", "Overall Efficiency (%)",
             s => s.reactorTemperatureC, s => s.overallEfficiencyPercent,
             200f, 300f, 0f, 100f);
-        BuildCorrelationGraph(graphDisplay, GraphNames[2],
+        BuildCorrelationGraph(graphDisplay, GraphNames[1],
             "Reactor Pressure (bar)", "Overall Efficiency (%)",
             s => s.reactorPressureBar, s => s.overallEfficiencyPercent,
             40f, 100f, 0f, 100f);
-        BuildLiveProgressGraph(graphDisplay, GraphNames[3], designMethanol);
+        BuildCorrelationGraph(graphDisplay, GraphNames[2],
+            "H2 / CO2 Ratio", "Overall Efficiency (%)",
+            s => s.h2Co2Ratio, s => s.overallEfficiencyPercent,
+            1f, 6f, 0f, 100f);
+        BuildCorrelationGraph(graphDisplay, GraphNames[3],
+            "GHSV (1/h)", "Overall Efficiency (%)",
+            s => s.ghsv, s => s.overallEfficiencyPercent,
+            1000f, 20000f, 0f, 100f);
+        BuildCorrelationGraph(graphDisplay, GraphNames[4],
+            "Reactor Feed Flow (%)", "Overall Efficiency (%)",
+            s => s.reactorFeedFlowPercent, s => s.overallEfficiencyPercent,
+            20f, 130f, 0f, 100f);
+        BuildCorrelationGraph(graphDisplay, GraphNames[5],
+            "Reactor Temp (C)", "Methanol Output (kg/h)",
+            s => s.reactorTemperatureC, s => s.methanolProductionKgH,
+            200f, 300f, 0f, designMethanol);
+        BuildLiveProgressGraph(graphDisplay, GraphNames[6], designMethanol);
 
         SelectGraph(0);
         SetAnalyticsTab(AnalyticsTab.Stats);
