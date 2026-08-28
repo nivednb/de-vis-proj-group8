@@ -47,3 +47,6 @@ sysinfo.txt
 *.mdb
 *.opendb
 *.VC.db
+
+# Analytics graph exports (CSV/PNG written at runtime by the OFAT sweep / correlation graphs)
+/Analytics Exports/

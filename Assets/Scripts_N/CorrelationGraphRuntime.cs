@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -67,6 +68,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
     private RectTransform hoverDot;
     private PlantProcessSimulator subscribedSimulator;
     private UIGraphLine lineGraphic;
+    private Button exportButton;
 
     // The axes auto-fit to the data (plus padding) rather than always spanning the full
     // physical slider range — see ComputeViewRange.
@@ -96,7 +98,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         selfRect = root;
 
         Text titleText = MakeText("Title", root, Title, 14, FontStyle.Bold, TextAnchor.UpperLeft, Color.white);
-        StretchWithOffset(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -30f), new Vector2(-14f, -6f));
+        StretchWithOffset(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -30f), new Vector2(-88f, -6f));
 
         Text yAxisNameLabel = MakeText("Y Axis Name", root, "Y:  " + YLabel, 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
         yAxisNameLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -149,6 +151,71 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
 
         BuildHoverDot();
         BuildTooltip(root);
+        BuildExportButton(root);
+    }
+
+    private void BuildExportButton(RectTransform root)
+    {
+        GameObject go = new GameObject("Export Button", typeof(RectTransform));
+        go.transform.SetParent(root, false);
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = new Vector2(-12f, -6f);
+        rect.sizeDelta = new Vector2(68f, 20f);
+        go.AddComponent<Image>().color = new Color(0.10f, 0.34f, 0.48f, 1f);
+        exportButton = go.AddComponent<Button>();
+        Text label = MakeText("Label", go.transform, "EXPORT", 10, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
+        Stretch(label.rectTransform);
+        exportButton.onClick.AddListener(ExportNow);
+    }
+
+    /// <summary>Writes the recorded points "until now" to a timestamped CSV (with the graph's
+    /// axis metadata as header comments) plus a PNG of the panel, into a shared folder.</summary>
+    private void ExportNow()
+    {
+        if (points.Count == 0)
+        {
+            GraphExportUtil.ShowToast(ownerCanvas, LabelFont, $"{Title}: no data recorded yet — change a slider first.");
+            return;
+        }
+
+        string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string baseName = GraphExportUtil.Sanitize($"{Title}_{stamp}");
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# {Title}");
+        sb.AppendLine($"# exported,{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"# x_axis,{GraphExportUtil.Csv(XLabel)}");
+        sb.AppendLine($"# y_axis,{GraphExportUtil.Csv(YLabel)}");
+        sb.AppendLine($"# x_view_range,{viewXMin.ToString("0.###")},{viewXMax.ToString("0.###")}");
+        sb.AppendLine($"# y_view_range,{viewYMin.ToString("0.###")},{viewYMax.ToString("0.###")}");
+        sb.AppendLine($"index,x [{UnitFromLabel(XLabel)}],y [{UnitFromLabel(YLabel)}],change_module,change_parameter,from_value,to_value,change_unit");
+        for (int i = 0; i < points.Count; i++)
+        {
+            Point p = points[i];
+            bool seed = string.IsNullOrEmpty(p.Module);
+            sb.AppendLine(string.Join(",",
+                i.ToString(),
+                p.X.ToString("0.#####"),
+                p.Y.ToString("0.#####"),
+                GraphExportUtil.Csv(p.Module),
+                GraphExportUtil.Csv(p.Parameter),
+                seed ? "" : p.FromValue.ToString("0.#####"),
+                seed ? "" : p.ToValue.ToString("0.#####"),
+                seed ? "" : GraphVisualUtils.GetParameterUnit(p.Parameter)));
+        }
+
+        string csvPath = GraphExportUtil.WriteText(baseName, "csv", sb.ToString());
+        StartCoroutine(GraphExportUtil.CaptureRegionPng(ownerCanvas, selfRect, baseName, pngPath =>
+        {
+            string msg = pngPath != null
+                ? $"Exported  {baseName}.csv + .png   →   {GraphExportUtil.ExportDirectory}"
+                : (csvPath != null
+                    ? $"Exported  {baseName}.csv  (PNG failed)   →   {GraphExportUtil.ExportDirectory}"
+                    : "Export failed — see console.");
+            GraphExportUtil.ShowToast(ownerCanvas, LabelFont, msg);
+        }, exportButton != null ? exportButton.gameObject : null));
     }
 
     private void Update()
@@ -348,6 +415,23 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         return v.ToString("F2");
     }
 
+    // XLabel / YLabel arrive as "Reactor Pressure (bar)" — split the unit out so tooltip
+    // values can read "82.3 bar" rather than "Reactor Pressure (bar): 82.3".
+    private static string UnitFromLabel(string label)
+    {
+        if (string.IsNullOrEmpty(label)) return "";
+        int open = label.LastIndexOf('(');
+        int close = label.LastIndexOf(')');
+        return open >= 0 && close > open ? label.Substring(open + 1, close - open - 1).Trim() : "";
+    }
+
+    private static string LabelWithoutUnit(string label)
+    {
+        if (string.IsNullOrEmpty(label)) return "";
+        int open = label.LastIndexOf('(');
+        return open > 0 ? label.Substring(0, open).Trim() : label.Trim();
+    }
+
     public void OnPointerMove(PointerEventData eventData)
     {
         if (pointScreenPositions.Count == 0 || plotArea == null)
@@ -382,10 +466,13 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         }
 
         Point p = points[nearest];
+        string xu = UnitFromLabel(XLabel);
+        string yu = UnitFromLabel(YLabel);
+        string cu = GraphVisualUtils.GetParameterUnit(p.Parameter);
         string changeLine = !string.IsNullOrEmpty(p.Module)
-            ? $"\n{p.Parameter} changed from {p.FromValue:F1} to {p.ToValue:F1} in {p.Module}"
+            ? $"\n{p.Parameter}: {GraphVisualUtils.FormatValue(p.FromValue, cu)} → {GraphVisualUtils.FormatValue(p.ToValue, cu)}  ({p.Module})"
             : "\n(starting point)";
-        tooltipText.text = $"{XLabel}: {p.X:F1}\n{YLabel}: {p.Y:F1}" + changeLine;
+        tooltipText.text = $"{LabelWithoutUnit(XLabel)}: {GraphVisualUtils.FormatValue(p.X, xu, "0.#")}\n{LabelWithoutUnit(YLabel)}: {GraphVisualUtils.FormatValue(p.Y, yu, "0.#")}" + changeLine;
         tooltip.SetActive(true);
 
         if (hoverDot != null)

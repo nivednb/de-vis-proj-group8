@@ -37,8 +37,10 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
     public string Title;
     public string XLabel; // e.g. "Reactor Temp" — shown in the hover tooltip, not as an axis
-    public string YLabel;
+    public string XUnit = "";
+    public string YLabel; // carries its own unit in parens, e.g. "Overall Efficiency (%)"
     public string SecondaryLabel; // e.g. "Tank" — only shown in the hover tooltip when set
+    public string SecondaryUnit = "";
     public Func<PlantProcessSimulator.ProcessSnapshot, float> XSelector;
     public Func<PlantProcessSimulator.ProcessSnapshot, float> YSelector;
     public Func<PlantProcessSimulator.ProcessSnapshot, float> SecondarySelector;
@@ -504,6 +506,21 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         return secondsFromNow >= -0.05f ? "now" : $"-{Mathf.Abs(secondsFromNow):F0}s";
     }
 
+    private static string UnitFromLabel(string label)
+    {
+        if (string.IsNullOrEmpty(label)) return "";
+        int open = label.LastIndexOf('(');
+        int close = label.LastIndexOf(')');
+        return open >= 0 && close > open ? label.Substring(open + 1, close - open - 1).Trim() : "";
+    }
+
+    private static string LabelWithoutUnit(string label)
+    {
+        if (string.IsNullOrEmpty(label)) return "";
+        int open = label.LastIndexOf('(');
+        return open > 0 ? label.Substring(0, open).Trim() : label.Trim();
+    }
+
     public void OnPointerMove(PointerEventData eventData)
     {
         if (pointScreenPositions.Count == 0 || plotArea == null)
@@ -559,12 +576,15 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
         Sample s = visiblePointSamples[nearest];
         float secondsAgo = clock - s.Time;
-        string xLine = !string.IsNullOrEmpty(XLabel) ? $"{XLabel}: {s.X:F1}\n" : "";
-        string secondaryLine = !string.IsNullOrEmpty(SecondaryLabel) ? $"{SecondaryLabel}: {s.Secondary:F0}\n" : "";
+        string yUnit = UnitFromLabel(YLabel);
+        string yName = LabelWithoutUnit(YLabel);
+        string xLine = !string.IsNullOrEmpty(XLabel) ? $"{XLabel}: {GraphVisualUtils.FormatValue(s.X, XUnit, "0.#")}\n" : "";
+        string secondaryLine = !string.IsNullOrEmpty(SecondaryLabel) ? $"{SecondaryLabel}: {GraphVisualUtils.FormatValue(s.Secondary, SecondaryUnit, "0")}\n" : "";
+        string cu = GraphVisualUtils.GetParameterUnit(s.ChangeParameter);
         string changeLine = !string.IsNullOrEmpty(s.ChangeModule)
-            ? $"\n{s.ChangeParameter} changed from {s.ChangeFromValue:F1} to {s.ChangeToValue:F1} in {s.ChangeModule}"
+            ? $"\n{s.ChangeParameter}: {GraphVisualUtils.FormatValue(s.ChangeFromValue, cu)} → {GraphVisualUtils.FormatValue(s.ChangeToValue, cu)}  ({s.ChangeModule})"
             : "";
-        tooltipText.text = $"{xLine}{secondaryLine}{YLabel}: {s.Y:F1}\n{secondsAgo:F0}s ago" + changeLine;
+        tooltipText.text = $"{xLine}{secondaryLine}{yName}: {GraphVisualUtils.FormatValue(s.Y, yUnit, "0.#")}\n{secondsAgo:F0}s ago" + changeLine;
         tooltip.SetActive(true);
 
         if (hoverDot != null)
