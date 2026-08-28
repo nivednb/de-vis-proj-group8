@@ -59,10 +59,16 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private readonly List<CanvasGroup> yieldGraphGroups = new List<CanvasGroup>();
     private readonly List<Button> efficiencyParamButtons = new List<Button>();
     private readonly List<CanvasGroup> efficiencyGraphGroups = new List<CanvasGroup>();
+    private int yieldParamIndex;
+    private int efficiencyParamIndex;
     private OfatTimelineGraphRuntime ofatTimeline;
+    private InteractiveModulePanelRuntime modulePanels;
 
     // Five reactor parameters shared by the YIELD and EFFICIENCY correlation sub-tabs.
     private static readonly string[] ReactorParamNames = { "Temp", "Pressure", "H2:CO2", "GHSV", "Feed" };
+    // Exact reactor slider labels (InteractiveModulePanelRuntime.CreateControls) for the
+    // variable-lock — selecting a parameter tab freezes every reactor slider but this one.
+    private static readonly string[] ReactorParamSliderLabels = { "Temp", "Pressure", "H2/CO2", "GHSV", "Feed flow" };
     private static readonly string[] ReactorParamAxisLabels =
         { "Reactor Temp (C)", "Reactor Pressure (bar)", "H2 / CO2 Ratio", "GHSV (1/h)", "Reactor Feed Flow (%)" };
     private static readonly float[] ReactorParamMin = { 180f, 40f, 1f, 1000f, 20f };
@@ -767,15 +773,26 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         }
         for (int i = 0; i < subTabButtons.Count; i++)
             if (subTabButtons[i] != null) subTabButtons[i].GetComponent<Image>().color = (int)tab == i ? AccentColor : HeaderColor;
-        if (ofatTimeline != null) ofatTimeline.SetSubTabVisible(tab == VisualiseSubTab.Ofat);
+        ApplyReactorLock();
     }
 
-    private void SelectYieldParam(int index) => SelectCorrelationParam(index, yieldParamButtons, yieldGraphGroups);
-    private void SelectEfficiencyParam(int index) => SelectCorrelationParam(index, efficiencyParamButtons, efficiencyGraphGroups);
-
-    private void SelectCorrelationParam(int index, List<Button> buttons, List<CanvasGroup> groups)
+    private void SelectYieldParam(int index)
     {
-        if (index < 0 || index >= groups.Count) return;
+        if (!SelectCorrelationParam(index, yieldParamButtons, yieldGraphGroups)) return;
+        yieldParamIndex = index;
+        if (currentSubTab == VisualiseSubTab.Yield) ApplyReactorLock();
+    }
+
+    private void SelectEfficiencyParam(int index)
+    {
+        if (!SelectCorrelationParam(index, efficiencyParamButtons, efficiencyGraphGroups)) return;
+        efficiencyParamIndex = index;
+        if (currentSubTab == VisualiseSubTab.Efficiency) ApplyReactorLock();
+    }
+
+    private bool SelectCorrelationParam(int index, List<Button> buttons, List<CanvasGroup> groups)
+    {
+        if (index < 0 || index >= groups.Count) return false;
         for (int i = 0; i < buttons.Count; i++)
             if (buttons[i] != null) buttons[i].GetComponent<Image>().color = i == index ? AccentColor : HeaderColor;
         for (int i = 0; i < groups.Count; i++)
@@ -785,6 +802,36 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             groups[i].interactable = visible;
             groups[i].blocksRaycasts = visible;
         }
+        return true;
+    }
+
+    private InteractiveModulePanelRuntime ModulePanels()
+    {
+        if (modulePanels == null) modulePanels = FindFirstObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
+        return modulePanels;
+    }
+
+    /// <summary>
+    /// Single source of truth for the reactor variable-lock. The REACTOR YIELD / EFFICIENCY
+    /// param tabs and the OFAT timeline all lock the reactor to a single moving slider while
+    /// their sub-tab is on screen; everything else releases it.
+    /// </summary>
+    private void ApplyReactorLock()
+    {
+        bool visualiseOpen = analyticsWindowOpen && currentAnalyticsTab == AnalyticsTab.Visualise;
+        bool ofatActive = visualiseOpen && currentSubTab == VisualiseSubTab.Ofat;
+
+        if (ofatTimeline != null) ofatTimeline.SetSubTabVisible(ofatActive);
+
+        InteractiveModulePanelRuntime p = ModulePanels();
+        if (p == null || ofatActive) return; // OFAT owns the lock while its tab is up
+
+        if (visualiseOpen && currentSubTab == VisualiseSubTab.Yield)
+            p.SetReactorVariableLock(ReactorParamSliderLabels[yieldParamIndex]);
+        else if (visualiseOpen && currentSubTab == VisualiseSubTab.Efficiency)
+            p.SetReactorVariableLock(ReactorParamSliderLabels[efficiencyParamIndex]);
+        else
+            p.ClearReactorVariableLock();
     }
 
     private void ToggleRunning()
@@ -799,8 +846,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         PlantProcessSimulator sim = PlantProcessSimulator.Instance;
         sim?.ResetSimulation();
-        InteractiveModulePanelRuntime panels = FindFirstObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
-        panels?.ResetControlVisuals();
+        ModulePanels()?.ResetControlVisuals();
+        ApplyReactorLock(); // ResetControlVisuals released the lock — re-assert it for the open tab
         Refresh();
     }
 
@@ -818,8 +865,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             analyticsWindow.transform.SetAsLastSibling();
             SetPopupVisible(analyticsWindow, true);
         }
-        if (ofatTimeline != null)
-            ofatTimeline.SetSubTabVisible(currentAnalyticsTab == AnalyticsTab.Visualise && currentSubTab == VisualiseSubTab.Ofat);
+        ApplyReactorLock();
         Refresh();
     }
 
@@ -827,7 +873,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         analyticsWindowOpen = false;
         SetPopupVisible(analyticsWindow, false);
-        if (ofatTimeline != null) ofatTimeline.SetSubTabVisible(false);
+        ApplyReactorLock();
         Refresh();
     }
 
@@ -878,9 +924,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         if (analyticsVisualiseTab != null) analyticsVisualiseTab.SetActive(tab == AnalyticsTab.Visualise);
         if (analyticsStatsTabButton != null) analyticsStatsTabButton.GetComponent<Image>().color = tab == AnalyticsTab.Stats ? AccentColor : HeaderColor;
         if (analyticsVisualiseTabButton != null) analyticsVisualiseTabButton.GetComponent<Image>().color = tab == AnalyticsTab.Visualise ? AccentColor : HeaderColor;
-        // The OFAT reactor-slider lock only applies while its sub-tab is actually on screen.
-        if (ofatTimeline != null)
-            ofatTimeline.SetSubTabVisible(tab == AnalyticsTab.Visualise && currentSubTab == VisualiseSubTab.Ofat);
+        // The reactor-slider lock only applies while a locking sub-tab is actually on screen.
+        ApplyReactorLock();
     }
 
     private CanvasGroup BuildCorrelationGraph(RectTransform container, string title, string xLabel, string yLabel,

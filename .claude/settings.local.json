@@ -13,7 +13,30 @@
       "Bash(git check-ignore *)",
       "Bash(git add *)",
       "Bash(git commit -q -m ' *)",
-      "Bash(git tag *)"
+      "Bash(git tag *)",
+      "Read(//c/Program Files/LibreOffice/program/**)",
+      "Read(//c/Program Files/Microsoft Office/root/Office16/**)",
+      "Bash(python -c \"import lxml; print\\('lxml ok'\\)\")",
+      "Bash(python -c \"import PIL; print\\('PIL ok'\\)\")",
+      "Read(//c/Users/Neeta/AppData/Local/Temp/claude/C--Users-Neeta-Downloads-de-vis-proj-group8-dev/be0f7de9-1183-4794-81a8-7220b8b7c65d/scratchpad/**)",
+      "Bash(rm -rf unpacked)",
+      "Bash(python -c \"import zipfile; zipfile.ZipFile\\('deck.pptx'\\).extractall\\('unpacked'\\)\")",
+      "Bash(python build_slides.py)",
+      "Bash(python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 python -X utf8 -c ' *)",
+      "Read(//c/Users/Neeta/Downloads/**)",
+      "Bash(cp \"DE Project Vis Sprint9 Group8.pptx\" \"DE Project Vis Sprint9 Group8 \\(backup 2026-08-28\\).pptx\")",
+      "Bash(cp \"/c/Users/Neeta/AppData/Local/Temp/claude/C--Users-Neeta-Downloads-de-vis-proj-group8-dev/be0f7de9-1183-4794-81a8-7220b8b7c65d/scratchpad/out.pptx\" \"DE Project Vis Sprint9 Group8.pptx\")",
+      "Bash(python -c \"import zipfile; z=zipfile.ZipFile\\(r'C:\\\\Users\\\\Neeta\\\\Downloads\\\\DE Project Vis Sprint9 Group8.pptx'\\); print\\('final file OK, testzip:', z.testzip\\(\\)\\); import re; p=z.read\\('ppt/presentation.xml'\\).decode\\(\\); print\\(len\\(re.findall\\(r'<p:sldId ', p\\)\\), 'slides'\\)\")",
+      "Read(//c/Users/Neeta/Videos/Screen Recordings/**)",
+      "Bash(ffmpeg -version)",
+      "Bash(ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate,duration,bit_rate -show_entries format=duration,size,bit_rate -of default=noprint_wrappers=1 \"/c/Users/Neeta/Videos/Screen Recordings/Screen Recording 2026-08-28 133547.mp4\")",
+      "Bash(C:/Users/Neeta/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/LocalCache/local-packages/Python313/site-packages/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe -hide_banner -i 'C:/Users/Neeta/Videos/Screen Recordings/Screen Recording 2026-08-28 133547.mp4')",
+      "Bash(time C:/Users/Neeta/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/LocalCache/local-packages/Python313/site-packages/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe -hide_banner -y -i 'C:/Users/Neeta/Videos/Screen Recordings/Screen Recording 2026-08-28 133547.mp4' -an -c:v libx264 -preset slow -crf 30 -vf scale=1280:-2 -pix_fmt yuv420p -movflags +faststart C:/Users/Neeta/AppData/Local/Temp/claude/C--Users-Neeta-Downloads-de-vis-proj-group8-dev/be0f7de9-1183-4794-81a8-7220b8b7c65d/scratchpad/demo_crf30.mp4)",
+      "Bash(C:/Users/Neeta/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/LocalCache/local-packages/Python313/site-packages/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe -hide_banner -y -i 'C:/Users/Neeta/Videos/Screen Recordings/Screen Recording 2026-08-28 133547.mp4' -an -c:v libx264 -preset slow -crf 25 -vf scale=1600:-2 -pix_fmt yuv420p -movflags +faststart C:/Users/Neeta/AppData/Local/Temp/claude/C--Users-Neeta-Downloads-de-vis-proj-group8-dev/be0f7de9-1183-4794-81a8-7220b8b7c65d/scratchpad/demo_crf25.mp4)",
+      "Bash(find /c/Users/Neeta/Downloads/de-vis-proj-group8-dev/Assets -iname *fluidflow*)",
+      "Bash(cp /c/Users/Neeta/Downloads/de-vis-proj-group8-codex-main-feedback-improvements/Assets/PipeFlowAnimator.cs /c/Users/Neeta/Downloads/de-vis-proj-group8-dev/Assets/PipeFlowAnimator.cs)",
+      "Bash(cp /c/Users/Neeta/Downloads/de-vis-proj-group8-codex-main-feedback-improvements/Assets/Scripts_N/FinalFlowSystem/FinalPlantFlowRuntime.cs /c/Users/Neeta/Downloads/de-vis-proj-group8-dev/Assets/Scripts_N/FinalFlowSystem/FinalPlantFlowRuntime.cs)"
     ]
   }
 }

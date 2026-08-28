@@ -50,3 +50,7 @@ sysinfo.txt
 
 # Analytics graph exports (CSV/PNG written at runtime by the OFAT sweep / correlation graphs)
 /Analytics Exports/
+
+# Ad-hoc screenshots dropped at project root
+/Screenshot */
+/Screenshot 20*.png
