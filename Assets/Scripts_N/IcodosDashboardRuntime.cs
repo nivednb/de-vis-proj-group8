@@ -40,6 +40,11 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private GameObject simulationPanel;
     private GameObject flowInspectionPanel;
     private GameObject processWorkflowBanner;
+    private Button legendStreamToggleButton;
+    private Button flowLabStreamToggleButton;
+    // FinalPlantFlowRuntime exposes ToggleVisuals() but no readable visibility property.
+    // Its serialized default is visible, and this tracks the two dashboard entry points.
+    private bool streamVisualsVisible = true;
     private GameObject analyticsWindow;
     private GameObject analyticsStatsTab;
     private GameObject analyticsVisualiseTab;
@@ -249,9 +254,6 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         RectTransform titleBar = CreatePanel("App Title Bar", parent, new Color32(6, 15, 21, 255));
         Pin(titleBar, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -TitleBarHeight), Vector2.zero);
 
-        Text label = CreateText("App Title", titleBar, "POWER-TO-METHANOL DIGITAL TWIN", 11, FontStyle.Bold, TextAnchor.MiddleLeft, MutedTextColor);
-        Pin(label.rectTransform, Vector2.zero, Vector2.one, new Vector2(14f, 0f), new Vector2(-40f, 0f));
-
         Button close = CreateButton("App Close", titleBar, "X", new Color32(6, 15, 21, 255), 12);
         Pin(close.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-30f, 2f), new Vector2(-2f, -2f));
         close.onClick.AddListener(Quit);
@@ -348,9 +350,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             AnchorTopLeft(label.rectTransform, new Vector2(48f, y + 5f), new Vector2(198f, 20f));
         }
 
-        Button streamToggle = CreateButton("Stream Visibility", panel, "SHOW / HIDE STREAMS", AccentColor, 10);
-        AnchorTopLeft(streamToggle.GetComponent<RectTransform>(), new Vector2(14f, -232f), new Vector2(226f, 36f));
-        streamToggle.onClick.AddListener(ToggleStreams);
+        legendStreamToggleButton = CreateButton("Stream Visibility", panel, "HIDE STREAMS", AccentColor, 10);
+        AnchorTopLeft(legendStreamToggleButton.GetComponent<RectTransform>(), new Vector2(14f, -232f), new Vector2(226f, 36f));
+        legendStreamToggleButton.onClick.AddListener(ToggleStreams);
     }
 
     private void BuildPlantStatus(Transform parent)
@@ -466,8 +468,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         AddFlowModeButton(flow, "CAPTURE LOOP", 2, 0.34f);
         AddFlowModeButton(flow, "SYNTHESIS LOOP", 3, 0.24f);
         AddFlowModeButton(flow, "PRODUCT PATH", 4, 0.14f);
-        Button toggle = AddContextButton(flow, "SHOW / HIDE STREAM VISUALS", 0.03f);
-        toggle.onClick.AddListener(ToggleStreams);
+        flowLabStreamToggleButton = AddContextButton(flow, "HIDE STREAMS", 0.03f);
+        flowLabStreamToggleButton.onClick.AddListener(ToggleStreams);
 
         SetProcessStep(0);
         SelectPage(DashboardPage.Overview);
@@ -595,17 +597,21 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         helpPanel = CreatePanel("Help Panel", parent, new Color32(9, 26, 36, 250)).gameObject;
         RectTransform panel = helpPanel.GetComponent<RectTransform>();
         panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(0.5f, 0.5f);
-        panel.sizeDelta = new Vector2(900f, 650f);
+        panel.sizeDelta = new Vector2(960f, 820f);
         AddPanelTitle(panel, "INFORMATION - BASIS, ASSUMPTIONS & OPERATING GUIDE");
         Text body = CreateText("Body", panel,
-            "PURPOSE\nExplore how operating conditions affect a simplified power-to-methanol plant. Use PLANT PROCESS for the guided material route; Overview is reserved for the plant and live status.\n\n" +
+            "PROCESS OVERVIEW\nPower-to-Methanol converts electricity and water into hydrogen, then combines hydrogen with captured CO2 to produce methanol.\n\n" +
+            "Water + Electricity\n        ↓\nH2 Generation\n        ↓\nH2 Buffer / Storage\n        ↓\nCaptured CO2 + H2\n        ↓\nCompression / Mixing\n        ↓\nMethanol Reactor\n        ↓\nCooling / Condensation / Separation\n        ↓\nDistillation / Purification\n        ↓\nMethanol Storage\n\n" +
             "MAIN REACTION\nCO2 + 3 H2 ⇌ CH3OH + H2O\n\n" +
+            "HOW TO USE\n1. Explore the plant: navigate around the digital twin and inspect the process modules.\n2. Inspect a process unit: use the existing module information controls for unit details and available controls.\n3. Explore the reactor: change reactor operating conditions using the existing controls; the educational model updates the simulated process results.\n4. Use Analytics: explore how one operating parameter affects simulated reactor yield while the others are held constant.\n5. Understand the streams: use the Process Flow Legend and Flow Lab controls to read stream types and visual flow.\n6. Understand the model: this is an educational steady-state model. Its simulated responses demonstrate process relationships and are not industrial validation or plant-design predictions.\n\n" +
+            "PURPOSE\nUse PLANT PROCESS for the guided material route; Overview is reserved for the plant and live status.\n\n" +
             "MODEL BASIS\nMolar masses: H2 2.01588, CO2 44.00950, CH3OH 32.04186, H2O 18.01528 kg/kmol. The synthesis export uses a steady-state external boundary: fresh H2 + fresh CO2 = methanol + water + purge H2 + purge CO2. Internal recycle is excluded from external totals.\n\n" +
             "ASSUMPTIONS\nPerfect methanol/water removal before gas recycle; identical separator recycle fraction for unreacted H2 and CO2; no CO, reverse-water-gas-shift, inerts, dissolved gas, heat loss or pressure drop. T/P/ratio/GHSV response and separation recovery are educational correlations, not fitted plant kinetics. Maximum product purity is 99.85%.\n\n" +
             "MASS-BALANCE CHECK\nOpen ANALYTICS and select EXPORT CSV. The file contains inputs, reactor inlet, products, recycle, purge, closure error, operating point, molar masses and assumptions. Verify the External closure rows; downstream refined methanol is reported separately because unrecovered material is outside the simplified synthesis boundary.\n\n" +
-            "CONTROLS & CONSTRAINTS\nUse top navigation, equipment selection and module arrows. Arrow keys orbit; A/D pan; W/S zoom. SET MAXIMUM EFFICIENCY applies the modeled optimum but cannot bypass the tank high-high interlock.\n\n" +
+            "CONTROLS & CONSTRAINTS\nUse top navigation, equipment selection and module arrows. SET MAXIMUM EFFICIENCY applies the modeled optimum but cannot bypass the tank high-high interlock.\n\n" +
+            "CAMERA / NAVIGATION\nArrow keys orbit; A/D pan; W/S zoom.\n\n" +
             "This educational application is not CFD, Aspen, industrial control software, or a validated process model.",
-            12, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
+            11, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
         Pin(body.rectTransform, Vector2.zero, Vector2.one, new Vector2(28f, 56f), new Vector2(-28f, -64f));
         Button close = CreateButton("Close", panel, "CLOSE", AccentColor, 13);
         AnchorBottomRight(close.GetComponent<RectTransform>(), new Vector2(-24f, 18f), new Vector2(120f, 36f));
@@ -1160,7 +1166,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         processWorkflowBanner = banner.gameObject;
         Pin(banner, new Vector2(0.20f, 1f), new Vector2(0.80f, 1f), new Vector2(0f, -152f - TitleBarHeight), new Vector2(0f, -120f - TitleBarHeight));
         Text badge = CreateText("Process Workflow", banner,
-            "WATER + ELECTRICITY  →  H2   |   CO2 CAPTURE  →  CO2   |   H2 + CO2  →  REACTOR  →  METHANOL  →  SEPARATION  →  STORAGE",
+            "WATER + ELECTRICITY → H2   |   CAPTURED CO2 + H2 → METHANOL REACTOR → SEPARATION → STORAGE",
             10, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
         Pin(badge.rectTransform, Vector2.zero, Vector2.one, new Vector2(10f, 2f), new Vector2(-10f, -2f));
         processWorkflowBanner.SetActive(false);
@@ -1403,7 +1409,25 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private void ToggleStreams()
     {
         FinalPlantFlowRuntime flow = FindFirstObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
-        if (flow != null) flow.ToggleVisuals();
+        if (flow == null) return;
+
+        flow.ToggleVisuals();
+        streamVisualsVisible = !streamVisualsVisible;
+        UpdateStreamToggleLabels();
+    }
+
+    private void UpdateStreamToggleLabels()
+    {
+        string label = streamVisualsVisible ? "HIDE STREAMS" : "SHOW STREAMS";
+        SetButtonLabel(legendStreamToggleButton, label);
+        SetButtonLabel(flowLabStreamToggleButton, label);
+    }
+
+    private static void SetButtonLabel(Button button, string label)
+    {
+        if (button == null) return;
+        Text text = button.GetComponentInChildren<Text>();
+        if (text != null) text.text = label;
     }
 
     private void SetFlowInspectionMode(int mode)

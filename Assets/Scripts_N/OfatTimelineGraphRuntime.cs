@@ -639,8 +639,7 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         pageIndex = 0;
         followLive = true;
         currentVar = Variable.Free;
-        showingTemperatureSweep = false;
-        showingPressureSweep = false;
+        ClearAutomaticSweepModes();
         epochs.Add(new Epoch { T = 0f, Var = currentVar, VarValue = 0f });
         ApplyLock();
         RecolorVarButtons();
@@ -854,8 +853,8 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         yAxisNameLabel.text = $"Y:  {rm.Label} ({rm.Unit})";
         if (xAxisNameLabel != null) xAxisNameLabel.text = "X:  Time (mm:ss, one page = 1 min)";
         if (moduleLegend != null) moduleLegend.SetActive(currentMode == ViewMode.Points);
-        if (prevPageButton != null) prevPageButton.interactable = true;
-        if (nextPageButton != null) nextPageButton.interactable = true;
+        if (prevPageButton != null) prevPageButton.interactable = pageIndex > 0;
+        if (nextPageButton != null) nextPageButton.interactable = pageIndex < latest;
         if (liveButton != null) liveButton.GetComponent<Image>().color = followLive ? BtnActive : BtnIdle;
     }
 
@@ -882,7 +881,7 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         if (segBuffer.Count >= 2)
         {
             UIGraphLine line = GetPoolLine(0);
-            line.color = Vars[Variable.Temperature].Color;
+            line.color = Vars[currentVar].Color;
             line.SetPoints(segBuffer);
         }
 
@@ -915,7 +914,9 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         highlight.effectColor = Vars[currentVar].Color;
         highlight.effectDistance = new Vector2(1.5f, -1.5f);
 
-        titleText.text = $"How does {lowerParameter} affect reactor yield?";
+        titleText.text = currentVar == Variable.FeedFlow
+            ? "How does Feed Flow affect reactor yield?"
+            : $"How does {lowerParameter} affect reactor yield?";
         contextText.text = currentVar == Variable.FeedFlow
             ? "Feed flow is varied while other operating conditions are held constant. In the current educational model, feed flow primarily changes throughput rather than calculated reactor yield, so the yield response remains approximately constant."
             : $"{parameter} vs Reactor Yield   |   Only {lowerParameter} changes; other operating conditions remain constant.   |   Each point is calculated using the educational process model.";
@@ -968,6 +969,12 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
 
     public void OnPointerMove(PointerEventData eventData)
     {
+        if (showingTemperatureSweep || showingPressureSweep || showingRatioSweep || showingGhsvSweep || showingFeedSweep)
+        {
+            HideTooltip();
+            return;
+        }
+
         if (plotArea == null || samples.Count == 0)
         {
             HideTooltip();
