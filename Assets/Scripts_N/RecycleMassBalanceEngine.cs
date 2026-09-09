@@ -18,6 +18,59 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
     private const double M_H2O = 18.01528;
     private const int MaxIterations = 1024;
     private const double ConvergenceToleranceKmolHr = 1e-9;
+    private const double RelativeConvergenceTolerance = 1e-6;
+
+    /// <summary>Pure steady-state recycle calculation shared by the live component and
+    /// hypothetical process evaluations. Values are kg/h unless explicitly noted.</summary>
+    public readonly struct RecycleCalculationResult
+    {
+        public readonly bool Converged;
+        public readonly int Iterations;
+        public readonly double ReactorCo2KgHr;
+        public readonly double ReactorH2KgHr;
+        public readonly double MethanolProductKgHr;
+        public readonly double WaterProductKgHr;
+        public readonly double UnreactedCo2KgHr;
+        public readonly double UnreactedH2KgHr;
+        public readonly double RecycleCo2KgHr;
+        public readonly double RecycleH2KgHr;
+        public readonly double PurgeCo2KgHr;
+        public readonly double PurgeH2KgHr;
+        public readonly double OverallCo2ConversionPercent;
+        public readonly double OverallH2ConversionPercent;
+        public readonly double ExternalMassBalanceErrorKgHr;
+        public readonly double ExternalMassBalanceErrorPercent;
+        public readonly string LimitingReactant;
+
+        internal RecycleCalculationResult(bool converged, int iterations,
+            double reactorCo2KgHr, double reactorH2KgHr, double methanolProductKgHr,
+            double waterProductKgHr, double unreactedCo2KgHr, double unreactedH2KgHr,
+            double recycleCo2KgHr, double recycleH2KgHr, double purgeCo2KgHr,
+            double purgeH2KgHr, double overallCo2ConversionPercent,
+            double overallH2ConversionPercent, double externalMassBalanceErrorKgHr,
+            double externalMassBalanceErrorPercent, string limitingReactant)
+        {
+            Converged = converged;
+            Iterations = iterations;
+            ReactorCo2KgHr = reactorCo2KgHr;
+            ReactorH2KgHr = reactorH2KgHr;
+            MethanolProductKgHr = methanolProductKgHr;
+            WaterProductKgHr = waterProductKgHr;
+            UnreactedCo2KgHr = unreactedCo2KgHr;
+            UnreactedH2KgHr = unreactedH2KgHr;
+            RecycleCo2KgHr = recycleCo2KgHr;
+            RecycleH2KgHr = recycleH2KgHr;
+            PurgeCo2KgHr = purgeCo2KgHr;
+            PurgeH2KgHr = purgeH2KgHr;
+            OverallCo2ConversionPercent = overallCo2ConversionPercent;
+            OverallH2ConversionPercent = overallH2ConversionPercent;
+            ExternalMassBalanceErrorKgHr = externalMassBalanceErrorKgHr;
+            ExternalMassBalanceErrorPercent = externalMassBalanceErrorPercent;
+            LimitingReactant = limitingReactant;
+        }
+
+        public double RecycleStreamKgHr => RecycleCo2KgHr + RecycleH2KgHr;
+    }
 
     [Header("Fresh Inputs (kg/h)")]
     [Min(0f)] public float freshCo2KgHr = 1152f;
@@ -73,15 +126,26 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
     [ContextMenu("Update Plant Mass Balance")]
     public void UpdatePlantMassBalance()
     {
-        double freshCo2 = Math.Max(0d, freshCo2KgHr) / M_CO2;
-        double freshH2 = Math.Max(0d, freshH2KgHr) / M_H2;
+        ApplyCalculation(Calculate(freshCo2KgHr, freshH2KgHr, singlePassCo2Conversion, recycleFraction));
+        BalanceUpdated?.Invoke();
+    }
+
+    /// <summary>Evaluates the existing recycle/purge fixed point without reading or writing
+    /// a component instance, allowing hypothetical operating points to remain side-effect-free.</summary>
+    public static RecycleCalculationResult Calculate(float freshCo2KgHr, float freshH2KgHr,
+        float singlePassCo2Conversion, float recycleFraction)
+    {
+        double freshCo2Mass = Math.Max(0d, freshCo2KgHr);
+        double freshH2Mass = Math.Max(0d, freshH2KgHr);
+        double freshCo2 = freshCo2Mass / M_CO2;
+        double freshH2 = freshH2Mass / M_H2;
         double conversion = Math.Clamp(singlePassCo2Conversion, 0d, 0.999d);
         double recycle = Math.Clamp(recycleFraction, 0d, 0.999d);
 
         double recycleCo2 = 0d;
         double recycleH2 = 0d;
-        converged = false;
-        convergenceIterations = 0;
+        bool calculationConverged = false;
+        int calculationIterations = 0;
 
         // A fixed-point solution is used instead of one recycle multiplier because
         // it remains valid when either CO2 or H2 becomes the limiting reactant.
@@ -94,13 +158,17 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
             double nextRecycleH2 = Math.Max(0d, feedH2 - 3d * extent) * recycle;
 
             double change = Math.Max(Math.Abs(nextRecycleCo2 - recycleCo2), Math.Abs(nextRecycleH2 - recycleH2));
+            // Near 100% recycle, a large non-limiting recycle stream contracts slowly, so
+            // this tight relative term scales the update test without loosening small flows.
+            double relevantScale = Math.Max(1d, Math.Max(Math.Max(feedCo2, feedH2), Math.Max(nextRecycleCo2, nextRecycleH2)));
+            double convergenceTolerance = Math.Max(ConvergenceToleranceKmolHr, RelativeConvergenceTolerance * relevantScale);
             recycleCo2 = nextRecycleCo2;
             recycleH2 = nextRecycleH2;
-            convergenceIterations = iteration;
+            calculationIterations = iteration;
 
-            if (change <= ConvergenceToleranceKmolHr)
+            if (change <= convergenceTolerance)
             {
-                converged = true;
+                calculationConverged = true;
                 break;
             }
         }
@@ -118,39 +186,64 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
         double purgeCo2 = unreactedCo2 * (1d - recycle);
         double purgeH2 = unreactedH2 * (1d - recycle);
 
-        reactorFeedCo2KgHr = ToFloat(reactorCo2 * M_CO2);
-        reactorFeedH2KgHr = ToFloat(reactorH2 * M_H2);
-        totalReactorFeedKgHr = reactorFeedCo2KgHr + reactorFeedH2KgHr;
-        reactorH2Co2MolarRatio = reactorCo2 > 1e-12 ? ToFloat(reactorH2 / reactorCo2) : 0f;
-
-        methanolProductKgHr = ToFloat(reacted * M_MEOH);
-        waterProductKgHr = ToFloat(reacted * M_H2O);
-        unreactedCo2KgHr = ToFloat(unreactedCo2 * M_CO2);
-        unreactedH2KgHr = ToFloat(unreactedH2 * M_H2);
-
-        recycleCo2KgHr = ToFloat(recycleCo2 * M_CO2);
-        recycleH2KgHr = ToFloat(recycleH2 * M_H2);
-        recycleStreamKgHr = recycleCo2KgHr + recycleH2KgHr;
-        purgeCo2KgHr = ToFloat(purgeCo2 * M_CO2);
-        purgeH2KgHr = ToFloat(purgeH2 * M_H2);
-        purgeStreamKgHr = purgeCo2KgHr + purgeH2KgHr;
-
-        overallCo2ConversionPercent = freshCo2 > 1e-12 ? ToFloat(Math.Clamp(reacted / freshCo2, 0d, 1d) * 100d) : 0f;
-        overallH2ConversionPercent = freshH2 > 1e-12 ? ToFloat(Math.Clamp(3d * reacted / freshH2, 0d, 1d) * 100d) : 0f;
+        double overallCo2Conversion = freshCo2 > 1e-12 ? Math.Clamp(reacted / freshCo2, 0d, 1d) * 100d : 0d;
+        double overallH2Conversion = freshH2 > 1e-12 ? Math.Clamp(3d * reacted / freshH2, 0d, 1d) * 100d : 0d;
 
         double possibleByCo2 = reactorCo2 * conversion;
         double possibleByH2 = reactorH2 / 3d;
-        limitingReactant = Math.Abs(possibleByCo2 - possibleByH2) <= 1e-7
+        string calculationLimitingReactant = Math.Abs(possibleByCo2 - possibleByH2) <= 1e-7
             ? "Stoichiometric"
             : possibleByCo2 < possibleByH2 ? "CO2 (conversion-limited)" : "H2";
 
-        double externalInput = freshCo2KgHr + freshH2KgHr;
-        double externalOutput = methanolProductKgHr + waterProductKgHr + purgeCo2KgHr + purgeH2KgHr;
-        externalMassBalanceErrorKgHr = ToFloat(externalInput - externalOutput);
-        externalMassBalanceErrorPercent = externalInput > 1e-9
-            ? ToFloat(Math.Abs(externalMassBalanceErrorKgHr) / externalInput * 100d)
-            : 0f;
+        double methanolMass = reacted * M_MEOH;
+        double waterMass = reacted * M_H2O;
+        double recycleCo2Mass = recycleCo2 * M_CO2;
+        double recycleH2Mass = recycleH2 * M_H2;
+        double purgeCo2Mass = purgeCo2 * M_CO2;
+        double purgeH2Mass = purgeH2 * M_H2;
+        double externalInput = freshCo2Mass + freshH2Mass;
+        double externalError = externalInput - (methanolMass + waterMass + purgeCo2Mass + purgeH2Mass);
+        double externalErrorPercent = externalInput > 1e-9 ? Math.Abs(externalError) / externalInput * 100d : 0d;
 
+        return new RecycleCalculationResult(calculationConverged, calculationIterations,
+            reactorCo2 * M_CO2, reactorH2 * M_H2, methanolMass, waterMass,
+            unreactedCo2 * M_CO2, unreactedH2 * M_H2, recycleCo2Mass, recycleH2Mass,
+            purgeCo2Mass, purgeH2Mass, overallCo2Conversion, overallH2Conversion,
+            externalError, externalErrorPercent, calculationLimitingReactant);
+    }
+
+    private void ApplyCalculation(RecycleCalculationResult result)
+    {
+        converged = result.Converged;
+        convergenceIterations = result.Iterations;
+        reactorFeedCo2KgHr = ToFloat(result.ReactorCo2KgHr);
+        reactorFeedH2KgHr = ToFloat(result.ReactorH2KgHr);
+        totalReactorFeedKgHr = reactorFeedCo2KgHr + reactorFeedH2KgHr;
+        reactorH2Co2MolarRatio = reactorFeedCo2KgHr > 1e-12f
+            ? ToFloat((reactorFeedH2KgHr / M_H2) / (reactorFeedCo2KgHr / M_CO2))
+            : 0f;
+        methanolProductKgHr = ToFloat(result.MethanolProductKgHr);
+        waterProductKgHr = ToFloat(result.WaterProductKgHr);
+        unreactedCo2KgHr = ToFloat(result.UnreactedCo2KgHr);
+        unreactedH2KgHr = ToFloat(result.UnreactedH2KgHr);
+        recycleCo2KgHr = ToFloat(result.RecycleCo2KgHr);
+        recycleH2KgHr = ToFloat(result.RecycleH2KgHr);
+        recycleStreamKgHr = recycleCo2KgHr + recycleH2KgHr;
+        purgeCo2KgHr = ToFloat(result.PurgeCo2KgHr);
+        purgeH2KgHr = ToFloat(result.PurgeH2KgHr);
+        purgeStreamKgHr = purgeCo2KgHr + purgeH2KgHr;
+        overallCo2ConversionPercent = ToFloat(result.OverallCo2ConversionPercent);
+        overallH2ConversionPercent = ToFloat(result.OverallH2ConversionPercent);
+        externalMassBalanceErrorKgHr = ToFloat(result.ExternalMassBalanceErrorKgHr);
+        externalMassBalanceErrorPercent = ToFloat(result.ExternalMassBalanceErrorPercent);
+        limitingReactant = result.LimitingReactant;
+    }
+
+    // PlantProcessSimulator applies an already-evaluated live operating point here. Its
+    // public Simulate(ProcessInputs) path consumes the same result without calling this.
+    internal void ApplyCalculatedResult(RecycleCalculationResult result)
+    {
+        ApplyCalculation(result);
         BalanceUpdated?.Invoke();
     }
 
@@ -238,4 +331,5 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
     {
         UpdatePlantMassBalance();
     }
+
 }

@@ -583,7 +583,9 @@ public class PlantProcessSimulator : MonoBehaviour
 
     private ProcessSnapshot CalculateSnapshot()
     {
-        return Simulate(BuildCurrentInputs());
+        ProcessSnapshot snapshot = Simulate(BuildCurrentInputs(), out RecycleMassBalanceEngine.RecycleCalculationResult recycleCalculation);
+        recycleMassBalance?.ApplyCalculatedResult(recycleCalculation);
+        return snapshot;
     }
 
     private ProcessInputs BuildCurrentInputs()
@@ -620,6 +622,11 @@ public class PlantProcessSimulator : MonoBehaviour
     /// call it many times per frame with one input varied and everything else held constant.
     /// </summary>
     public ProcessSnapshot Simulate(ProcessInputs i)
+    {
+        return Simulate(i, out _);
+    }
+
+    private ProcessSnapshot Simulate(ProcessInputs i, out RecycleMassBalanceEngine.RecycleCalculationResult recycleCalculation)
     {
         float timeline = i.timeline;
         float plantRamp = i.storageInterlockLatched ? 0f : CalculatePlantRamp(timeline);
@@ -661,7 +668,8 @@ public class PlantProcessSimulator : MonoBehaviour
         float h2RequiredForAvailableCo2 = availableCo2 / 44.0095f * requestedRatio * 2.01588f;
         float h2ToReactor = Mathf.Min(availableH2, h2RequiredForAvailableCo2);
         float co2ToReactor = Mathf.Min(availableCo2, h2ToReactor / 2.01588f / requestedRatio * 44.0095f);
-        recycleMassBalance.ConfigureAndCalculate(co2ToReactor, h2ToReactor, singlePassConversion, manualRecycleRatio / 100f);
+        recycleCalculation = RecycleMassBalanceEngine.Calculate(
+            co2ToReactor, h2ToReactor, singlePassConversion, i.recycleRatio / 100f);
         float theoreticalMethanol = Mathf.Min(
             h2ToReactor * (32.04186f / (3f * 2.01588f)),
             co2ToReactor * (32.04186f / 44.0095f));
@@ -673,11 +681,11 @@ public class PlantProcessSimulator : MonoBehaviour
         float methanolPurity = Mathf.Clamp(90f + 7.2f * Mathf.InverseLerp(0.5f, 5f, i.refluxRatio) + 2.4f * Mathf.InverseLerp(78f, 105f, i.distillationReboilerTemp), 88f, 99.85f);
         float distillationEnergy = Mathf.Clamp(18f + i.refluxRatio * 12f + Mathf.InverseLerp(70f, 115f, i.distillationReboilerTemp) * 36f, 0f, 100f);
 
-        float reactorMethanol = recycleMassBalance.converged
-            ? recycleMassBalance.methanolProductKgHr
+        float reactorMethanol = recycleCalculation.Converged
+            ? (float)recycleCalculation.MethanolProductKgHr
             : theoreticalMethanol * singlePassConversion;
         float methanol = Mathf.Min(designMethanolKgH, reactorMethanol) * condenserRecovery * separatorFactor * distillationFactor;
-        float recycle = recycleMassBalance.converged ? recycleMassBalance.recycleStreamKgHr : 0f;
+        float recycle = recycleCalculation.Converged ? (float)recycleCalculation.RecycleStreamKgHr : 0f;
         float efficiency = Mathf.Clamp01(methanol / Mathf.Max(theoreticalMethanol, 1f)) * 100f;
 
         ProcessSnapshot snapshot = new ProcessSnapshot

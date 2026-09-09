@@ -152,19 +152,107 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 
             Vector3 screen = anchor.CachedScreen;
             anchor.ButtonRect.position = screen;
-            Vector3 unclampedPanelPosition = screen + new Vector3(panelOffset.x, panelOffset.y, 0f);
-            float halfWidth = panelSize.x * 0.5f;
-            float halfHeight = panelSize.y * 0.5f;
-            anchor.PanelRect.position = new Vector3(
-                Mathf.Clamp(unclampedPanelPosition.x, halfWidth + 8f, Screen.width - halfWidth - 8f),
-                Mathf.Clamp(unclampedPanelPosition.y, halfHeight + 8f, Screen.height - halfHeight - 8f),
-                0f);
+            anchor.PanelRect.position = FindPanelPosition(anchor, screen);
 
             if (anchor.PanelRoot.activeSelf && anchor.LiveText != null)
             {
                 anchor.LiveText.text = BuildLiveText(anchor.ModuleId);
             }
         }
+    }
+
+    /// <summary>Uses the existing module-relative placement first, then evaluates positions
+    /// around the module only when that normal placement overlaps the live Analytics dock.
+    /// This is intentionally shared by every anchor: no module receives special treatment.</summary>
+    private Vector2 FindPanelPosition(ModuleAnchor anchor, Vector2 moduleScreenPosition)
+    {
+        Vector2 normal = ClampPanelCenter(moduleScreenPosition + panelOffset);
+        IcodosDashboardRuntime dashboard = IcodosDashboardRuntime.Instance;
+        if (dashboard == null || !dashboard.TryGetAnalyticsWindowScreenRect(out Rect analyticsRect))
+        {
+            anchor.PanelPlacementIndex = 0;
+            return normal;
+        }
+
+        if (!OverlapsAnalytics(normal, analyticsRect))
+        {
+            anchor.PanelPlacementIndex = 0;
+            return normal;
+        }
+
+        float horizontalGap = panelSize.x * 0.5f + buttonSize.x + 18f;
+        float verticalGap = panelSize.y * 0.5f + buttonSize.y + 18f;
+        Vector2[] candidates =
+        {
+            normal,
+            ClampPanelCenter(moduleScreenPosition + new Vector2(-horizontalGap, panelOffset.y)),
+            ClampPanelCenter(moduleScreenPosition + new Vector2(horizontalGap, panelOffset.y)),
+            ClampPanelCenter(moduleScreenPosition + new Vector2(0f, verticalGap)),
+            ClampPanelCenter(moduleScreenPosition + new Vector2(0f, -verticalGap))
+        };
+
+        // Keep a previously selected alternative while it remains valid. This prevents
+        // tiny camera movements from making the panel hop between equally good sides.
+        if (anchor.PanelPlacementIndex > 0 && anchor.PanelPlacementIndex < candidates.Length &&
+            !OverlapsAnalytics(candidates[anchor.PanelPlacementIndex], analyticsRect))
+        {
+            return candidates[anchor.PanelPlacementIndex];
+        }
+
+        int bestIndex = -1;
+        float bestDistance = float.MaxValue;
+        for (int i = 1; i < candidates.Length; i++)
+        {
+            if (OverlapsAnalytics(candidates[i], analyticsRect)) continue;
+            float distance = (candidates[i] - moduleScreenPosition).sqrMagnitude;
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+
+        // At unusually constrained resolutions all candidates may intersect the dock.
+        // In that case choose the least-covered candidate, with distance as a stable tie-break.
+        if (bestIndex < 0)
+        {
+            float leastOverlap = float.MaxValue;
+            for (int i = 1; i < candidates.Length; i++)
+            {
+                float overlap = OverlapArea(PanelRectAt(candidates[i]), analyticsRect);
+                float distance = (candidates[i] - moduleScreenPosition).sqrMagnitude;
+                if (overlap < leastOverlap || (Mathf.Approximately(overlap, leastOverlap) && distance < bestDistance))
+                {
+                    leastOverlap = overlap;
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+        }
+
+        anchor.PanelPlacementIndex = bestIndex;
+        return candidates[bestIndex];
+    }
+
+    private Vector2 ClampPanelCenter(Vector2 candidate)
+    {
+        float halfWidth = panelSize.x * 0.5f;
+        float halfHeight = panelSize.y * 0.5f;
+        return new Vector2(
+            Mathf.Clamp(candidate.x, halfWidth + 8f, Screen.width - halfWidth - 8f),
+            Mathf.Clamp(candidate.y, halfHeight + 8f, Screen.height - halfHeight - 8f));
+    }
+
+    private Rect PanelRectAt(Vector2 center) => new Rect(center - panelSize * 0.5f, panelSize);
+
+    private bool OverlapsAnalytics(Vector2 panelCenter, Rect analyticsRect) =>
+        OverlapArea(PanelRectAt(panelCenter), analyticsRect) > 0.5f;
+
+    private static float OverlapArea(Rect first, Rect second)
+    {
+        float width = Mathf.Max(0f, Mathf.Min(first.xMax, second.xMax) - Mathf.Max(first.xMin, second.xMin));
+        float height = Mathf.Max(0f, Mathf.Min(first.yMax, second.yMax) - Mathf.Max(first.yMin, second.yMin));
+        return width * height;
     }
 
     // Padded hit test around a button's screen rect. The plain RectangleContainsScreenPoint
@@ -765,5 +853,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         public Text LiveText;
         public Vector3 CachedScreen;
         public bool IsInFrustum;
+        // 0 is the normal module-relative placement; 1-4 are the evaluated alternatives.
+        public int PanelPlacementIndex;
     }
 }

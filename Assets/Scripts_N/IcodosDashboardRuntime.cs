@@ -62,6 +62,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private readonly List<CanvasGroup> yieldGraphGroups = new List<CanvasGroup>();
     private readonly List<Button> efficiencyParamButtons = new List<Button>();
     private readonly List<CanvasGroup> efficiencyGraphGroups = new List<CanvasGroup>();
+    private Text yieldExploreContextText;
+    private Text efficiencyExploreContextText;
     private int yieldParamIndex;
     private int efficiencyParamIndex;
     private OfatTimelineGraphRuntime ofatTimeline;
@@ -69,6 +71,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     // Five reactor parameters shared by the YIELD and EFFICIENCY correlation sub-tabs.
     private static readonly string[] ReactorParamNames = { "Temp", "Pressure", "H2:CO2", "GHSV", "Feed" };
+    private static readonly string[] ReactorParamExploreNames = { "Temperature", "Pressure", "H2 / CO2 Ratio", "GHSV", "Feed Flow" };
     // Exact reactor slider labels (InteractiveModulePanelRuntime.CreateControls) for the
     // variable-lock — selecting a parameter tab freezes every reactor slider but this one.
     private static readonly string[] ReactorParamSliderLabels = { "Temp", "Pressure", "H2/CO2", "GHSV", "Feed flow" };
@@ -126,10 +129,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     }
 
     /// <summary>
-    /// True while the analytics window is open and the given screen point falls within its
-    /// actual current rect (it's draggable, so this is computed live rather than cached) —
-    /// the precise geometric test other systems (camera orbit, module hover buttons) use to
-    /// block input only under the window, and nowhere else on screen.
+    /// True while the docked analytics panel is open and the given screen point falls within
+    /// its current rect. Other systems use this precise hit test to reserve only the right
+    /// dock for UI input while the remaining plant viewport stays interactive.
     /// </summary>
     public bool IsPointerOverAnalyticsWindow(Vector2 screenPoint)
     {
@@ -137,6 +139,21 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         RectTransform rect = analyticsWindow.GetComponent<RectTransform>();
         Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
         return RectTransformUtility.RectangleContainsScreenPoint(rect, screenPoint, cam);
+    }
+
+    /// <summary>Returns the dock's live screen-space bounds for other UI layers that need
+    /// to avoid covering it. The rect is recomputed every call so it stays correct if the
+    /// dock is moved or the display size changes.</summary>
+    public bool TryGetAnalyticsWindowScreenRect(out Rect screenRect)
+    {
+        screenRect = default;
+        if (!analyticsWindowOpen || analyticsWindow == null) return false;
+        RectTransform rect = analyticsWindow.GetComponent<RectTransform>();
+        if (rect == null || !rect.gameObject.activeInHierarchy) return false;
+        Vector3[] corners = new Vector3[4];
+        rect.GetWorldCorners(corners);
+        screenRect = Rect.MinMaxRect(corners[0].x, corners[0].y, corners[2].x, corners[2].y);
+        return screenRect.width > 0f && screenRect.height > 0f;
     }
 
     private void Start()
@@ -598,26 +615,25 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void BuildAnalyticsWindow(Transform parent)
     {
-        analyticsWindow = CreatePanel("Analytics Window", parent, new Color32(9, 29, 41, 250)).gameObject;
+        analyticsWindow = CreatePanel("Analytics Window", parent, new Color32(9, 29, 41, 246)).gameObject;
         RectTransform win = analyticsWindow.GetComponent<RectTransform>();
-        win.anchorMin = win.anchorMax = new Vector2(0.5f, 0.5f);
-        win.pivot = new Vector2(0.5f, 0.5f);
-        win.sizeDelta = new Vector2(1180f, 780f);
-        win.anchoredPosition = Vector2.zero;
+        // Keep the plant, its navigation, and its module controls visible: Analytics is a
+        // responsive right-side dock, not a centre-screen modal. Anchors preserve a useful
+        // plant viewport at common desktop aspect ratios without a fixed pixel width.
+        win.anchorMin = new Vector2(0.62f, 0f);
+        win.anchorMax = new Vector2(1f, 1f);
+        win.pivot = new Vector2(1f, 0.5f);
+        win.offsetMin = new Vector2(12f, 70f);
+        win.offsetMax = new Vector2(-12f, -112f);
 
         Outline outline = analyticsWindow.AddComponent<Outline>();
         outline.effectColor = AccentColor;
         outline.effectDistance = new Vector2(1.5f, -1.5f);
 
-        // Title bar doubles as the drag handle, like a normal OS window.
         RectTransform titleBar = CreatePanel("Title Bar", win, HeaderColor);
         Pin(titleBar, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -40f), Vector2.zero);
-        Text titleText = CreateText("Window Title", titleBar, "ANALYTICS & INSIGHTS", 14, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
+        Text titleText = CreateText("Window Title", titleBar, "ANALYZE THE PROCESS", 14, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
         Pin(titleText.rectTransform, Vector2.zero, Vector2.one, new Vector2(16f, 0f), new Vector2(-362f, 0f));
-
-        WindowDragHandle drag = titleBar.gameObject.AddComponent<WindowDragHandle>();
-        drag.target = win;
-        drag.canvas = canvas;
 
         // Available regardless of which tab (Stats/Visualise) is active, so the window is
         // fully self-contained for controlling the run.
@@ -642,11 +658,11 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         RectTransform tabBar = CreatePanel("Tab Bar", win, PanelColor);
         Pin(tabBar, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -76f), new Vector2(0f, -40f));
 
-        analyticsStatsTabButton = CreateButton("Stats Tab", tabBar, "STATS", AccentColor, 12);
+        analyticsStatsTabButton = CreateButton("Stats Tab", tabBar, "PROCESS STATE", AccentColor, 11);
         Pin(analyticsStatsTabButton.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f));
         analyticsStatsTabButton.onClick.AddListener(() => SetAnalyticsTab(AnalyticsTab.Stats));
 
-        analyticsVisualiseTabButton = CreateButton("Visualise Tab", tabBar, "VISUALISE", HeaderColor, 12);
+        analyticsVisualiseTabButton = CreateButton("Visualise Tab", tabBar, "EXPLORE", HeaderColor, 11);
         Pin(analyticsVisualiseTabButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
         analyticsVisualiseTabButton.onClick.AddListener(() => SetAnalyticsTab(AnalyticsTab.Visualise));
 
@@ -701,9 +717,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         float designMethanol = PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance.DesignMethanolKgH : 1250f;
 
         subTabGroups[0] = BuildCorrelationSubTab(subContent, "Reactor Yield", "Reactor Yield (%)",
-            s => s.reactorYieldPercent, yieldParamButtons, yieldGraphGroups, true);
+            s => s.reactorYieldPercent, yieldParamButtons, yieldGraphGroups, true, out yieldExploreContextText);
         subTabGroups[1] = BuildCorrelationSubTab(subContent, "Efficiency", "Overall Efficiency (%)",
-            s => s.overallEfficiencyPercent, efficiencyParamButtons, efficiencyGraphGroups, false);
+            s => s.overallEfficiencyPercent, efficiencyParamButtons, efficiencyGraphGroups, false, out efficiencyExploreContextText);
         subTabGroups[2] = BuildOfatTimelineSubTab(subContent);
         subTabGroups[3] = BuildLiveSubTab(subContent, designMethanol);
 
@@ -716,7 +732,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private CanvasGroup BuildCorrelationSubTab(RectTransform parent, string kind, string yLabel,
         Func<PlantProcessSimulator.ProcessSnapshot, float> ySelector,
-        List<Button> paramButtons, List<CanvasGroup> graphGroups, bool isYield)
+        List<Button> paramButtons, List<CanvasGroup> graphGroups, bool isYield, out Text exploreContext)
     {
         GameObject panel = new GameObject(kind + " Sub Panel", typeof(RectTransform));
         RectTransform panelRect = panel.GetComponent<RectTransform>();
@@ -724,21 +740,37 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Pin(panelRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
         CanvasGroup group = AddHiddenCanvasGroup(panel);
 
+        Text changeLabel = CreateText(kind + " Change Label", panelRect, "WHAT WOULD YOU LIKE TO CHANGE?", 9, FontStyle.Bold, TextAnchor.MiddleLeft, AccentColor);
+        Pin(changeLabel.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(8f, -18f), new Vector2(-8f, -2f));
+
         RectTransform paramRow = CreatePanel(kind + " Param Row", panelRect, PanelColor);
-        Pin(paramRow, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -26f), Vector2.zero);
-        Text lbl = CreateText(kind + " Param Label", paramRow, "PARAMETER:", 9, FontStyle.Bold, TextAnchor.MiddleLeft, MutedTextColor);
-        Pin(lbl.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(8f, 0f), new Vector2(78f, 0f));
+        Pin(paramRow, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -44f), new Vector2(0f, -20f));
+
+        Text observeLabel = CreateText(kind + " Observe Label", panelRect, "WHAT WOULD YOU LIKE TO OBSERVE?", 9, FontStyle.Bold, TextAnchor.MiddleLeft, AccentColor);
+        Pin(observeLabel.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(8f, -62f), new Vector2(-8f, -46f));
+
+        RectTransform observeRow = CreatePanel(kind + " Observe Row", panelRect, PanelColor);
+        Pin(observeRow, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -88f), new Vector2(0f, -64f));
+        Button yieldButton = CreateButton(kind + " Observe Yield", observeRow, "YIELD", isYield ? AccentColor : HeaderColor, 9);
+        Pin(yieldButton.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
+        yieldButton.onClick.AddListener(() => SelectSubTab(VisualiseSubTab.Yield));
+        Button efficiencyButton = CreateButton(kind + " Observe Efficiency", observeRow, "EFFICIENCY", isYield ? HeaderColor : AccentColor, 9);
+        Pin(efficiencyButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
+        efficiencyButton.onClick.AddListener(() => SelectSubTab(VisualiseSubTab.Efficiency));
+
+        exploreContext = CreateText(kind + " Explore Context", panelRect, "", 9, FontStyle.Normal, TextAnchor.UpperLeft, MutedTextColor);
+        Pin(exploreContext.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(10f, -202f), new Vector2(-10f, -92f));
 
         RectTransform graphHost = new GameObject("Graph Host", typeof(RectTransform)).GetComponent<RectTransform>();
         graphHost.SetParent(panelRect, false);
-        Pin(graphHost, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0f, -26f));
+        Pin(graphHost, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0f, -206f));
 
-        float bw = (1f - 0.09f) / ReactorParamNames.Length;
+        float bw = 1f / ReactorParamNames.Length;
         for (int p = 0; p < ReactorParamNames.Length; p++)
         {
             int pi = p;
             Button b = CreateButton(kind + " Param " + p, paramRow, ReactorParamNames[p], p == 0 ? AccentColor : HeaderColor, 9);
-            Pin(b.GetComponent<RectTransform>(), new Vector2(0.09f + p * bw, 0f), new Vector2(0.09f + (p + 1) * bw, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
+            Pin(b.GetComponent<RectTransform>(), new Vector2(p * bw, 0f), new Vector2((p + 1) * bw, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
             if (isYield) b.onClick.AddListener(() => SelectYieldParam(pi));
             else b.onClick.AddListener(() => SelectEfficiencyParam(pi));
             paramButtons.Add(b);
@@ -799,6 +831,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         if (!SelectCorrelationParam(index, yieldParamButtons, yieldGraphGroups)) return;
         yieldParamIndex = index;
         if (currentSubTab == VisualiseSubTab.Yield) ApplyReactorLock();
+        Refresh();
     }
 
     private void SelectEfficiencyParam(int index)
@@ -806,6 +839,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         if (!SelectCorrelationParam(index, efficiencyParamButtons, efficiencyGraphGroups)) return;
         efficiencyParamIndex = index;
         if (currentSubTab == VisualiseSubTab.Efficiency) ApplyReactorLock();
+        Refresh();
     }
 
     private bool SelectCorrelationParam(int index, List<Button> buttons, List<CanvasGroup> groups)
@@ -1209,6 +1243,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
         if (analyticsSummaryText != null)
             analyticsSummaryText.text =
+                "CHANGE ONE OPERATING CONDITION AND OBSERVE HOW THE SIMULATED PROCESS RESPONDS.\n" +
                 "SIMULATED EDUCATIONAL PROCESS-STATE MODEL\n" +
                 $"Production {s.methanolProductionKgH:F0} kg/h   |   Captured CO2 {s.co2CapturedKgH:F0} kg/h\n" +
                 $"Syngas {s.syngasFeedKgH:F0} kg/h   |   Recycle {s.recycleGasKgH:F0} kg/h";
@@ -1228,15 +1263,53 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
                 (s.captureEfficiencyPercent < 80f ? "Insight: CO2 capture is limiting carbon utilization. " : "CO2 capture is operating in the preferred educational range. ") +
                 (s.h2Co2Ratio < 2.8f || s.h2Co2Ratio > 3.2f ? "Adjust the synthesis feed ratio toward 3.0. " : "Synthesis feed ratio is near its target. ") +
                 (s.storageFillPercent > 85f ? "Storage headroom is low; monitor the interlock." : "Storage headroom is adequate.");
+
+        UpdateExploreContext(yieldExploreContextText, yieldParamIndex, true, s);
+        UpdateExploreContext(efficiencyExploreContextText, efficiencyParamIndex, false, s);
+    }
+
+    private void UpdateExploreContext(Text target, int changingIndex, bool isYield,
+        PlantProcessSimulator.ProcessSnapshot state)
+    {
+        if (target == null || changingIndex < 0 || changingIndex >= ReactorParamExploreNames.Length) return;
+
+        string parameter = ReactorParamExploreNames[changingIndex];
+        string response = isYield ? "REACTOR YIELD" : "OVERALL EFFICIENCY";
+        string changingValue = FormatExploreParameter(state, changingIndex);
+        var constants = new List<string>();
+        for (int i = 0; i < ReactorParamExploreNames.Length; i++)
+        {
+            if (i != changingIndex) constants.Add($"{ReactorParamExploreNames[i]}: {FormatExploreParameter(state, i)}");
+        }
+
+        target.text =
+            $"HOW DOES {parameter.ToUpper()} AFFECT {response}?\n" +
+            $"CURRENT PROCESS STATE  Temperature {state.reactorTemperatureC:F0} °C  |  Pressure {state.reactorPressureBar:F0} bar  |  H2 / CO2 {state.h2Co2Ratio:F2}\n" +
+            $"CHANGING: {parameter}     CURRENT: {changingValue}\n" +
+            $"KEEPING OTHER CONDITIONS CONSTANT: {string.Join("  |  ", constants)}\n" +
+            "WHAT DOES THIS MEAN? This graph records how the simulated " +
+            (isYield ? "reactor yield" : "overall efficiency") +
+            $" responds when {parameter} is varied while the other operating conditions are kept constant.\n" +
+            $"● CURRENT PROCESS STATE: {changingValue}  |  " +
+            (isYield ? $"{state.reactorYieldPercent:F1}% Yield" : $"{state.overallEfficiencyPercent:F1}% Efficiency") +
+            "\nMove the selected real reactor control to create comparison points. The starting point is shown first.";
+    }
+
+    private static string FormatExploreParameter(PlantProcessSimulator.ProcessSnapshot state, int index)
+    {
+        switch (index)
+        {
+            case 0: return $"{state.reactorTemperatureC:F0} °C";
+            case 1: return $"{state.reactorPressureBar:F0} bar";
+            case 2: return state.h2Co2Ratio.ToString("F2");
+            case 3: return $"{state.ghsv:N0} 1/h";
+            case 4: return $"{state.reactorFeedFlowPercent:F0}%";
+            default: return "—";
+        }
     }
 
     private void SelectPage(DashboardPage page)
     {
-        if (analyticsWindowOpen)
-        {
-            analyticsWindowOpen = false;
-            if (analyticsWindow != null) analyticsWindow.SetActive(false);
-        }
         if (helpPanelOpen)
         {
             helpPanelOpen = false;
@@ -1253,7 +1326,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void ApplyPageVisibility()
     {
-        bool modalOpen = analyticsWindowOpen || helpPanelOpen;
+        // Analytics is a dock, so it deliberately does not suppress the underlying plant
+        // page. The information panel remains modal because it is explanatory content.
+        bool modalOpen = helpPanelOpen;
         if (processPanel != null) processPanel.SetActive(!modalOpen && currentPage == DashboardPage.Process);
         if (equipmentPanel != null) equipmentPanel.SetActive(!modalOpen && currentPage == DashboardPage.Equipment);
         if (simulationPanel != null) simulationPanel.SetActive(!modalOpen && currentPage == DashboardPage.Simulation);
