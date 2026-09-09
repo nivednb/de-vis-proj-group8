@@ -33,6 +33,48 @@ public static class GraphVisualUtils
         return new Color(0.86f, 0.82f, 0.95f, 1f);
     }
 
+    /// <summary>
+    /// Engineering unit for a control slider, keyed by the exact label
+    /// InteractiveModulePanelRuntime.CreateControls gives it. Returns "" for dimensionless
+    /// ratios. Used so every value shown in a graph tooltip / marker carries its unit.
+    /// </summary>
+    public static string GetParameterUnit(string parameterLabel)
+    {
+        switch (parameterLabel)
+        {
+            case "Temp":
+            case "Regen temp":
+            case "Cooling temp":
+            case "Sep. temp":
+            case "Reboiler temp":
+                return "°C";
+            case "Pressure":
+            case "Outlet press.":
+                return "bar";
+            case "GHSV":
+                return "1/h";
+            case "Plant load":
+            case "Power":
+            case "Water feed":
+            case "Amine flow":
+            case "Flue gas":
+            case "Steam flow":
+            case "Cooling flow":
+            case "Recycle ratio":
+            case "Feed flow":
+                return "%";
+            default:
+                return ""; // H2/CO2, Comp. ratio, Reflux ratio — dimensionless
+        }
+    }
+
+    /// <summary>Formats a value with its unit ("82.3 bar"), or just the number when the unit
+    /// is empty ("3.0").</summary>
+    public static string FormatValue(float value, string unit, string numberFormat = "0.##")
+    {
+        return string.IsNullOrEmpty(unit) ? value.ToString(numberFormat) : $"{value.ToString(numberFormat)} {unit}";
+    }
+
     private static Sprite cachedCircleSprite;
 
     public static Sprite GetCircleSprite()

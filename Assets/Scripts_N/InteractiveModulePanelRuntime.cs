@@ -33,10 +33,15 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         public Slider Slider;
         public float DefaultValue;
         public Text ValueText;
+        public Text LabelText;
         public int Decimals;
         public string Unit;
         public SliderCommitTracker Tracker;
     }
+
+    // Exact module title + slider labels the OFAT timeline uses to lock the reactor to a
+    // single varying parameter. Must match AddModule / CreateControls below.
+    private const string ReactorModuleTitle = "Methanol Reactor";
 
     /// <summary>
     /// Fires PlantProcessSimulator.CommitManualChange exactly once per interaction — on
@@ -349,7 +354,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
                 CreateSlider(parent, "Outlet press.", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -168f, moduleTitle);
                 break;
             case "reactor":
-                CreateSlider(parent, "Temp", 200f, 300f, 250f, 0, " C", v => Simulator()?.SetReactorTemperature(v), -126f, moduleTitle);
+                CreateSlider(parent, "Temp", 180f, 300f, 250f, 0, " C", v => Simulator()?.SetReactorTemperature(v), -126f, moduleTitle);
                 CreateSlider(parent, "Pressure", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -158f, moduleTitle);
                 CreateSlider(parent, "H2/CO2", 1f, 6f, 3f, 1, "", v => Simulator()?.SetH2Co2Ratio(v), -190f, moduleTitle);
                 CreateSlider(parent, "GHSV", 1000f, 20000f, 8000f, 0, " h-1", v => Simulator()?.SetGHSV(v), -222f, moduleTitle);
@@ -432,7 +437,100 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         tracker.Parameter = label;
         tracker.LastCommittedValue = value;
 
-        registeredSliders.Add(new RegisteredSlider { Slider = slider, DefaultValue = value, ValueText = valueText, Decimals = decimals, Unit = unit, Tracker = tracker });
+        registeredSliders.Add(new RegisteredSlider { Slider = slider, DefaultValue = value, ValueText = valueText, LabelText = labelText, Decimals = decimals, Unit = unit, Tracker = tracker });
+    }
+
+    /// <summary>
+    /// Called by the OFAT timeline. While one reactor parameter is the active swept variable
+    /// its slider stays usable and every other reactor slider is locked (non-interactive and
+    /// dimmed) so the plant holds those constant. Pass null to release the lock.
+    /// </summary>
+    public void SetReactorVariableLock(string activeParameter)
+    {
+        foreach (RegisteredSlider entry in registeredSliders)
+        {
+            if (entry.Slider == null || entry.Tracker == null) continue;
+            if (!string.Equals(entry.Tracker.Module, ReactorModuleTitle, StringComparison.OrdinalIgnoreCase)) continue;
+
+            bool locked = activeParameter != null &&
+                !string.Equals(entry.Tracker.Parameter, activeParameter, StringComparison.OrdinalIgnoreCase);
+            entry.Slider.interactable = !locked;
+            SetSliderDimmed(entry, locked);
+        }
+    }
+
+    public void ClearReactorVariableLock() => SetReactorVariableLock(null);
+
+    private static void SetSliderDimmed(RegisteredSlider entry, bool dim)
+    {
+        SetGraphicAlpha(entry.Slider.fillRect, dim ? 0.3f : 1f);
+        SetGraphicAlpha(entry.Slider.handleRect, dim ? 0.35f : 1f);
+        if (entry.ValueText != null) SetTextAlpha(entry.ValueText, dim ? 0.4f : 1f);
+        if (entry.LabelText != null) SetTextAlpha(entry.LabelText, dim ? 0.4f : 0.95f);
+    }
+
+    private static void SetGraphicAlpha(RectTransform target, float alpha)
+    {
+        if (target == null) return;
+        Image image = target.GetComponent<Image>();
+        if (image == null) return;
+        Color c = image.color;
+        c.a = alpha;
+        image.color = c;
+    }
+
+    private static void SetTextAlpha(Text text, float alpha)
+    {
+        Color c = text.color;
+        c.a = alpha;
+        text.color = c;
+    }
+
+    /// <summary>
+    /// Drives every module slider to the setpoint that maximises overall plant efficiency in
+    /// the educational model: reactor at the yield peak (255 C), full pressure and recycle,
+    /// stoichiometric feed ratio, minimum GHSV (max residence), and the whole separation
+    /// train at maximum recovery. Moving the sliders re-runs the normal
+    /// onValueChanged -> Simulator().SetXxx cascade, so KPIs / visuals follow.
+    /// </summary>
+    public void ApplyMaximumEfficiencyPreset()
+    {
+        ClearReactorVariableLock();
+
+        SetSliderValue("Electrolyzer", "Plant load", 100f);
+        SetSliderValue("Electrolyzer", "Power", 100f);
+        SetSliderValue("Electrolyzer", "Water feed", 100f);
+        SetSliderValue("CO2 Absorber", "Amine flow", 100f);
+        SetSliderValue("CO2 Absorber", "Flue gas", 100f);
+        SetSliderValue("Desorber / Regenerator", "Steam flow", 100f);
+        SetSliderValue("Desorber / Regenerator", "Regen temp", 122f);
+        SetSliderValue("Compressor", "Comp. ratio", 3f);
+        SetSliderValue("Compressor", "Outlet press.", 100f);
+        SetSliderValue("Methanol Reactor", "Temp", 255f);
+        SetSliderValue("Methanol Reactor", "Pressure", 100f);
+        SetSliderValue("Methanol Reactor", "H2/CO2", 3f);
+        SetSliderValue("Methanol Reactor", "GHSV", 1000f);
+        SetSliderValue("Methanol Reactor", "Feed flow", 100f);
+        SetSliderValue("Condenser", "Cooling flow", 100f);
+        SetSliderValue("Condenser", "Cooling temp", 5f);
+        SetSliderValue("Separator + Recycle", "Recycle ratio", 100f);
+        SetSliderValue("Separator + Recycle", "Sep. temp", 34f);
+        SetSliderValue("Distillation Column", "Reflux ratio", 5f);
+        SetSliderValue("Distillation Column", "Reboiler temp", 115f);
+    }
+
+    private void SetSliderValue(string module, string parameter, float value)
+    {
+        foreach (RegisteredSlider entry in registeredSliders)
+        {
+            if (entry.Slider == null || entry.Tracker == null) continue;
+            if (!string.Equals(entry.Tracker.Module, module, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(entry.Tracker.Parameter, parameter, StringComparison.OrdinalIgnoreCase)) continue;
+            float clamped = Mathf.Clamp(value, entry.Slider.minValue, entry.Slider.maxValue);
+            entry.Slider.value = clamped;
+            entry.Tracker.LastCommittedValue = clamped;
+            return;
+        }
     }
 
     /// <summary>
@@ -444,6 +542,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     /// </summary>
     public void ResetControlVisuals()
     {
+        ClearReactorVariableLock();
         foreach (RegisteredSlider entry in registeredSliders)
         {
             if (entry.Slider == null) continue;

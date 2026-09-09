@@ -65,6 +65,38 @@ public class PlantProcessSimulator : MonoBehaviour
         public bool storageInterlockActive;
     }
 
+    /// <summary>
+    /// The full set of control inputs consumed by <see cref="Simulate"/>. Bundling every
+    /// manual value into one struct lets the OFAT sweep take the current operating point,
+    /// perturb exactly one entry across a range, and re-evaluate the process with everything
+    /// else held constant.
+    /// </summary>
+    [Serializable]
+    public struct ProcessInputs
+    {
+        public float timeline;
+        public bool storageInterlockLatched;
+        public float storedMethanolKg;
+        public float electrolyzerPower;
+        public float waterFeed;
+        public float flueGasFlow;
+        public float amineFlow;
+        public float regeneratorSteam;
+        public float regenTemp;
+        public float compressionRatio;
+        public float temperature;
+        public float pressure;
+        public float ratio;
+        public float ghsv;
+        public float reactorFeedFlow;
+        public float coolingWaterFlow;
+        public float coolingWaterTemperature;
+        public float separatorTemperature;
+        public float recycleRatio;
+        public float refluxRatio;
+        public float distillationReboilerTemp;
+    }
+
     [Header("Design Capacity")]
     [SerializeField] private float designH2InputKgH = 215f;
     [SerializeField] private float designCO2InputKgH = 1510f;
@@ -138,6 +170,10 @@ public class PlantProcessSimulator : MonoBehaviour
     public RecycleMassBalanceEngine MassBalance => recycleMassBalance;
     public event Action<ProcessSnapshot> SnapshotUpdated;
 
+    /// <summary>The current operating point as a <see cref="ProcessInputs"/> — the baseline
+    /// the OFAT sweep holds constant while it varies one axis.</summary>
+    public ProcessInputs CurrentInputs => BuildCurrentInputs();
+
     public readonly struct ManualChangeInfo
     {
         public readonly string Module;
@@ -181,6 +217,24 @@ public class PlantProcessSimulator : MonoBehaviour
     // the plant's known maximums instead of re-deriving/duplicating these constants.
     public float DesignMethanolKgH => designMethanolKgH;
     public float StorageCapacityKg => storageCapacityKg;
+
+    /// <summary>
+    /// Real-world seconds until the methanol tank fills at the current production rate
+    /// (accounts for the accelerated storage clock). PositiveInfinity when production has
+    /// effectively stopped; 0 when the tank is already full.
+    /// </summary>
+    public float SecondsUntilStorageFull
+    {
+        get
+        {
+            float remaining = storageCapacityKg - current.storedMethanolKg;
+            if (remaining <= 0f) return 0f;
+            float rate = current.methanolProductionKgH;
+            if (rate < 1f || storageSimulationHoursPerSecond <= 0f || !accumulateStorageInPlayMode)
+                return float.PositiveInfinity;
+            return remaining / rate / storageSimulationHoursPerSecond;
+        }
+    }
 
     public bool IsRunning { get; private set; } = true;
 
@@ -385,7 +439,7 @@ public class PlantProcessSimulator : MonoBehaviour
     public void SetReactorTemperature(float value)
     {
         manualTemperatureEnabled = true;
-        manualTemperature = Mathf.Clamp(value, 200f, 300f);
+        manualTemperature = Mathf.Clamp(value, 180f, 300f);
         if (temperatureSlider != null) temperatureSlider.SetValueWithoutNotify(manualTemperature);
         ApplyReactorControlChange();
     }
@@ -529,32 +583,70 @@ public class PlantProcessSimulator : MonoBehaviour
 
     private ProcessSnapshot CalculateSnapshot()
     {
-        float timeline = manualTimelineEnabled ? manualTimeline : GetSliderValue(timelineSlider, 100f);
-        float plantRamp = storageInterlockLatched ? 0f : CalculatePlantRamp(timeline);
+        return Simulate(BuildCurrentInputs());
+    }
 
-        float temperature = manualTemperatureEnabled ? manualTemperature : GetSliderValue(temperatureSlider, 250f);
-        float pressure = manualPressureEnabled ? manualPressure : GetSliderValue(pressureSlider, 70f);
-        float ratio = manualRatioEnabled ? manualRatio : GetSliderValue(ratioSlider, 3f);
-        float ghsv = manualGhsvEnabled ? manualGhsv : GetSliderValue(ghsvSlider, 8000f);
-        float amineFlow = manualAmineFlowEnabled ? manualAmineFlow : GetSliderValue(amineFlowSlider, 65f);
-        float regenTemp = manualRegenTempEnabled ? manualRegenTemp : GetSliderValue(regenTempSlider, 105f);
+    private ProcessInputs BuildCurrentInputs()
+    {
+        return new ProcessInputs
+        {
+            timeline = manualTimelineEnabled ? manualTimeline : GetSliderValue(timelineSlider, 100f),
+            storageInterlockLatched = storageInterlockLatched,
+            storedMethanolKg = current.storedMethanolKg,
+            electrolyzerPower = manualElectrolyzerPower,
+            waterFeed = manualWaterFeed,
+            flueGasFlow = manualFlueGasFlow,
+            regeneratorSteam = manualRegeneratorSteam,
+            compressionRatio = manualCompressionRatio,
+            reactorFeedFlow = manualReactorFeedFlow,
+            coolingWaterFlow = manualCoolingWaterFlow,
+            coolingWaterTemperature = manualCoolingWaterTemperature,
+            separatorTemperature = manualSeparatorTemperature,
+            recycleRatio = manualRecycleRatio,
+            refluxRatio = manualRefluxRatio,
+            distillationReboilerTemp = manualDistillationReboilerTemp,
+            temperature = manualTemperatureEnabled ? manualTemperature : GetSliderValue(temperatureSlider, 250f),
+            pressure = manualPressureEnabled ? manualPressure : GetSliderValue(pressureSlider, 70f),
+            ratio = manualRatioEnabled ? manualRatio : GetSliderValue(ratioSlider, 3f),
+            ghsv = manualGhsvEnabled ? manualGhsv : GetSliderValue(ghsvSlider, 8000f),
+            amineFlow = manualAmineFlowEnabled ? manualAmineFlow : GetSliderValue(amineFlowSlider, 65f),
+            regenTemp = manualRegenTempEnabled ? manualRegenTemp : GetSliderValue(regenTempSlider, 105f),
+        };
+    }
 
-        float powerFactor = Mathf.Clamp01(manualElectrolyzerPower / 100f);
-        float waterFactor = Mathf.Clamp01(manualWaterFeed / 100f);
+    /// <summary>
+    /// Pure process math: given a complete set of control inputs, returns the resulting
+    /// snapshot. No side effects and reads no mutable simulator state, so the OFAT sweep can
+    /// call it many times per frame with one input varied and everything else held constant.
+    /// </summary>
+    public ProcessSnapshot Simulate(ProcessInputs i)
+    {
+        float timeline = i.timeline;
+        float plantRamp = i.storageInterlockLatched ? 0f : CalculatePlantRamp(timeline);
+
+        float temperature = i.temperature;
+        float pressure = i.pressure;
+        float ratio = i.ratio;
+        float ghsv = i.ghsv;
+        float amineFlow = i.amineFlow;
+        float regenTemp = i.regenTemp;
+
+        float powerFactor = Mathf.Clamp01(i.electrolyzerPower / 100f);
+        float waterFactor = Mathf.Clamp01(i.waterFeed / 100f);
         float electrolyzerFactor = Mathf.Min(powerFactor, Mathf.Lerp(0.15f, 1.1f, waterFactor));
         float h2Input = designH2InputKgH * plantRamp * electrolyzerFactor;
         float waterFeed = designWaterFeedKgH * plantRamp * waterFactor;
         float oxygen = h2Input * 8f;
 
-        float flueGasFactor = Mathf.Clamp01(manualFlueGasFlow / 100f);
+        float flueGasFactor = Mathf.Clamp01(i.flueGasFlow / 100f);
         float amineFactor = Mathf.Pow(Mathf.Clamp01(amineFlow / 100f), 0.55f);
         float regenTempFactor = Mathf.InverseLerp(82f, 118f, regenTemp);
-        float steamFactor = Mathf.Pow(Mathf.Clamp01(manualRegeneratorSteam / 100f), 0.45f);
+        float steamFactor = Mathf.Pow(Mathf.Clamp01(i.regeneratorSteam / 100f), 0.45f);
         float captureEfficiency = Mathf.Clamp01(0.18f + 0.46f * amineFactor + 0.22f * regenTempFactor + 0.14f * steamFactor);
         float co2Input = designCO2InputKgH * plantRamp * flueGasFactor;
         float co2Captured = co2Input * captureEfficiency;
 
-        float reactorFeedFactor = Mathf.Clamp01(manualReactorFeedFlow / 100f);
+        float reactorFeedFactor = Mathf.Clamp01(i.reactorFeedFlow / 100f);
         float syngasFeed = (h2Input + co2Captured) * reactorFeedFactor;
 
         float singlePassConversion = RecycleMassBalanceEngine.CalculateSinglePassConversion(
@@ -574,12 +666,12 @@ public class PlantProcessSimulator : MonoBehaviour
             h2ToReactor * (32.04186f / (3f * 2.01588f)),
             co2ToReactor * (32.04186f / 44.0095f));
 
-        float coolingFactor = Mathf.Clamp01((manualCoolingWaterFlow / 100f) * Mathf.InverseLerp(45f, 8f, manualCoolingWaterTemperature));
+        float coolingFactor = Mathf.Clamp01((i.coolingWaterFlow / 100f) * Mathf.InverseLerp(45f, 8f, i.coolingWaterTemperature));
         float condenserRecovery = Mathf.Lerp(0.55f, 0.98f, coolingFactor);
-        float separatorFactor = 1f - Mathf.Clamp01(Mathf.Abs(manualSeparatorTemperature - 34f) / 35f) * 0.16f;
-        float distillationFactor = Mathf.Clamp01(0.72f + 0.11f * Mathf.InverseLerp(0.5f, 5f, manualRefluxRatio) + 0.17f * Mathf.InverseLerp(76f, 105f, manualDistillationReboilerTemp));
-        float methanolPurity = Mathf.Clamp(90f + 7.2f * Mathf.InverseLerp(0.5f, 5f, manualRefluxRatio) + 2.4f * Mathf.InverseLerp(78f, 105f, manualDistillationReboilerTemp), 88f, 99.85f);
-        float distillationEnergy = Mathf.Clamp(18f + manualRefluxRatio * 12f + Mathf.InverseLerp(70f, 115f, manualDistillationReboilerTemp) * 36f, 0f, 100f);
+        float separatorFactor = 1f - Mathf.Clamp01(Mathf.Abs(i.separatorTemperature - 34f) / 35f) * 0.16f;
+        float distillationFactor = Mathf.Clamp01(0.72f + 0.11f * Mathf.InverseLerp(0.5f, 5f, i.refluxRatio) + 0.17f * Mathf.InverseLerp(76f, 105f, i.distillationReboilerTemp));
+        float methanolPurity = Mathf.Clamp(90f + 7.2f * Mathf.InverseLerp(0.5f, 5f, i.refluxRatio) + 2.4f * Mathf.InverseLerp(78f, 105f, i.distillationReboilerTemp), 88f, 99.85f);
+        float distillationEnergy = Mathf.Clamp(18f + i.refluxRatio * 12f + Mathf.InverseLerp(70f, 115f, i.distillationReboilerTemp) * 36f, 0f, 100f);
 
         float reactorMethanol = recycleMassBalance.converged
             ? recycleMassBalance.methanolProductKgHr
@@ -592,40 +684,40 @@ public class PlantProcessSimulator : MonoBehaviour
         {
             timelinePercent = timeline,
             plantLoadPercent = plantRamp * 100f,
-            electrolyzerPowerPercent = manualElectrolyzerPower,
-            waterFeedPercent = manualWaterFeed,
+            electrolyzerPowerPercent = i.electrolyzerPower,
+            waterFeedPercent = i.waterFeed,
             waterFeedKgH = waterFeed,
             h2InputKgH = h2Input,
             oxygenByproductKgH = oxygen,
-            flueGasFlowPercent = manualFlueGasFlow,
+            flueGasFlowPercent = i.flueGasFlow,
             amineFlowPercent = amineFlow,
-            regeneratorSteamPercent = manualRegeneratorSteam,
+            regeneratorSteamPercent = i.regeneratorSteam,
             regeneratorTemperatureC = regenTemp,
             co2InputKgH = co2Input,
             co2CapturedKgH = co2Captured,
             captureEfficiencyPercent = captureEfficiency * 100f,
-            compressionRatio = manualCompressionRatio,
-            reactorFeedFlowPercent = manualReactorFeedFlow,
+            compressionRatio = i.compressionRatio,
+            reactorFeedFlowPercent = i.reactorFeedFlow,
             syngasFeedKgH = syngasFeed,
             reactorYieldPercent = singlePassConversion * 100f,
             reactorTemperatureC = temperature,
             reactorPressureBar = pressure,
             h2Co2Ratio = ratio,
             ghsv = ghsv,
-            coolingWaterFlowPercent = manualCoolingWaterFlow,
-            coolingWaterTemperatureC = manualCoolingWaterTemperature,
+            coolingWaterFlowPercent = i.coolingWaterFlow,
+            coolingWaterTemperatureC = i.coolingWaterTemperature,
             condenserRecoveryPercent = condenserRecovery * 100f,
-            separatorTemperatureC = manualSeparatorTemperature,
-            recycleRatioPercent = manualRecycleRatio,
+            separatorTemperatureC = i.separatorTemperature,
+            recycleRatioPercent = i.recycleRatio,
             recycleGasKgH = recycle,
-            refluxRatio = manualRefluxRatio,
-            distillationReboilerTemperatureC = manualDistillationReboilerTemp,
+            refluxRatio = i.refluxRatio,
+            distillationReboilerTemperatureC = i.distillationReboilerTemp,
             methanolPurityPercent = methanolPurity,
             distillationEnergyPercent = distillationEnergy,
             methanolProductionKgH = methanol,
-            storedMethanolKg = current.storedMethanolKg,
+            storedMethanolKg = i.storedMethanolKg,
             overallEfficiencyPercent = efficiency,
-            storageInterlockActive = storageInterlockLatched
+            storageInterlockActive = i.storageInterlockLatched
         };
 
         snapshot.storageFillPercent = StorageFill(snapshot.storedMethanolKg);
