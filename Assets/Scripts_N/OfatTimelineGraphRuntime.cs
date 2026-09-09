@@ -41,6 +41,7 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     private struct Sample { public float T; public float Y; public Variable Var; public float VarValue; }
     private struct Epoch { public float T; public Variable Var; public float VarValue; }
     private struct ChangePoint { public float T; public float Y; public string Module; public string Parameter; public float From; public float To; }
+    private struct SweepPoint { public float X; public float YieldPercent; }
 
     private static readonly Dictionary<Variable, VarMeta> Vars = new Dictionary<Variable, VarMeta>
     {
@@ -80,6 +81,18 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     private readonly List<Sample> samples = new List<Sample>();
     private readonly List<Epoch> epochs = new List<Epoch>();
     private readonly List<ChangePoint> changePoints = new List<ChangePoint>();
+    private readonly List<SweepPoint> temperatureSweepPoints = new List<SweepPoint>();
+    private readonly List<SweepPoint> pressureSweepPoints = new List<SweepPoint>();
+    private readonly List<SweepPoint> ratioSweepPoints = new List<SweepPoint>();
+    private readonly List<SweepPoint> ghsvSweepPoints = new List<SweepPoint>();
+    private readonly List<SweepPoint> feedSweepPoints = new List<SweepPoint>();
+    private bool showingTemperatureSweep;
+    private bool showingPressureSweep;
+    private bool showingRatioSweep;
+    private bool showingGhsvSweep;
+    private bool showingFeedSweep;
+    private float sweepCurrentTemperature;
+    private float sweepCurrentYield;
 
     private float clock;
     private float nextSampleTime;
@@ -100,6 +113,7 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     private Text contextText;
     private Text pageLabel;
     private Text yAxisNameLabel;
+    private Text xAxisNameLabel;
     private Text yMinLabel;
     private Text yMaxLabel;
     private Text xMinLabel;
@@ -178,8 +192,8 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         pointsLayer.SetParent(plotArea, false);
         Stretch(pointsLayer);
 
-        Text xAxisName = MakeText("X Axis Name", root, "X:  Time (mm:ss, one page = 1 min)", 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
-        StretchWithOffset(xAxisName.rectTransform, Vector2.zero, Vector2.one, new Vector2(62f, 16f), new Vector2(-16f, 32f));
+        xAxisNameLabel = MakeText("X Axis Name", root, "X:  Time (mm:ss, one page = 1 min)", 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
+        StretchWithOffset(xAxisNameLabel.rectTransform, Vector2.zero, Vector2.one, new Vector2(62f, 16f), new Vector2(-16f, 32f));
 
         yAxisNameLabel = MakeText("Y Axis Name", root, "", 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
         yAxisNameLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -358,8 +372,88 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
 
     private void SetVariable(Variable v)
     {
-        if (v == currentVar) return;
+        if (v == currentVar)
+        {
+            if (v == Variable.Temperature && !showingTemperatureSweep)
+            {
+                showingTemperatureSweep = true;
+                ClearAutomaticSweepModes();
+                showingTemperatureSweep = true;
+                currentResp = Response.Yield;
+                GenerateTemperatureYieldSweep();
+                RecolorRespButtons();
+                dirty = true;
+            }
+            else if (v == Variable.Pressure && !showingPressureSweep)
+            {
+                ClearAutomaticSweepModes();
+                showingPressureSweep = true;
+                currentResp = Response.Yield;
+                GeneratePressureYieldSweep();
+                RecolorRespButtons();
+                dirty = true;
+            }
+            else if (v == Variable.H2CO2 && !showingRatioSweep)
+            {
+                ClearAutomaticSweepModes();
+                showingRatioSweep = true;
+                currentResp = Response.Yield;
+                GenerateRatioYieldSweep();
+                RecolorRespButtons();
+                dirty = true;
+            }
+            else if (v == Variable.GHSV && !showingGhsvSweep)
+            {
+                ClearAutomaticSweepModes();
+                showingGhsvSweep = true;
+                currentResp = Response.Yield;
+                GenerateGhsvYieldSweep();
+                RecolorRespButtons();
+                dirty = true;
+            }
+            else if (v == Variable.FeedFlow && !showingFeedSweep)
+            {
+                ClearAutomaticSweepModes();
+                showingFeedSweep = true;
+                currentResp = Response.Yield;
+                GenerateFeedYieldSweep();
+                RecolorRespButtons();
+                dirty = true;
+            }
+            return;
+        }
         currentVar = v;
+        ClearAutomaticSweepModes();
+        showingTemperatureSweep = v == Variable.Temperature;
+        showingPressureSweep = v == Variable.Pressure;
+        showingRatioSweep = v == Variable.H2CO2;
+        showingGhsvSweep = v == Variable.GHSV;
+        showingFeedSweep = v == Variable.FeedFlow;
+        if (showingTemperatureSweep)
+        {
+            currentResp = Response.Yield;
+            GenerateTemperatureYieldSweep();
+        }
+        else if (showingPressureSweep)
+        {
+            currentResp = Response.Yield;
+            GeneratePressureYieldSweep();
+        }
+        else if (showingRatioSweep)
+        {
+            currentResp = Response.Yield;
+            GenerateRatioYieldSweep();
+        }
+        else if (showingGhsvSweep)
+        {
+            currentResp = Response.Yield;
+            GenerateGhsvYieldSweep();
+        }
+        else if (showingFeedSweep)
+        {
+            currentResp = Response.Yield;
+            GenerateFeedYieldSweep();
+        }
         epochs.Add(new Epoch { T = clock, Var = v, VarValue = ReadVarValue(v, PlantProcessSimulator.Instance) });
         if (epochs.Count > MaxRecords) epochs.RemoveAt(0);
         ApplyLock();
@@ -372,9 +466,103 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     {
         if (r == currentResp) return;
         currentResp = r;
+        ClearAutomaticSweepModes();
         RecolorRespButtons();
         UpdateContext();
         dirty = true;
+    }
+
+    /// <summary>Captures one live baseline, then evaluates independent copies with only
+    /// temperature changed. Simulate is pure, so neither plant controls nor recycle state
+    /// can be altered by this educational OFAT calculation.</summary>
+    private void GenerateTemperatureYieldSweep()
+    {
+        temperatureSweepPoints.Clear();
+        PlantProcessSimulator sim = PlantProcessSimulator.Instance;
+        if (sim == null) return;
+
+        PlantProcessSimulator.ProcessInputs baseline = sim.CurrentInputs;
+        sweepCurrentTemperature = baseline.temperature;
+        sweepCurrentYield = sim.Current.reactorYieldPercent;
+        for (int temperature = 180; temperature <= 300; temperature += 10)
+        {
+            PlantProcessSimulator.ProcessInputs hypothetical = baseline;
+            hypothetical.temperature = temperature;
+            PlantProcessSimulator.ProcessSnapshot result = sim.Simulate(hypothetical);
+            temperatureSweepPoints.Add(new SweepPoint
+            {
+                X = temperature,
+                YieldPercent = result.reactorYieldPercent
+            });
+        }
+    }
+
+    private void GeneratePressureYieldSweep()
+    {
+        pressureSweepPoints.Clear();
+        PlantProcessSimulator sim = PlantProcessSimulator.Instance;
+        if (sim == null) return;
+
+        PlantProcessSimulator.ProcessInputs baseline = sim.CurrentInputs;
+        sweepCurrentTemperature = baseline.pressure;
+        sweepCurrentYield = sim.Current.reactorYieldPercent;
+        for (int pressure = 40; pressure <= 100; pressure += 5)
+        {
+            PlantProcessSimulator.ProcessInputs hypothetical = baseline;
+            hypothetical.pressure = pressure;
+            PlantProcessSimulator.ProcessSnapshot result = sim.Simulate(hypothetical);
+            pressureSweepPoints.Add(new SweepPoint
+            {
+                X = pressure,
+                YieldPercent = result.reactorYieldPercent
+            });
+        }
+    }
+
+    private void GenerateRatioYieldSweep()
+    {
+        GenerateYieldSweep(ratioSweepPoints, 1f, 6f, 12, (ref PlantProcessSimulator.ProcessInputs inputs, float value) => inputs.ratio = value, out sweepCurrentTemperature);
+    }
+
+    private void GenerateGhsvYieldSweep()
+    {
+        GenerateYieldSweep(ghsvSweepPoints, 1000f, 20000f, 12, (ref PlantProcessSimulator.ProcessInputs inputs, float value) => inputs.ghsv = value, out sweepCurrentTemperature);
+    }
+
+    private void GenerateFeedYieldSweep()
+    {
+        GenerateYieldSweep(feedSweepPoints, 20f, 130f, 12, (ref PlantProcessSimulator.ProcessInputs inputs, float value) => inputs.reactorFeedFlow = value, out sweepCurrentTemperature);
+    }
+
+    private delegate void SetSweepInput(ref PlantProcessSimulator.ProcessInputs inputs, float value);
+
+    private void GenerateYieldSweep(List<SweepPoint> destination, float min, float max, int intervals,
+        SetSweepInput setValue, out float currentValue)
+    {
+        destination.Clear();
+        PlantProcessSimulator sim = PlantProcessSimulator.Instance;
+        currentValue = 0f;
+        if (sim == null) return;
+        PlantProcessSimulator.ProcessInputs baseline = sim.CurrentInputs;
+        for (int index = 0; index <= intervals; index++)
+        {
+            float value = Mathf.Lerp(min, max, index / (float)intervals);
+            PlantProcessSimulator.ProcessInputs hypothetical = baseline;
+            setValue(ref hypothetical, value);
+            PlantProcessSimulator.ProcessSnapshot result = sim.Simulate(hypothetical);
+            destination.Add(new SweepPoint { X = value, YieldPercent = result.reactorYieldPercent });
+        }
+        sweepCurrentYield = sim.Current.reactorYieldPercent;
+        currentValue = ReadVarValue(currentVar, sim);
+    }
+
+    private void ClearAutomaticSweepModes()
+    {
+        showingTemperatureSweep = false;
+        showingPressureSweep = false;
+        showingRatioSweep = false;
+        showingGhsvSweep = false;
+        showingFeedSweep = false;
     }
 
     private void SetMode(ViewMode m)
@@ -451,6 +639,8 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         pageIndex = 0;
         followLive = true;
         currentVar = Variable.Free;
+        showingTemperatureSweep = false;
+        showingPressureSweep = false;
         epochs.Add(new Epoch { T = 0f, Var = currentVar, VarValue = 0f });
         ApplyLock();
         RecolorVarButtons();
@@ -528,6 +718,32 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
 
         for (int i = pointsLayer.childCount - 1; i >= 0; i--) Destroy(pointsLayer.GetChild(i).gameObject);
         for (int i = epochLayer.childCount - 1; i >= 0; i--) Destroy(epochLayer.GetChild(i).gameObject);
+
+        if (showingTemperatureSweep)
+        {
+            RebuildAutomaticYieldSweep(temperatureSweepPoints, 180f, 300f, "Temperature", "°C", "temperature");
+            return;
+        }
+        if (showingPressureSweep)
+        {
+            RebuildAutomaticYieldSweep(pressureSweepPoints, 40f, 100f, "Pressure", "bar", "pressure");
+            return;
+        }
+        if (showingRatioSweep)
+        {
+            RebuildAutomaticYieldSweep(ratioSweepPoints, 1f, 6f, "H2/CO2 Ratio", "", "H2/CO2 ratio");
+            return;
+        }
+        if (showingGhsvSweep)
+        {
+            RebuildAutomaticYieldSweep(ghsvSweepPoints, 1000f, 20000f, "GHSV", "1/h", "GHSV");
+            return;
+        }
+        if (showingFeedSweep)
+        {
+            RebuildAutomaticYieldSweep(feedSweepPoints, 20f, 130f, "Feed Flow", "%", "feed");
+            return;
+        }
 
         RespMeta rm = responses[(int)currentResp];
         int latest = LatestPage;
@@ -636,8 +852,86 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         yMaxLabel.text = FormatNum(viewYMax);
         yMinLabel.text = "0";
         yAxisNameLabel.text = $"Y:  {rm.Label} ({rm.Unit})";
+        if (xAxisNameLabel != null) xAxisNameLabel.text = "X:  Time (mm:ss, one page = 1 min)";
         if (moduleLegend != null) moduleLegend.SetActive(currentMode == ViewMode.Points);
+        if (prevPageButton != null) prevPageButton.interactable = true;
+        if (nextPageButton != null) nextPageButton.interactable = true;
         if (liveButton != null) liveButton.GetComponent<Image>().color = followLive ? BtnActive : BtnIdle;
+    }
+
+    private void RebuildAutomaticYieldSweep(List<SweepPoint> points, float xMin, float xMax,
+        string parameter, string unit, string lowerParameter)
+    {
+        for (int i = 0; i < linePool.Count; i++) linePool[i].ClearPoints();
+        if (points.Count == 0) return;
+
+        Rect r = plotArea.rect;
+        float dataMax = 0f;
+        for (int i = 0; i < points.Count; i++)
+            dataMax = Mathf.Max(dataMax, points[i].YieldPercent);
+        viewYMax = Mathf.Clamp(dataMax * 1.15f, 20f, 100f);
+
+        segBuffer.Clear();
+        for (int i = 0; i < points.Count; i++)
+        {
+            SweepPoint point = points[i];
+            segBuffer.Add(new Vector2(
+                r.xMin + Mathf.InverseLerp(xMin, xMax, point.X) * r.width,
+                MapY(point.YieldPercent, r)));
+        }
+        if (segBuffer.Count >= 2)
+        {
+            UIGraphLine line = GetPoolLine(0);
+            line.color = Vars[Variable.Temperature].Color;
+            line.SetPoints(segBuffer);
+        }
+
+        for (int i = 0; i < points.Count; i++)
+        {
+            SweepPoint point = points[i];
+            RectTransform dot = MakePanel(parameter + " Sweep Point", pointsLayer, Vars[currentVar].Color);
+            Image image = dot.GetComponent<Image>();
+            image.sprite = GraphVisualUtils.GetCircleSprite();
+            image.type = Image.Type.Simple;
+            image.raycastTarget = false;
+            dot.anchorMin = dot.anchorMax = new Vector2(0.5f, 0.5f);
+            dot.pivot = new Vector2(0.5f, 0.5f);
+            dot.sizeDelta = new Vector2(6f, 6f);
+            dot.anchoredPosition = segBuffer[i];
+        }
+
+        RectTransform currentDot = MakePanel("Current Temperature Point", pointsLayer, Color.white);
+        Image currentImage = currentDot.GetComponent<Image>();
+        currentImage.sprite = GraphVisualUtils.GetCircleSprite();
+        currentImage.type = Image.Type.Simple;
+        currentImage.raycastTarget = false;
+        currentDot.anchorMin = currentDot.anchorMax = new Vector2(0.5f, 0.5f);
+        currentDot.pivot = new Vector2(0.5f, 0.5f);
+        currentDot.sizeDelta = new Vector2(11f, 11f);
+        currentDot.anchoredPosition = new Vector2(
+            r.xMin + Mathf.InverseLerp(xMin, xMax, sweepCurrentTemperature) * r.width,
+            MapY(sweepCurrentYield, r));
+        Outline highlight = currentDot.gameObject.AddComponent<Outline>();
+        highlight.effectColor = Vars[currentVar].Color;
+        highlight.effectDistance = new Vector2(1.5f, -1.5f);
+
+        titleText.text = $"How does {lowerParameter} affect reactor yield?";
+        contextText.text = currentVar == Variable.FeedFlow
+            ? "Feed flow is varied while other operating conditions are held constant. In the current educational model, feed flow primarily changes throughput rather than calculated reactor yield, so the yield response remains approximately constant."
+            : $"{parameter} vs Reactor Yield   |   Only {lowerParameter} changes; other operating conditions remain constant.   |   Each point is calculated using the educational process model.";
+        pageLabel.text = "AUTOMATIC OFAT SWEEP   •   13 calculated points";
+        xMinLabel.text = string.IsNullOrEmpty(unit) ? xMin.ToString("0.##") : $"{xMin:F0} {unit}";
+        xMaxLabel.text = string.IsNullOrEmpty(unit) ? xMax.ToString("0.##") : $"{xMax:F0} {unit}";
+        yMaxLabel.text = FormatNum(viewYMax);
+        yMinLabel.text = "0";
+        yAxisNameLabel.text = "Y:  Reactor Yield (%)";
+        if (xAxisNameLabel != null) xAxisNameLabel.text = string.IsNullOrEmpty(unit)
+            ? $"X:  {parameter}"
+            : $"X:  {parameter} ({unit})";
+        if (moduleLegend != null) moduleLegend.SetActive(false);
+        if (prevPageButton != null) prevPageButton.interactable = false;
+        if (nextPageButton != null) nextPageButton.interactable = false;
+        if (liveButton != null) liveButton.GetComponent<Image>().color = BtnIdle;
     }
 
     private void FlushRun(ref int poolUsed, Variable v)
