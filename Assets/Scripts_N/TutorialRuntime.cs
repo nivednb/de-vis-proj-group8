@@ -47,9 +47,25 @@ public sealed class TutorialRuntime : MonoBehaviour
         /// <summary>Puts the application into the state this step talks about. Must be complete
         /// rather than incremental, so stepping backwards restores the right view too.</summary>
         public Action Apply;
+        /// <summary>Spotlight <see cref="TargetName"/> even while it is hidden — for pointing at
+        /// where something *will* appear. Only sensible together with an arrow and a caption,
+        /// otherwise an empty spotlit strip just reads as a bug.</summary>
+        public bool SpotlightWhenHidden;
+        /// <summary>Draw an arrow from the card to the spotlight.</summary>
+        public bool ArrowToTarget;
+        /// <summary>Short caption rendered beside the arrow's tip.</summary>
+        public string ArrowLabel;
+        /// <summary>Let the pointer through to the 3D scene inside the spotlight, so the step
+        /// can be tried out while it is being explained. The dim panels still cover — and so
+        /// still block — every piece of UI outside the spotlight.</summary>
+        public bool AllowInteraction;
     }
 
+    private const float ArrowHeadLength = 18f;
+    private const float ArrowRunLength = 78f;
+
     private readonly List<Step> steps = new List<Step>();
+    private readonly List<Vector2> arrowPoints = new List<Vector2>();
     private readonly Vector3[] worldCorners = new Vector3[4];
 
     private Canvas canvas;
@@ -59,6 +75,11 @@ public sealed class TutorialRuntime : MonoBehaviour
     private readonly RectTransform[] dimPanels = new RectTransform[4];
     private readonly RectTransform[] frameEdges = new RectTransform[4];
     private GameObject frameRoot;
+    private Image blockerImage;
+    private GameObject arrowRoot;
+    private UIGraphLine arrowShaft;
+    private TutorialArrowHead arrowHead;
+    private Text arrowLabel;
     private RectTransform card;
     private Text cardTitle;
     private Text cardBody;
@@ -149,9 +170,21 @@ public sealed class TutorialRuntime : MonoBehaviour
         if (dashboard != null) action(dashboard);
     }
 
-    private void Add(string title, string body, string targetName = null, Rect fallback = default, Action apply = null)
+    private void Add(string title, string body, string targetName = null, Rect fallback = default, Action apply = null,
+        bool spotlightWhenHidden = false, bool arrowToTarget = false, string arrowLabel = null, bool allowInteraction = false)
     {
-        steps.Add(new Step { Title = title, Body = body, TargetName = targetName, ViewportFallback = fallback, Apply = apply });
+        steps.Add(new Step
+        {
+            Title = title,
+            Body = body,
+            TargetName = targetName,
+            ViewportFallback = fallback,
+            Apply = apply,
+            SpotlightWhenHidden = spotlightWhenHidden,
+            ArrowToTarget = arrowToTarget,
+            ArrowLabel = arrowLabel,
+            AllowInteraction = allowInteraction,
+        });
     }
 
     /// <summary>Roughly the equipment row of the 3D plant, used for the steps that talk about
@@ -209,15 +242,14 @@ public sealed class TutorialRuntime : MonoBehaviour
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
         Add("THE 3D PLANT AND THE CAMERA",
-            "The plant itself is fully navigable:\n\n" +
-            "Arrow keys - orbit around the plant\n" +
-            "A / D - pan left and right\n" +
-            "W / S - zoom in and out\n" +
-            "Shift + arrow keys - step through the modules one by one\n" +
-            "Home - return to the full plant overview\n\n" +
-            "You can also drag with the mouse to look around and scroll to zoom.",
+            "The plant itself is fully navigable with the mouse:\n\n" +
+            "Hold the left button and drag - turn the view in any direction: up, down, left or right.\n" +
+            "Hold Shift, then hold the left button and drag - pan the view horizontally or vertically.\n" +
+            "Scroll the wheel - zoom in and out, towards whatever the cursor is pointing at.\n\n" +
+            "Try it now: the highlighted area is live while this step is open.",
             null, PlantArea,
-            () => Dashboard(d => d.TutorialShowPage("overview")));
+            () => Dashboard(d => d.TutorialShowPage("overview")),
+            allowInteraction: true);
 
         Add("EQUIPMENT INFO AND CONTROLS",
             "Hover over any piece of equipment and a small 'i' button appears on it. Click that button to open the module's own panel with live readings and its operating sliders.\n\n" +
@@ -297,12 +329,11 @@ public sealed class TutorialRuntime : MonoBehaviour
             }));
 
         Add("SAFETY AND EFFICIENCY WARNINGS",
-            "When an operating condition drifts out of the safe or sensible range - reactor temperature or pressure too high, storage nearly full, capture efficiency too low - a red warning band appears here listing the active alarms and cautions.\n\n" +
-            "It clears itself as soon as conditions recover, so it is worth watching while you experiment with the sliders.",
-            // No viewport fallback on purpose: when the plant is running cleanly the band is
-            // hidden, and spotlighting the empty strip it would occupy reads as a mistake.
+            "The arrow points at the strip just below the OVERVIEW button, along the top-left of the screen. That is where a red warning band appears when an operating condition drifts out of the safe or sensible range - reactor temperature or pressure too high, storage nearly full, capture efficiency too low - listing the active alarms and cautions.\n\n" +
+            "Nothing is showing there right now because the plant is running cleanly. The band clears itself again as soon as conditions recover, so it is worth watching while you experiment with the sliders.",
             "Warning Panel",
-            apply: () => Dashboard(d => d.TutorialShowPage("overview")));
+            apply: () => Dashboard(d => d.TutorialShowPage("overview")),
+            spotlightWhenHidden: true, arrowToTarget: true, arrowLabel: "WARNINGS APPEAR HERE");
 
         Add("HELP AND THIS TOUR",
             "HELP opens the about box, with a summary of the controls and the educational disclaimer.\n\n" +
@@ -339,6 +370,10 @@ public sealed class TutorialRuntime : MonoBehaviour
         previousButton.GetComponent<Image>().color = first ? new Color32(24, 44, 56, 255) : HeaderColor;
         bool last = index == steps.Count - 1;
         nextButtonLabel.text = last ? "FINISH" : "NEXT";
+
+        // Steps that invite the user to try something drop the full-screen blocker; the dim
+        // panels still cover every pixel outside the spotlight, so only the scene is reachable.
+        blockerImage.raycastTarget = !step.AllowInteraction;
 
         UpdateLayout();
     }
@@ -405,12 +440,56 @@ public sealed class TutorialRuntime : MonoBehaviour
 
         if (frameRoot.activeSelf != highlighted) frameRoot.SetActive(highlighted);
         PlaceCard(area, highlighted, spot);
+        UpdateArrow(area, highlighted, spot);
+    }
+
+    /// <summary>Runs the annotation arrow from the card's near edge to the spotlight, with a
+    /// single elbow when the two are not vertically aligned.</summary>
+    private void UpdateArrow(Rect area, bool highlighted, Rect spot)
+    {
+        Step step = steps[index];
+        bool show = highlighted && step.ArrowToTarget;
+        if (arrowRoot.activeSelf != show) arrowRoot.SetActive(show);
+        if (!show) return;
+
+        Rect cardRect = new Rect((Vector2)card.anchoredPosition - card.sizeDelta * 0.5f, card.sizeDelta);
+        bool cardBelow = cardRect.center.y <= spot.center.y;
+        float startX = Mathf.Clamp(spot.center.x, cardRect.xMin + 30f, cardRect.xMax - 30f);
+        Vector2 start = new Vector2(startX, cardBelow ? cardRect.yMax + 8f : cardRect.yMin - 8f);
+        Vector2 tip = new Vector2(
+            Mathf.Clamp(spot.center.x, spot.xMin + 20f, spot.xMax - 20f),
+            cardBelow ? spot.yMin - 9f : spot.yMax + 9f);
+
+        arrowPoints.Clear();
+        arrowPoints.Add(start);
+        if (Mathf.Abs(start.x - tip.x) > 24f)
+        {
+            float midY = (start.y + tip.y) * 0.5f;
+            arrowPoints.Add(new Vector2(start.x, midY));
+            arrowPoints.Add(new Vector2(tip.x, midY));
+        }
+        Vector2 previous = arrowPoints[arrowPoints.Count - 1];
+        Vector2 headDirection = (tip - previous).sqrMagnitude > 1e-4f ? (tip - previous).normalized : Vector2.up;
+        arrowPoints.Add(tip - headDirection * (ArrowHeadLength * 0.85f));
+
+        arrowShaft.SetPoints(arrowPoints);
+        arrowHead.SetArrow(tip, headDirection, ArrowHeadLength);
+
+        bool hasLabel = !string.IsNullOrEmpty(step.ArrowLabel);
+        if (arrowLabel.gameObject.activeSelf != hasLabel) arrowLabel.gameObject.SetActive(hasLabel);
+        if (!hasLabel) return;
+        arrowLabel.text = step.ArrowLabel;
+        const float labelWidth = 240f;
+        // Beside the middle of the shaft, in the gap the arrow run opened up.
+        Vector2 mid = (start + tip) * 0.5f;
+        float labelX = Mathf.Min(mid.x + 14f, area.xMax - labelWidth - 8f);
+        SetLocalRect(arrowLabel.rectTransform, new Rect(labelX, mid.y - 11f, labelWidth, 22f));
     }
 
     private bool TryGetHighlight(Rect area, out Rect result)
     {
         Step step = steps[index];
-        if (currentTarget != null && currentTarget.gameObject.activeInHierarchy &&
+        if (currentTarget != null && (step.SpotlightWhenHidden || currentTarget.gameObject.activeInHierarchy) &&
             TryGetTargetRect(currentTarget, out result))
         {
             result = Clamp(Expand(result, HighlightPadding), area);
@@ -459,18 +538,22 @@ public sealed class TutorialRuntime : MonoBehaviour
             return;
         }
 
+        // Arrow steps stand the card further off so the arrow has a run long enough to read as
+        // an arrow, and so its caption has somewhere to sit.
+        float gap = CardMargin + (steps[index].ArrowToTarget ? ArrowRunLength : 0f);
+
         float halfW = size.x * 0.5f;
         float halfH = size.y * 0.5f;
         float x = Mathf.Clamp(spot.center.x, area.xMin + halfW + CardMargin, area.xMax - halfW - CardMargin);
 
-        float topIfBelow = spot.yMin - CardMargin;
+        float topIfBelow = spot.yMin - gap;
         if (topIfBelow - size.y >= area.yMin + CardMargin)
         {
             card.anchoredPosition = new Vector2(x, topIfBelow - halfH);
             return;
         }
 
-        float bottomIfAbove = spot.yMax + CardMargin;
+        float bottomIfAbove = spot.yMax + gap;
         if (bottomIfAbove + size.y <= area.yMax - CardMargin)
         {
             card.anchoredPosition = new Vector2(x, bottomIfAbove + halfH);
@@ -562,6 +645,7 @@ public sealed class TutorialRuntime : MonoBehaviour
         // underneath cannot be clicked out from under the step that is describing it.
         RectTransform blocker = CreatePanel("Input Blocker", root, new Color(0f, 0f, 0f, 0.004f));
         Pin(blocker, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        blockerImage = blocker.GetComponent<Image>();
 
         for (int i = 0; i < dimPanels.Length; i++)
         {
@@ -579,8 +663,39 @@ public sealed class TutorialRuntime : MonoBehaviour
             frameEdges[i].GetComponent<Image>().raycastTarget = false;
         }
 
+        BuildArrow();
         BuildCard();
         rootObject.SetActive(false);
+    }
+
+    private void BuildArrow()
+    {
+        arrowRoot = new GameObject("Annotation Arrow", typeof(RectTransform));
+        arrowRoot.transform.SetParent(root, false);
+        RectTransform arrowRect = arrowRoot.GetComponent<RectTransform>();
+        Pin(arrowRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+        // Shaft and head live in their own full-screen rects so their vertex coordinates are
+        // the same root-local space the spotlight geometry is computed in.
+        GameObject shaft = new GameObject("Arrow Shaft", typeof(RectTransform));
+        shaft.transform.SetParent(arrowRect, false);
+        Pin(shaft.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        arrowShaft = shaft.AddComponent<UIGraphLine>();
+        arrowShaft.Thickness = 3.2f;
+        arrowShaft.color = AccentColor;
+        arrowShaft.raycastTarget = false;
+
+        GameObject head = new GameObject("Arrow Head", typeof(RectTransform));
+        head.transform.SetParent(arrowRect, false);
+        Pin(head.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        arrowHead = head.AddComponent<TutorialArrowHead>();
+        arrowHead.color = AccentColor;
+        arrowHead.raycastTarget = false;
+
+        arrowLabel = CreateText("Arrow Label", arrowRect, "", 12, FontStyle.Bold, TextAnchor.MiddleLeft, AccentColor);
+        arrowLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        arrowRoot.SetActive(false);
     }
 
     private void BuildCard()
@@ -701,5 +816,49 @@ public sealed class TutorialRuntime : MonoBehaviour
         rect.anchorMax = anchorMax;
         rect.offsetMin = offsetMin;
         rect.offsetMax = offsetMax;
+    }
+}
+
+/// <summary>
+/// Solid triangle used as the tutorial annotation arrow's head; the shaft reuses the project's
+/// existing single-draw-call <see cref="UIGraphLine"/>.
+///
+/// Top-level rather than nested inside <see cref="TutorialRuntime"/> on purpose: Unity does not
+/// reliably support MonoBehaviour-derived types declared as nested classes — AddComponent
+/// succeeds but the graphic never issues its mesh.
+/// </summary>
+[RequireComponent(typeof(CanvasRenderer))]
+public sealed class TutorialArrowHead : MaskableGraphic
+{
+    private Vector2 tip;
+    private Vector2 direction = Vector2.up;
+    private float size = 18f;
+
+    public void SetArrow(Vector2 tipPoint, Vector2 dir, float headSize)
+    {
+        tip = tipPoint;
+        direction = dir.sqrMagnitude < 1e-6f ? Vector2.up : dir.normalized;
+        size = headSize;
+        SetVerticesDirty();
+    }
+
+    protected override void OnPopulateMesh(VertexHelper vh)
+    {
+        vh.Clear();
+        Vector2 back = tip - direction * size;
+        Vector2 side = new Vector2(-direction.y, direction.x) * (size * 0.52f);
+        int idx = vh.currentVertCount;
+        AddVert(vh, tip);
+        AddVert(vh, back + side);
+        AddVert(vh, back - side);
+        vh.AddTriangle(idx, idx + 1, idx + 2);
+    }
+
+    private void AddVert(VertexHelper vh, Vector2 position)
+    {
+        UIVertex v = UIVertex.simpleVert;
+        v.color = color;
+        v.position = position;
+        vh.AddVert(v);
     }
 }
