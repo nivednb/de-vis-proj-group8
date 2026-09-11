@@ -324,11 +324,18 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
 
         const int size = 32;
         const float centre = 15.5f;
-        cursorTexture = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear };
+        cursorTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp
+        };
         Color[] pixels = new Color[size * size];
-        Color ink = new Color(0.42f, 0.86f, 1f, 1f);
-        Color edge = new Color(0f, 0.05f, 0.09f, 0.9f);
+        Color ink = new Color(0.45f, 0.88f, 1f, 1f);
+        Color edge = new Color(0f, 0.04f, 0.08f, 1f);
 
+        // Every shape is built from a signed distance and resolved with smooth coverage rather
+        // than a hard in/out test, so the strokes antialias instead of stair-stepping. The dark
+        // outline is the same shapes grown by a pixel, composited underneath.
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
@@ -336,20 +343,24 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
                 float dx = x - centre, dy = y - centre;
                 float r = Mathf.Sqrt(dx * dx + dy * dy);
 
-                // Ring, four tick marks poking out of it, and a centre dot.
-                float ring = Mathf.Abs(r - 9f);
-                bool onRing = ring <= 1.2f;
-                bool onEdge = ring > 1.2f && ring <= 2.2f;
-                bool tick = (Mathf.Abs(dx) <= 0.9f && r > 9f && r <= 14f) ||
-                            (Mathf.Abs(dy) <= 0.9f && r > 9f && r <= 14f);
-                bool tickEdge = (Mathf.Abs(dx) <= 1.9f && r > 9f && r <= 14.6f) ||
-                                (Mathf.Abs(dy) <= 1.9f && r > 9f && r <= 14.6f);
-                bool dot = r <= 1.8f;
-                bool dotEdge = r > 1.8f && r <= 2.8f;
+                // Ring, four ticks reaching outwards from it, and a centre dot.
+                float ringD = Mathf.Abs(r - 8.6f) - 1.05f;
+                float tickD = Mathf.Max(
+                    Mathf.Min(Mathf.Abs(dx), Mathf.Abs(dy)) - 0.85f,
+                    Mathf.Max(8.6f - r, r - 13.6f));
+                float dotD = r - 2.0f;
+                float shape = Mathf.Min(Mathf.Min(ringD, tickD), dotD);
 
+                float inkA = Coverage(shape);
+                float edgeA = Coverage(shape - 1.15f);
                 Color c = Color.clear;
-                if (onEdge || tickEdge || dotEdge) c = edge;
-                if (onRing || tick || dot) c = ink;
+                if (edgeA > 0f) c = new Color(edge.r, edge.g, edge.b, edgeA * 0.92f);
+                if (inkA > 0f)
+                {
+                    float a = inkA + c.a * (1f - inkA);
+                    Color rgb = Color.Lerp(c, ink, a > 0f ? inkA / a : 1f);
+                    c = new Color(rgb.r, rgb.g, rgb.b, a);
+                }
                 pixels[y * size + x] = c;
             }
         }
@@ -358,4 +369,7 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
         cursorTexture.Apply();
         return cursorTexture;
     }
+
+    /// <summary>Antialiased coverage for a signed distance, one pixel wide at the boundary.</summary>
+    private static float Coverage(float signedDistance) => Mathf.Clamp01(0.5f - signedDistance);
 }

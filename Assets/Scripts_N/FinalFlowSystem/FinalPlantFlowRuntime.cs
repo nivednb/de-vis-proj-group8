@@ -24,7 +24,10 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
 
     [SerializeField] bool visualsEnabled = true;
     [SerializeField] InspectionMode inspectionMode = InspectionMode.All;
-    [SerializeField, Range(.25f, 2f)] float globalSpeed = 1f;
+    // The continuous fluid fields have a much longer feature wavelength than the old packet
+    // pattern did, so the same offset rate reads as far slower motion. This is scaled up to
+    // match: a feature now crosses a pipe segment in roughly two seconds instead of fifteen.
+    [SerializeField, Range(.25f, 20f)] float globalSpeed = 8f;
     [SerializeField, Range(.25f, 2f)] float globalDensity = 1f;
     [SerializeField, Range(.25f, 2f)] float globalIntensity = 1f;
     [Header("Continuous process transport")]
@@ -364,35 +367,35 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     static bool TryDescribe(string name, out RouteDefinition route)
     {
         route = default;
-        if (Starts(name, "H2Storage_pipe_")) route = Def(PlantFlowKind.HydrogenFromStorage, C(.1f, 1f, .22f), 1.05f, 17f);
+        if (Starts(name, "H2Storage_pipe_")) route = Def(PlantFlowKind.HydrogenFromStorage, 1.05f, 17f);
         // In the imported complete-plant meshes, increasing shader coordinates
         // run away from the T-junction. Reverse both fresh feeds so H2 and CO2
         // visibly converge at the junction; the mixed route then leaves it.
-        else if (Starts(name, "H2_pipe_")) route = Def(PlantFlowKind.Hydrogen, C(.1f, 1f, .22f), 1.15f, 18f, true);
-        else if (Starts(name, "CO2_pipe_")) route = Def(PlantFlowKind.CarbonDioxide, C(.86f, .94f, 1f), .82f, 15f, true);
-        else if (Starts(name, "RichAmine_pipe_")) route = Def(PlantFlowKind.RichAmine, C(.04f, .72f, .42f), .62f, 12f);
-        else if (Starts(name, "LeanAmine_pipe_")) route = Def(PlantFlowKind.LeanAmine, C(.05f, .92f, .52f), .68f, 13f);
-        else if (Starts(name, "RecycleGas_pipe_")) route = Def(PlantFlowKind.RecycleGas, C(.48f, .82f, 1f), .9f, 16f, true);
-        else if (Starts(name, "MixedFeed_pipe_")) route = Def(PlantFlowKind.MixedFeed, C(.48f, .88f, .68f), 1f, 18f);
+        else if (Starts(name, "H2_pipe_")) route = Def(PlantFlowKind.Hydrogen, 1.15f, 18f, true);
+        else if (Starts(name, "CO2_pipe_")) route = Def(PlantFlowKind.CarbonDioxide, .82f, 15f, true);
+        else if (Starts(name, "RichAmine_pipe_")) route = Def(PlantFlowKind.RichAmine, .62f, 12f);
+        else if (Starts(name, "LeanAmine_pipe_")) route = Def(PlantFlowKind.LeanAmine, .68f, 13f);
+        else if (Starts(name, "RecycleGas_pipe_")) route = Def(PlantFlowKind.RecycleGas, .9f, 16f, true);
+        else if (Starts(name, "MixedFeed_pipe_")) route = Def(PlantFlowKind.MixedFeed, 1f, 18f);
         else if (Starts(name, "Syngas_pipe_"))
         {
             int segment = TrailingNumber(name);
-            route = Def(segment >= 6 ? PlantFlowKind.SyngasHeated : PlantFlowKind.SyngasCold,
-                segment >= 6 ? C(1f, .58f, .12f) : C(.54f, .92f, .76f), 1.12f, 19f);
+            route = Def(segment >= 6 ? PlantFlowKind.SyngasHeated : PlantFlowKind.SyngasCold, 1.12f, 19f);
         }
-        else if (Starts(name, "ReactorEffluent_pipe_")) route = Def(PlantFlowKind.ReactorEffluent, C(1f, .42f, .12f), .88f, 17f);
-        else if (Starts(name, "CrudeMeOH_pipe_")) route = Def(PlantFlowKind.CrudeMethanolVapourLiquid, C(.72f, .18f, 1f), .7f, 14f);
-        else if (Starts(name, "Liq_CrudeMeOH_pipe_")) route = Def(PlantFlowKind.LiquidCrudeMethanol, C(.35f, .42f, 1f), .55f, 12f);
-        else if (Starts(name, "MethanolProduct_pipe_")) route = Def(PlantFlowKind.MethanolProduct, C(.2f, .78f, 1f), .48f, 11f);
+        else if (Starts(name, "ReactorEffluent_pipe_")) route = Def(PlantFlowKind.ReactorEffluent, .88f, 17f);
+        else if (Starts(name, "CrudeMeOH_pipe_")) route = Def(PlantFlowKind.CrudeMethanolVapourLiquid, .7f, 14f);
+        else if (Starts(name, "Liq_CrudeMeOH_pipe_")) route = Def(PlantFlowKind.LiquidCrudeMethanol, .55f, 12f);
+        else if (Starts(name, "MethanolProduct_pipe_")) route = Def(PlantFlowKind.MethanolProduct, .48f, 11f);
         else return false;
         return true;
     }
 
     static bool Starts(string value, string prefix) =>
         value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-    static Color C(float r, float g, float b) => new(r, g, b, 1f);
-    static RouteDefinition Def(PlantFlowKind k, Color c, float s, float d, bool reverse = false) =>
-        new(k, c, s, d, 1.55f, .24f, reverse);
+    /// <summary>Colour always comes from <see cref="PlantStreamLegend"/>, never from a literal
+    /// here — that is what keeps every pipe matching the legend row that explains it.</summary>
+    static RouteDefinition Def(PlantFlowKind k, float s, float d, bool reverse = false) =>
+        new(k, PlantStreamLegend.ColorFor(k), s, d, 1.55f, .24f, reverse);
     static int TrailingNumber(string value)
     {
         int underscore = value.LastIndexOf('_');

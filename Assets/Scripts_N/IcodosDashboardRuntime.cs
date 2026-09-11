@@ -344,44 +344,31 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMax = new Vector2(0f, 1f);
         panel.pivot = new Vector2(0f, 1f);
         panel.anchoredPosition = new Vector2(14f, -90f - TitleBarHeight);
-        panel.sizeDelta = new Vector2(238f, 214f);
+        panel.sizeDelta = new Vector2(238f, 240f);
 
         AddPanelTitle(panel, "PROCESS FLOW");
 
-        // Grouped, plain-language streams (the raw per-pipe kinds are collapsed here) plus a
-        // dashed row for the recycle loop.
-        string[] names =
+        // Rows come from PlantStreamLegend, which is also what colours the pipes themselves —
+        // so this panel and the plant can never disagree.
+        PlantStreamLegend.Row[] rows = PlantStreamLegend.Rows;
+        for (int i = 0; i < rows.Length; i++)
         {
-            "Raw Water / H2 Stream",
-            "Amine Solvent / Captured CO2",
-            "Compressed Syngas (3:1 H2:CO2)",
-            "Hot Reactor Effluent",
-            "Pure Refined Methanol (>99.85%)",
-            "Gas Recycle Loop",
-        };
-        Color[] colors =
-        {
-            Hex("38BDF8"), Hex("10B981"), Hex("F59E0B"), Hex("EF4444"), Hex("22C55E"), Hex("F59E0B"),
-        };
-
-        for (int i = 0; i < names.Length; i++)
-        {
+            PlantStreamLegend.Row row = rows[i];
             float y = -50f - i * 26f;
-            bool dashed = i == names.Length - 1;
-            if (dashed)
+            if (row.Dashed)
             {
                 for (int d = 0; d < 4; d++)
                 {
-                    RectTransform dash = CreatePanel("Recycle Dash " + d, panel, colors[i]);
+                    RectTransform dash = CreatePanel("Recycle Dash " + d, panel, row.Color);
                     AnchorTopLeft(dash, new Vector2(14f + d * 10f, y), new Vector2(6f, 4f));
                 }
             }
             else
             {
-                RectTransform swatch = CreatePanel(names[i] + " Swatch", panel, colors[i]);
+                RectTransform swatch = CreatePanel(row.Label + " Swatch", panel, row.Color);
                 AnchorTopLeft(swatch, new Vector2(14f, y), new Vector2(20f, 8f));
             }
-            Text label = CreateText(names[i], panel, names[i], 11, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
+            Text label = CreateText(row.Label, panel, row.Label, 11, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
             AnchorTopLeft(label.rectTransform, new Vector2(44f, y + 6f), new Vector2(188f, 20f));
         }
     }

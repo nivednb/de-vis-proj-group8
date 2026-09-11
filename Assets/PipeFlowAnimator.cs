@@ -69,34 +69,31 @@ public sealed class PipeFlowAnimator : MonoBehaviour
     public void Apply()
     {
         Ensure(); if(target==null)return;
+        // Species tracers are drawn in their own legend colours, so composition inside a mixed
+        // stream is readable without inventing hues the legend never explains.
+        Color h2=PlantStreamLegend.WaterHydrogen, co2=PlantStreamLegend.AmineCapturedCo2,
+            syngas=PlantStreamLegend.CompressedSyngas, crude=PlantStreamLegend.CrudeMethanol;
         Color a=flowColor,b=flowColor,c=flowColor; float count=1,liquid=0,twoPhase=0;
         switch(flowKind)
         {
             case PlantFlowKind.MixedFeed:
-                // Fresh H2, fresh CO2 and the H2-rich recycle remain individually
-                // identifiable after the T-junction instead of becoming one colour.
-                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f);
-                c=new Color(.72f,.28f,1f); count=3; break;
             case PlantFlowKind.SyngasCold:
             case PlantFlowKind.SyngasHeated:
-                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f);
-                c=new Color(.72f,.28f,1f); count=3; break;
+            case PlantFlowKind.RecycleGas:
+                // Fresh H2, fresh CO2 and the recycled gas remain individually identifiable
+                // after the T-junction instead of becoming one flat colour.
+                a=h2; b=co2; c=syngas; count=3; break;
             case PlantFlowKind.ReactorEffluent:
                 // At reactor outlet conditions (250 C, 70 bar) everything is still vapour —
                 // methanol only condenses downstream of the cooler, so this runs as a gas.
-                a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); c=new Color(.10f,1f,.22f); count=3; break;
+                a=crude; b=h2; c=syngas; count=3; break;
             case PlantFlowKind.CrudeMethanolVapourLiquid:
                 // Species A is the condensed liquid, species B the gas still above it.
-                a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); count=2; twoPhase=1; break;
+                a=crude; b=syngas; count=2; twoPhase=1; break;
             case PlantFlowKind.RichAmine:
             case PlantFlowKind.LeanAmine:
             case PlantFlowKind.LiquidCrudeMethanol:
             case PlantFlowKind.MethanolProduct: liquid=1; break;
-            case PlantFlowKind.RecycleGas:
-                // Recycle is principally H2 and CO2 with a smaller CO/inert
-                // remainder. Purple is a recycle-origin tracer, not a new species.
-                a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f);
-                c=new Color(.72f,.28f,1f); count=3; break;
         }
         target.GetPropertyBlock(block);
         block.SetColor(FlowColor,flowColor); block.SetColor(A,a); block.SetColor(B,b); block.SetColor(C,c);
