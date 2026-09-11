@@ -82,8 +82,11 @@ public sealed class PipeFlowAnimator : MonoBehaviour
                 a=new Color(.10f,1f,.22f); b=new Color(.86f,.94f,1f);
                 c=new Color(.72f,.28f,1f); count=3; break;
             case PlantFlowKind.ReactorEffluent:
-                a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); c=new Color(.10f,1f,.22f); count=3; twoPhase=1; break;
+                // At reactor outlet conditions (250 C, 70 bar) everything is still vapour —
+                // methanol only condenses downstream of the cooler, so this runs as a gas.
+                a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); c=new Color(.10f,1f,.22f); count=3; break;
             case PlantFlowKind.CrudeMethanolVapourLiquid:
+                // Species A is the condensed liquid, species B the gas still above it.
                 a=new Color(.72f,.18f,1f); b=new Color(.15f,.70f,1f); count=2; twoPhase=1; break;
             case PlantFlowKind.RichAmine:
             case PlantFlowKind.LeanAmine:

@@ -339,27 +339,15 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         };
     }
 
+    /// <summary>
+    /// Visual scaling only. The mass flow itself comes from <see cref="PipeStreamState"/> —
+    /// the same evaluation the mass-flow probe reports — so the animation speed and the
+    /// number the probe shows can never disagree about which lines are busy.
+    /// </summary>
     static float NormalizedMassFlow(PlantFlowKind kind, PlantProcessSimulator.ProcessSnapshot s)
     {
-        const float designH2 = 215f, designCO2 = 1510f, designSyngas = 1725f;
-        const float designMethanol = 1250f, designCrude = 1953.125f;
-        float waterProduct = s.methanolProductionKgH * (18f / 32f);
-        float crude = s.methanolProductionKgH + waterProduct;
-        return kind switch
-        {
-            PlantFlowKind.Hydrogen or PlantFlowKind.HydrogenFromStorage => s.h2InputKgH / designH2,
-            PlantFlowKind.CarbonDioxide => s.co2CapturedKgH / designCO2,
-            PlantFlowKind.RichAmine or PlantFlowKind.LeanAmine =>
-                (s.co2CapturedKgH / designCO2) * (s.amineFlowPercent / 65f),
-            PlantFlowKind.RecycleGas => s.recycleGasKgH / 450f,
-            PlantFlowKind.MixedFeed or PlantFlowKind.SyngasCold or PlantFlowKind.SyngasHeated =>
-                s.syngasFeedKgH / designSyngas,
-            PlantFlowKind.ReactorEffluent => (crude + s.recycleGasKgH) / (designCrude + 450f),
-            PlantFlowKind.CrudeMethanolVapourLiquid or PlantFlowKind.LiquidCrudeMethanol =>
-                crude / designCrude,
-            PlantFlowKind.MethanolProduct => s.methanolProductionKgH / designMethanol,
-            _ => 0f
-        };
+        float actual = PipeStreamState.Evaluate(kind, s).MassFlowKgH;
+        return actual / Mathf.Max(1f, PipeStreamState.DesignMassFlowKgH(kind));
     }
 
     Material GetMaterial(PlantFlowKind kind, Color color)

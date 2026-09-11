@@ -615,7 +615,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         }
     }
 
-    private const int FooterButtonCount = 7;
+    private const int FooterButtonCount = 8;
+    private Button massFlowToolButton;
 
     private void BuildFooter(Transform parent)
     {
@@ -627,9 +628,18 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         resetButton.GetComponent<Image>().color = Hex("7A2A2A");
         AddFooterButton(footer, "VIEW INFORMATION", 2, () => SetPopupVisible(helpPanel, true));
         AddFooterButton(footer, "SHOW STREAMS", 3, ToggleStreams);
-        AddFooterButton(footer, "PREVIOUS MODULE", 4, () => cameraController?.FocusPrevious());
-        AddFooterButton(footer, "NEXT MODULE", 5, () => cameraController?.FocusNext());
-        AddFooterButton(footer, "RESET VIEW", 6, () => cameraController?.FocusOverview());
+        massFlowToolButton = AddFooterButton(footer, "MASS FLOW TOOL", 4, ToggleMassFlowTool);
+        AddFooterButton(footer, "PREVIOUS MODULE", 5, () => cameraController?.FocusPrevious());
+        AddFooterButton(footer, "NEXT MODULE", 6, () => cameraController?.FocusNext());
+        AddFooterButton(footer, "RESET VIEW", 7, () => cameraController?.FocusOverview());
+    }
+
+    /// <summary>Arms/disarms the pipe mass-flow probe; the button stays lit while it is armed
+    /// so the changed cursor is never unexplained.</summary>
+    private void ToggleMassFlowTool()
+    {
+        MassFlowProbeRuntime.Instance?.Toggle();
+        Refresh();
     }
 
     private void BuildHelpPanel(Transform parent)
@@ -1159,6 +1169,12 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             if (img != null) img.color = simulator.IsRunning ? Hex("1E7A46") : Hex("B37A18");
             Text label = button.GetComponentInChildren<Text>();
             if (label != null) label.text = simulator.IsRunning ? "PAUSE" : "RESUME";
+        }
+
+        if (massFlowToolButton != null)
+        {
+            bool armed = MassFlowProbeRuntime.Instance != null && MassFlowProbeRuntime.Instance.IsActive;
+            massFlowToolButton.GetComponent<Image>().color = armed ? AccentColor : HeaderColor;
         }
 
         bool alarm = s.reactorTemperatureC >= 285f || s.reactorPressureBar >= 98f || s.storageFillPercent >= 95f;

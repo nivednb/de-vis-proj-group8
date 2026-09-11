@@ -119,7 +119,9 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         // distance heuristic against a single anchor point.
         ModuleAnchor closestAnchor = null;
         Ray ray = mainCamera.ScreenPointToRay(mousePos);
-        if (Physics.Raycast(ray, out RaycastHit hit, 5000f))
+        // Pipe probe colliders (added by MassFlowProbeRuntime on their own layer) are excluded:
+        // a pipe crossing in front of a module must not swallow that module's hover.
+        if (Physics.Raycast(ray, out RaycastHit hit, 5000f, ~MassFlowProbeRuntime.PipeLayerMask))
         {
             colliderToAnchor.TryGetValue(hit.collider, out closestAnchor);
         }
