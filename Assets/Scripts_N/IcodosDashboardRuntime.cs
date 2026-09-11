@@ -451,19 +451,33 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         processPanel = BuildContextPanel("Guided Process", parent, new Vector2(0.20f, 0.20f), new Vector2(0.80f, 0.47f), "GUIDED POWER-TO-METHANOL PROCESS");
         RectTransform process = processPanel.GetComponent<RectTransform>();
-        processStepText = CreateText("Step", process, "", 12, FontStyle.Bold, TextAnchor.UpperLeft, AccentColor);
-        Pin(processStepText.rectTransform, new Vector2(0f, 0.72f), new Vector2(0.25f, 0.90f), new Vector2(20f, 0f), Vector2.zero);
-        processTitleText = CreateText("Process Title", process, "", 20, FontStyle.Bold, TextAnchor.UpperLeft, Color.white);
-        Pin(processTitleText.rectTransform, new Vector2(0.20f, 0.70f), new Vector2(0.70f, 0.92f), Vector2.zero, Vector2.zero);
+        processStepText = CreateText("Step", process, "", 12, FontStyle.Bold, TextAnchor.MiddleRight, AccentColor);
+        // Laid out in pixels measured from the panel's own top and bottom edges rather than in
+        // fractions of its height: the panel is short, so fractional rows landed on top of the
+        // 42px panel-title band and each other.
+        Pin(processStepText.rectTransform, new Vector2(0.55f, 1f), new Vector2(1f, 1f), new Vector2(0f, -42f), new Vector2(-18f, -10f));
+        processTitleText = CreateText("Process Title", process, "", 19, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
+        Pin(processTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -86f), new Vector2(-18f, -50f));
+
+        RectTransform processRule = CreatePanel("Process Rule", process, AccentColor);
+        Pin(processRule, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -92f), new Vector2(-18f, -90f));
+        processRule.GetComponent<Image>().raycastTarget = false;
+
         processBodyText = CreateText("Explanation", process, "", 13, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Pin(processBodyText.rectTransform, new Vector2(0f, 0.18f), new Vector2(0.67f, 0.70f), new Vector2(20f, 4f), new Vector2(-10f, 0f));
+        Pin(processBodyText.rectTransform, Vector2.zero, new Vector2(0.66f, 1f), new Vector2(20f, 62f), new Vector2(-16f, -104f));
+
+        RectTransform columnRule = CreatePanel("Process Column Rule", process, new Color32(38, 66, 82, 255));
+        Pin(columnRule, new Vector2(0.66f, 0f), new Vector2(0.66f, 1f), new Vector2(0f, 62f), new Vector2(2f, -104f));
+        columnRule.GetComponent<Image>().raycastTarget = false;
+
         processStreamsText = CreateText("Streams", process, "", 12, FontStyle.Normal, TextAnchor.UpperLeft, MutedTextColor);
-        Pin(processStreamsText.rectTransform, new Vector2(0.68f, 0.18f), new Vector2(1f, 0.70f), new Vector2(8f, 4f), new Vector2(-18f, 0f));
+        Pin(processStreamsText.rectTransform, new Vector2(0.66f, 0f), Vector2.one, new Vector2(16f, 62f), new Vector2(-18f, -104f));
+
         Button previous = CreateButton("Previous Step", process, "PREVIOUS STEP", HeaderColor, 11);
-        Pin(previous.GetComponent<RectTransform>(), new Vector2(0.02f, 0.03f), new Vector2(0.20f, 0.18f), Vector2.zero, Vector2.zero);
+        Pin(previous.GetComponent<RectTransform>(), Vector2.zero, Vector2.zero, new Vector2(20f, 16f), new Vector2(170f, 50f));
         previous.onClick.AddListener(() => SetProcessStep(processStepIndex - 1));
         Button next = CreateButton("Next Step", process, "NEXT STEP", AccentColor, 11);
-        Pin(next.GetComponent<RectTransform>(), new Vector2(0.80f, 0.03f), new Vector2(0.98f, 0.18f), Vector2.zero, Vector2.zero);
+        Pin(next.GetComponent<RectTransform>(), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-170f, 16f), new Vector2(-20f, 50f));
         next.onClick.AddListener(() => SetProcessStep(processStepIndex + 1));
 
         equipmentPanel = BuildContextPanel("Reactor Lab", parent, new Vector2(0.69f, 0.25f), new Vector2(0.985f, 0.72f), "REACTOR REACTION LAB");
