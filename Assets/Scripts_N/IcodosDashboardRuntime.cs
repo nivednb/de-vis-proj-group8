@@ -120,6 +120,65 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Instance = this;
     }
 
+    /// <summary>True once <see cref="Build"/> has produced the dashboard canvas.</summary>
+    public bool IsBuilt => canvas != null;
+
+    /// <summary>
+    /// Opens one of the header sections by name ("overview", "process", "flow", "reactor",
+    /// "simulation"). Exists so the guided tutorial can put the dashboard into the state a
+    /// tour step is describing without duplicating any page logic of its own.
+    /// </summary>
+    public void TutorialShowPage(string pageId)
+    {
+        switch (pageId)
+        {
+            case "overview": SelectPage(DashboardPage.Overview); break;
+            case "process": SelectPage(DashboardPage.Process); break;
+            case "flow": SelectPage(DashboardPage.FlowInspection); break;
+            case "reactor": SelectPage(DashboardPage.Equipment); break;
+            case "simulation": SelectPage(DashboardPage.Simulation); break;
+        }
+    }
+
+    /// <summary>
+    /// Tutorial hook for the analytics window. A null or empty <paramref name="subTab"/> means
+    /// the STATS tab; "yield", "efficiency", "ofat" or "live" select the VISUALISE tab and the
+    /// matching sub-tab.
+    /// </summary>
+    public void TutorialSetAnalyticsView(bool open, string subTab)
+    {
+        if (!open)
+        {
+            CloseAnalyticsWindow();
+            return;
+        }
+
+        OpenAnalyticsWindow();
+        if (string.IsNullOrEmpty(subTab))
+        {
+            SetAnalyticsTab(AnalyticsTab.Stats);
+            return;
+        }
+
+        SetAnalyticsTab(AnalyticsTab.Visualise);
+        switch (subTab)
+        {
+            case "yield": SelectSubTab(VisualiseSubTab.Yield); break;
+            case "efficiency": SelectSubTab(VisualiseSubTab.Efficiency); break;
+            case "ofat": SelectSubTab(VisualiseSubTab.Ofat); break;
+            case "live": SelectSubTab(VisualiseSubTab.Live); break;
+        }
+    }
+
+    /// <summary>Returns the dashboard to its normal starting view — used when the tutorial
+    /// finishes or is skipped part-way through an analytics step.</summary>
+    public void TutorialRestoreDefaults()
+    {
+        SetPopupVisible(helpPanel, false);
+        CloseAnalyticsWindow();
+        SelectPage(DashboardPage.Overview);
+    }
+
     /// <summary>
     /// True while the analytics window is open and the given screen point falls within its
     /// actual current rect (it's draggable, so this is computed live rather than cached) —
@@ -564,10 +623,11 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         helpPanel = CreatePanel("Help Panel", parent, new Color32(9, 26, 36, 250)).gameObject;
         RectTransform panel = helpPanel.GetComponent<RectTransform>();
         panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(0.5f, 0.5f);
-        panel.sizeDelta = new Vector2(620f, 390f);
+        panel.sizeDelta = new Vector2(620f, 420f);
         AddPanelTitle(panel, "ABOUT THIS DIGITAL TWIN");
         Text body = CreateText("Body", panel,
             "Explore the Power-to-Methanol process from hydrogen production to methanol storage.\n\n" +
+            "• New here? START TUTORIAL below runs a step-by-step tour of every section.\n" +
             "• Use the top navigation or module arrows to focus equipment.\n" +
             "• Select equipment to open educational controls and live values.\n" +
             "• Stream colours show qualitative material movement through the actual pipe routes.\n" +
@@ -575,11 +635,23 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             "Important: values and animations are simplified educational representations. " +
             "This application is not CFD, Aspen, industrial control software, or a validated process model.",
             16, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Pin(body.rectTransform, Vector2.zero, Vector2.one, new Vector2(28f, 56f), new Vector2(-28f, -64f));
+        Pin(body.rectTransform, Vector2.zero, Vector2.one, new Vector2(28f, 62f), new Vector2(-28f, -64f));
+
+        Button tutorial = CreateButton("Start Tutorial", panel, "START TUTORIAL", Hex("1E7A46"), 13);
+        AnchorBottomLeft(tutorial.GetComponent<RectTransform>(), new Vector2(24f, 18f), new Vector2(200f, 36f));
+        tutorial.onClick.AddListener(StartTutorial);
+
         Button close = CreateButton("Close", panel, "CLOSE", AccentColor, 13);
         AnchorBottomRight(close.GetComponent<RectTransform>(), new Vector2(-24f, 18f), new Vector2(120f, 36f));
         close.onClick.AddListener(() => SetPopupVisible(helpPanel, false));
         helpPanel.SetActive(false);
+    }
+
+    /// <summary>Closes the about box and hands over to the guided tour.</summary>
+    private void StartTutorial()
+    {
+        SetPopupVisible(helpPanel, false);
+        TutorialRuntime.Instance?.StartTutorial();
     }
 
     private void BuildAnalyticsWindow(Transform parent)
@@ -1373,6 +1445,13 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private static void AnchorBottomRight(RectTransform rect, Vector2 position, Vector2 size)
     {
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+    }
+
+    private static void AnchorBottomLeft(RectTransform rect, Vector2 position, Vector2 size)
+    {
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 0f);
         rect.anchoredPosition = position;
         rect.sizeDelta = size;
     }
