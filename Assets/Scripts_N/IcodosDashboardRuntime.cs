@@ -40,6 +40,16 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private GameObject simulationPanel;
     private GameObject flowInspectionPanel;
     private GameObject analyticsWindow;
+    // In the Windows player the analytics UI lives in its own native OS window; in the
+    // Editor it stays an in-app popup on the main canvas.
+    private ExternalAnalyticsWindow externalAnalytics;
+    private Canvas analyticsCanvas;
+    private Button flowNavButton;
+    private Button showStreamsButton;
+    private Button streamVisualsButton;
+    // Flow Lab *mode* (animated pipes) is independent of its panel: closing the panel keeps
+    // the flow running; only FLOW LAB / SHOW STREAMS switch the mode off again.
+    private bool flowLabOn;
     private GameObject analyticsStatsTab;
     private GameObject analyticsVisualiseTab;
     private Button analyticsNavButton;
@@ -130,11 +140,13 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     /// </summary>
     public void TutorialShowPage(string pageId)
     {
+        // Every tour stop except the Flow Lab ones shows the plant with its normal pipes.
+        if (pageId != "flow") SetFlowLabMode(false);
         switch (pageId)
         {
             case "overview": SelectPage(DashboardPage.Overview); break;
             case "process": SelectPage(DashboardPage.Process); break;
-            case "flow": SelectPage(DashboardPage.FlowInspection); break;
+            case "flow": SetFlowLabMode(true); break;
             case "reactor": SelectPage(DashboardPage.Equipment); break;
             case "simulation": SelectPage(DashboardPage.Simulation); break;
         }
@@ -175,9 +187,14 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     public void TutorialRestoreDefaults()
     {
         SetPopupVisible(helpPanel, false);
-        CloseAnalyticsWindow();
+        // A separate analytics window belongs to the user; the tour never opens one, so it
+        // must not close one either.
+        if (!AnalyticsIsExternal) CloseAnalyticsWindow();
         SelectPage(DashboardPage.Overview);
     }
+
+    /// <summary>True when ANALYTICS opens as its own native OS window (Windows player).</summary>
+    public bool AnalyticsIsExternal => externalAnalytics != null;
 
     /// <summary>
     /// True while the analytics window is open and the given screen point falls within its
@@ -187,7 +204,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     /// </summary>
     public bool IsPointerOverAnalyticsWindow(Vector2 screenPoint)
     {
-        if (!analyticsWindowOpen || analyticsWindow == null) return false;
+        // A separate OS window never overlaps the main window's own screen space.
+        if (AnalyticsIsExternal || !analyticsWindowOpen || analyticsWindow == null) return false;
         RectTransform rect = analyticsWindow.GetComponent<RectTransform>();
         Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
         return RectTransformUtility.RectangleContainsScreenPoint(rect, screenPoint, cam);
@@ -211,13 +229,16 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     /// <summary>
     /// Clicking the 3D scene itself (not any UI) moves focus back to the main simulation
-    /// view — closes whichever nav page (Process Map / Flow Lab / Reactor Lab / Simulation)
-    /// is open, the way clicking outside a popover dismisses it elsewhere. Module control-
-    /// slider panels and the analytics window are deliberately left alone.
+    /// view — closes whichever nav page (Process Map / Reactor Lab / Simulation) is open, the
+    /// way clicking outside a popover dismisses it elsewhere. The Flow Lab panel is the
+    /// exception: it closes with its own X (the flow mode itself only with FLOW LAB / SHOW
+    /// STREAMS), so orbiting the plant with it open never snaps the camera back. Module
+    /// control-slider panels and the analytics window are deliberately left alone.
     /// </summary>
     private void OnBackgroundClicked()
     {
-        if (currentPage != DashboardPage.Overview) SelectPage(DashboardPage.Overview);
+        if (currentPage != DashboardPage.Overview && currentPage != DashboardPage.FlowInspection)
+            SelectPage(DashboardPage.Overview);
     }
 
     private void Update()
@@ -261,7 +282,6 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         canvasObject.AddComponent<GraphicRaycaster>();
 
-        BuildTitleBar(canvasObject.transform);
         BuildHeader(canvasObject.transform);
         BuildLegend(canvasObject.transform);
         BuildPlantStatus(canvasObject.transform);
@@ -273,31 +293,10 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         BuildEducationalBadge(canvasObject.transform);
     }
 
-    private const float TitleBarHeight = 26f;
-
-    /// <summary>
-    /// Slim OS-style window chrome above the functional header — app name/icon on the
-    /// left, a single close (X) button on the right. Replaces the old inline EXIT button
-    /// so the whole app reads as one window with a real title bar, matching the analytics
-    /// popup's own title bar.
-    /// </summary>
-    private void BuildTitleBar(Transform parent)
-    {
-        RectTransform titleBar = CreatePanel("App Title Bar", parent, new Color32(6, 15, 21, 255));
-        Pin(titleBar, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -TitleBarHeight), Vector2.zero);
-
-        Text label = CreateText("App Title", titleBar, "POWER-TO-METHANOL DIGITAL TWIN", 11, FontStyle.Bold, TextAnchor.MiddleLeft, MutedTextColor);
-        Pin(label.rectTransform, Vector2.zero, Vector2.one, new Vector2(14f, 0f), new Vector2(-40f, 0f));
-
-        Button close = CreateButton("App Close", titleBar, "X", new Color32(6, 15, 21, 255), 12);
-        Pin(close.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-30f, 2f), new Vector2(-2f, -2f));
-        close.onClick.AddListener(Quit);
-    }
-
     private void BuildHeader(Transform parent)
     {
         RectTransform header = CreatePanel("Header", parent, HeaderColor);
-        Pin(header, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -TitleBarHeight - 76f), new Vector2(0f, -TitleBarHeight));
+        Pin(header, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -76f), Vector2.zero);
 
         Text title = CreateText("Title", header, "POWER-TO-METHANOL DIGITAL TWIN", 21, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
         Pin(title.rectTransform, new Vector2(0f, 0f), new Vector2(0.31f, 1f), new Vector2(24f, 0f), new Vector2(-8f, 0f));
@@ -323,6 +322,11 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
                 analyticsNavButton = button;
                 button.onClick.AddListener(ToggleAnalyticsWindow);
             }
+            else if (page == DashboardPage.FlowInspection)
+            {
+                flowNavButton = button;
+                button.onClick.AddListener(ToggleFlowLab);
+            }
             else
             {
                 button.onClick.AddListener(() => SelectPage(page));
@@ -343,7 +347,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMin = new Vector2(0f, 1f);
         panel.anchorMax = new Vector2(0f, 1f);
         panel.pivot = new Vector2(0f, 1f);
-        panel.anchoredPosition = new Vector2(14f, -90f - TitleBarHeight);
+        panel.anchoredPosition = new Vector2(14f, -90f);
         panel.sizeDelta = new Vector2(238f, 240f);
 
         AddPanelTitle(panel, "PROCESS FLOW");
@@ -380,7 +384,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         panel.anchorMin = new Vector2(1f, 1f);
         panel.anchorMax = new Vector2(1f, 1f);
         panel.pivot = new Vector2(1f, 1f);
-        panel.anchoredPosition = new Vector2(-16f, -94f - TitleBarHeight);
+        panel.anchoredPosition = new Vector2(-16f, -94f);
         panel.sizeDelta = new Vector2(340f, 210f);
         AddPanelTitle(panel, "PLANT STATUS");
 
@@ -486,16 +490,20 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
         flowInspectionPanel = BuildContextPanel("Flow Lab", parent, new Vector2(0.69f, 0.21f), new Vector2(0.985f, 0.76f), "ENGINEERING PIPE-FLOW LAB");
         RectTransform flow = flowInspectionPanel.GetComponent<RectTransform>();
+        Button closeFlow = CreateButton("Flow Lab Close", flow, "X", HeaderColor, 13);
+        Pin(closeFlow.GetComponent<RectTransform>(), Vector2.one, Vector2.one, new Vector2(-40f, -38f), new Vector2(-8f, -8f));
+        closeFlow.onClick.AddListener(CloseFlowLab);
         Text flowBody = AddContextBody(flow,
-            "Filter the actual plant routes by subsystem. Mixed synthesis gas retains separate H2, CO2 and recycle-species tracers. Direction, packet speed and occupancy remain driven by the calculated plant state.");
-        Pin(flowBody.rectTransform, new Vector2(0f, 0.67f), new Vector2(1f, 0.88f), new Vector2(18f, 2f), new Vector2(-18f, 0f));
+            "While this lab is open the pipes turn see-through and show what they carry, in their legend colours. Gases stream as moving eddies, liquids fill the bore, and the recycle loop runs in dashes. Speed follows the calculated flow.");
+        flowBody.fontSize = 12;
+        Pin(flowBody.rectTransform, new Vector2(0f, 0.65f), new Vector2(1f, 0.88f), new Vector2(18f, 2f), new Vector2(-18f, 0f));
         AddFlowModeButton(flow, "ALL STREAMS", 0, 0.54f);
         AddFlowModeButton(flow, "FEED GASES", 1, 0.44f);
         AddFlowModeButton(flow, "CAPTURE LOOP", 2, 0.34f);
         AddFlowModeButton(flow, "SYNTHESIS LOOP", 3, 0.24f);
         AddFlowModeButton(flow, "PRODUCT PATH", 4, 0.14f);
-        Button toggle = AddContextButton(flow, "SHOW / HIDE STREAM VISUALS", 0.03f);
-        toggle.onClick.AddListener(ToggleStreams);
+        streamVisualsButton = AddContextButton(flow, "SHOW / HIDE STREAM VISUALS", 0.03f);
+        streamVisualsButton.onClick.AddListener(ToggleStreams);
 
         SetProcessStep(0);
         SelectPage(DashboardPage.Overview);
@@ -614,7 +622,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Button resetButton = AddFooterButton(footer, "RESET", 1, ResetSimulation);
         resetButton.GetComponent<Image>().color = Hex("7A2A2A");
         AddFooterButton(footer, "VIEW INFORMATION", 2, () => SetPopupVisible(helpPanel, true));
-        AddFooterButton(footer, "SHOW STREAMS", 3, ToggleStreams);
+        showStreamsButton = AddFooterButton(footer, "SHOW STREAMS", 3, ToggleFlowLab);
         massFlowToolButton = AddFooterButton(footer, "MASS FLOW TOOL", 4, ToggleMassFlowTool);
         AddFooterButton(footer, "PREVIOUS MODULE", 5, () => cameraController?.FocusPrevious());
         AddFooterButton(footer, "NEXT MODULE", 6, () => cameraController?.FocusNext());
@@ -667,16 +675,40 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void BuildAnalyticsWindow(Transform parent)
     {
+        if (externalAnalytics != null)
+        {
+            externalAnalytics.Close();
+            Destroy(externalAnalytics.gameObject);
+            externalAnalytics = null;
+        }
+        analyticsCanvas = canvas;
+        if (ExternalAnalyticsWindow.IsSupported)
+        {
+            externalAnalytics = ExternalAnalyticsWindow.Create(transform);
+            externalAnalytics.Closed += OnExternalAnalyticsClosed;
+            analyticsCanvas = externalAnalytics.Canvas;
+            parent = externalAnalytics.Root;
+        }
+        bool external = externalAnalytics != null;
+
         analyticsWindow = CreatePanel("Analytics Window", parent, new Color32(9, 29, 41, 250)).gameObject;
         RectTransform win = analyticsWindow.GetComponent<RectTransform>();
-        win.anchorMin = win.anchorMax = new Vector2(0.5f, 0.5f);
-        win.pivot = new Vector2(0.5f, 0.5f);
-        win.sizeDelta = new Vector2(1180f, 780f);
-        win.anchoredPosition = Vector2.zero;
+        if (external)
+        {
+            // The OS window supplies the frame, title and close button; fill its client area.
+            Pin(win, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        }
+        else
+        {
+            win.anchorMin = win.anchorMax = new Vector2(0.5f, 0.5f);
+            win.pivot = new Vector2(0.5f, 0.5f);
+            win.sizeDelta = new Vector2(1180f, 780f);
+            win.anchoredPosition = Vector2.zero;
 
-        Outline outline = analyticsWindow.AddComponent<Outline>();
-        outline.effectColor = AccentColor;
-        outline.effectDistance = new Vector2(1.5f, -1.5f);
+            Outline outline = analyticsWindow.AddComponent<Outline>();
+            outline.effectColor = AccentColor;
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+        }
 
         // Title bar doubles as the drag handle, like a normal OS window.
         RectTransform titleBar = CreatePanel("Title Bar", win, HeaderColor);
@@ -684,24 +716,32 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Text titleText = CreateText("Window Title", titleBar, "ANALYTICS & INSIGHTS", 14, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
         Pin(titleText.rectTransform, Vector2.zero, Vector2.one, new Vector2(16f, 0f), new Vector2(-206f, 0f));
 
-        WindowDragHandle drag = titleBar.gameObject.AddComponent<WindowDragHandle>();
-        drag.target = win;
-        drag.canvas = canvas;
+        if (!external)
+        {
+            WindowDragHandle drag = titleBar.gameObject.AddComponent<WindowDragHandle>();
+            drag.target = win;
+            drag.canvas = canvas;
+        }
 
         // Available regardless of which tab (Stats/Visualise) is active, so the window is
-        // fully self-contained for controlling the run.
+        // fully self-contained for controlling the run. As a separate OS window the close
+        // button is the system one, so the run controls move into its place.
+        float controlsShift = external ? 42f : 0f;
         Button windowRun = CreateButton("Window Run Toggle", titleBar, "PAUSE", AccentColor, 11);
-        Pin(windowRun.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-200f, 6f), new Vector2(-102f, -6f));
+        Pin(windowRun.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-200f + controlsShift, 6f), new Vector2(-102f + controlsShift, -6f));
         windowRun.onClick.AddListener(ToggleRunning);
         runToggleButtons.Add(windowRun);
 
         Button windowReset = CreateButton("Window Reset", titleBar, "RESET", Hex("7A2A2A"), 11);
-        Pin(windowReset.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-98f, 6f), new Vector2(-46f, -6f));
+        Pin(windowReset.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-98f + controlsShift, 6f), new Vector2(-46f + controlsShift, -6f));
         windowReset.onClick.AddListener(ResetSimulation);
 
-        Button close = CreateButton("Close Window", titleBar, "X", HeaderColor, 14);
-        Pin(close.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-40f, 4f), new Vector2(-4f, -4f));
-        close.onClick.AddListener(CloseAnalyticsWindow);
+        if (!external)
+        {
+            Button close = CreateButton("Close Window", titleBar, "X", HeaderColor, 14);
+            Pin(close.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-40f, 4f), new Vector2(-4f, -4f));
+            close.onClick.AddListener(CloseAnalyticsWindow);
+        }
 
         // Tab bar
         RectTransform tabBar = CreatePanel("Tab Bar", win, PanelColor);
@@ -777,6 +817,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         SelectSubTab(VisualiseSubTab.Yield);
         SetAnalyticsTab(AnalyticsTab.Stats);
         analyticsWindow.SetActive(false);
+        if (external) externalAnalytics.AssignLayerRecursively();
     }
 
     private CanvasGroup BuildCorrelationSubTab(RectTransform parent, string kind, string yLabel,
@@ -827,7 +868,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
         GameObject go = new GameObject("OFAT Timeline Graph", typeof(RectTransform));
         ofatTimeline = go.AddComponent<OfatTimelineGraphRuntime>();
-        ofatTimeline.Initialize(panelRect, canvas, font);
+        ofatTimeline.Initialize(panelRect, analyticsCanvas, font);
         return group;
     }
 
@@ -936,17 +977,35 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void ToggleAnalyticsWindow()
     {
+        // A separate window can only be opened once; while it is open the nav button is
+        // disabled and the window is closed from its own title bar.
+        if (AnalyticsIsExternal)
+        {
+            if (!analyticsWindowOpen) OpenAnalyticsWindow();
+            return;
+        }
         if (analyticsWindowOpen) CloseAnalyticsWindow();
         else OpenAnalyticsWindow();
     }
 
     private void OpenAnalyticsWindow()
     {
-        analyticsWindowOpen = true;
-        if (analyticsWindow != null)
+        if (AnalyticsIsExternal)
         {
-            analyticsWindow.transform.SetAsLastSibling();
-            SetPopupVisible(analyticsWindow, true);
+            if (externalAnalytics.IsOpen) return;
+            analyticsWindow.SetActive(true);
+            externalAnalytics.Open();
+            analyticsWindowOpen = externalAnalytics.IsOpen;
+            if (!analyticsWindowOpen) analyticsWindow.SetActive(false);
+        }
+        else
+        {
+            analyticsWindowOpen = true;
+            if (analyticsWindow != null)
+            {
+                analyticsWindow.transform.SetAsLastSibling();
+                SetPopupVisible(analyticsWindow, true);
+            }
         }
         ApplyReactorLock();
         Refresh();
@@ -955,7 +1014,24 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private void CloseAnalyticsWindow()
     {
         analyticsWindowOpen = false;
-        SetPopupVisible(analyticsWindow, false);
+        if (AnalyticsIsExternal)
+        {
+            externalAnalytics.Close();
+            if (analyticsWindow != null) analyticsWindow.SetActive(false);
+        }
+        else
+        {
+            SetPopupVisible(analyticsWindow, false);
+        }
+        ApplyReactorLock();
+        Refresh();
+    }
+
+    /// <summary>The user closed the separate analytics window from its own title bar.</summary>
+    private void OnExternalAnalyticsClosed()
+    {
+        analyticsWindowOpen = false;
+        if (analyticsWindow != null) analyticsWindow.SetActive(false);
         ApplyReactorLock();
         Refresh();
     }
@@ -1027,7 +1103,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         graph.XMax = xMax;
         graph.YMin = yMin;
         graph.YMax = yMax;
-        graph.Initialize(container, canvas, font);
+        graph.Initialize(container, analyticsCanvas, font);
 
         return AddHiddenCanvasGroup(go);
     }
@@ -1084,7 +1160,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         graph.SecondaryLabel = secondaryLabel;
         graph.SecondaryUnit = secondaryUnit;
         graph.SecondarySelector = secondarySelector;
-        graph.Initialize(container, canvas, font);
+        graph.Initialize(container, analyticsCanvas, font);
 
         AddHiddenCanvasGroup(go);
         return graph;
@@ -1139,7 +1215,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private void BuildEducationalBadge(Transform parent)
     {
         Text badge = CreateText("Educational Badge", parent, "EDUCATIONAL VISUALIZATION • SIMPLIFIED PROCESS VALUES", 10, FontStyle.Bold, TextAnchor.MiddleCenter, MutedTextColor);
-        Pin(badge.rectTransform, new Vector2(0.33f, 1f), new Vector2(0.67f, 1f), new Vector2(0f, -98f - TitleBarHeight), new Vector2(0f, -76f - TitleBarHeight));
+        Pin(badge.rectTransform, new Vector2(0.33f, 1f), new Vector2(0.67f, 1f), new Vector2(0f, -98f), new Vector2(0f, -76f));
     }
 
     private void Refresh()
@@ -1156,6 +1232,18 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             if (img != null) img.color = simulator.IsRunning ? Hex("1E7A46") : Hex("B37A18");
             Text label = button.GetComponentInChildren<Text>();
             if (label != null) label.text = simulator.IsRunning ? "PAUSE" : "RESUME";
+        }
+
+        if (analyticsNavButton != null)
+            analyticsNavButton.interactable = !(AnalyticsIsExternal && analyticsWindowOpen);
+        if (showStreamsButton != null)
+            showStreamsButton.GetComponent<Image>().color = flowLabOn ? AccentColor : HeaderColor;
+        if (streamVisualsButton != null)
+        {
+            FinalPlantFlowRuntime flowRuntime = FinalPlantFlowRuntime.Instance;
+            Text label = streamVisualsButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = flowRuntime != null && !flowRuntime.VisualsEnabled ? "SHOW STREAM VISUALS" : "HIDE STREAM VISUALS";
         }
 
         if (massFlowToolButton != null)
@@ -1201,8 +1289,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         for (int i = 0; i < navigationImages.Count; i++)
         {
             if (navigationImages[i] == null) continue;
-            bool active = navigationPages[i] == DashboardPage.Analytics
-                ? analyticsWindowOpen
+            bool active = navigationPages[i] == DashboardPage.Analytics ? analyticsWindowOpen
+                : navigationPages[i] == DashboardPage.FlowInspection ? flowLabOn
                 : navigationPages[i] == currentPage;
             navigationImages[i].color = active ? AccentColor : HeaderColor;
         }
@@ -1245,22 +1333,50 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
                 (s.storageFillPercent > 85f ? "Storage headroom is low; monitor the interlock." : "Storage headroom is adequate.");
     }
 
-    private void SelectPage(DashboardPage page)
+    private void SelectPage(DashboardPage page, bool moveCamera = true)
     {
         currentPage = page;
         if (processPanel != null) processPanel.SetActive(page == DashboardPage.Process);
         if (equipmentPanel != null) equipmentPanel.SetActive(page == DashboardPage.Equipment);
         if (simulationPanel != null) simulationPanel.SetActive(page == DashboardPage.Simulation);
         if (flowInspectionPanel != null) flowInspectionPanel.SetActive(page == DashboardPage.FlowInspection);
-        if (legendPanel != null) legendPanel.SetActive(page == DashboardPage.Overview || page == DashboardPage.Process || page == DashboardPage.FlowInspection);
+        if (legendPanel != null) legendPanel.SetActive(flowLabOn || page == DashboardPage.Overview || page == DashboardPage.Process || page == DashboardPage.FlowInspection);
         if (plantStatusPanel != null) plantStatusPanel.SetActive(page == DashboardPage.Overview);
         if (kpiStrip != null) kpiStrip.SetActive(page == DashboardPage.Overview || page == DashboardPage.Process || page == DashboardPage.Simulation);
-        if (page == DashboardPage.Overview) Focus(-1);
-        else if (page == DashboardPage.FlowInspection) Focus(-1);
-        else if (page == DashboardPage.Equipment) Focus(7);
-        if (page != DashboardPage.FlowInspection) SetFlowInspectionMode(0);
+        if (moveCamera)
+        {
+            if (page == DashboardPage.Overview || page == DashboardPage.FlowInspection) Focus(-1);
+            else if (page == DashboardPage.Equipment) Focus(7);
+        }
         Refresh();
     }
+
+    /// <summary>
+    /// FLOW LAB (and the footer's SHOW STREAMS): when the mode is off, switch it on and open its
+    /// panel; when it is already on, switch it straight off without reopening the panel.
+    /// </summary>
+    private void ToggleFlowLab() => SetFlowLabMode(!flowLabOn);
+
+    private void SetFlowLabMode(bool on)
+    {
+        flowLabOn = on;
+        FinalPlantFlowRuntime flowRuntime = FinalPlantFlowRuntime.Instance != null
+            ? FinalPlantFlowRuntime.Instance
+            : FindFirstObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
+        if (flowRuntime != null) flowRuntime.SetFlowLabActive(on);
+        if (on)
+        {
+            SelectPage(DashboardPage.FlowInspection);
+            return;
+        }
+        SetFlowInspectionMode(0);
+        // Switching the flow off leaves the camera where the user put it.
+        SelectPage(currentPage == DashboardPage.FlowInspection ? DashboardPage.Overview : currentPage, false);
+    }
+
+    /// <summary>The panel's X only hides the panel; the flow keeps running so the plant can be
+    /// explored with it on.</summary>
+    private void CloseFlowLab() => SelectPage(DashboardPage.Overview, false);
 
     private void SetProcessStep(int index)
     {
@@ -1312,6 +1428,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         FinalPlantFlowRuntime flow = FindFirstObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
         if (flow != null) flow.ToggleVisuals();
+        Refresh();
     }
 
     private void SetFlowInspectionMode(int mode)
@@ -1324,15 +1441,6 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         InteractiveModulePanelRuntime panels = FindFirstObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
         if (panels != null) panels.SetSelectionVisible(visible);
-    }
-
-    private void Quit()
-    {
-#if UNITY_EDITOR
-        UnityEditor.EditorApplication.isPlaying = false;
-#else
-        Application.Quit();
-#endif
     }
 
     private Text AddStatusRow(RectTransform panel, string label, float y)

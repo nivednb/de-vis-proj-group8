@@ -3,34 +3,39 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class PipeFlowAnimator : MonoBehaviour
 {
-    // PipeFlow.shader's packet frequencies are all hundredths (for example
-    // 0.24, 0.34 and 0.43). Advancing the offset by 100 is therefore a whole
-    // number of cycles for every packet pattern. Wrapping at 1 made tracers
-    // jump backwards and look as if they regenerated inside each segment.
-    const float SeamlessOffsetPeriod = 100f;
+    /// <summary>
+    /// PipeFlow.shader's noise lattices all repeat after 256 cells along the pipe, so the
+    /// advected offset wraps at exactly that — the stream never visibly jumps or restarts.
+    /// </summary>
+    public const float NoisePeriod = 256f;
 
     public PlantFlowKind flowKind = PlantFlowKind.MixedFeed;
     public Color flowColor = Color.white;
-    [Min(0f)] public float speed = 1f;
-    [Min(0f)] public float density = 18f;
+    [Tooltip("Visual advection speed in metres per second.")]
+    [Min(0f)] public float speed = 3f;
+    [Tooltip("Noise cells per metre of pipe — the size of the eddies.")]
+    [Min(.01f)] public float featureScale = .6f;
     [Range(0f, 1f)] public float pipeAlpha = .2f;
     [Range(0f, 3f)] public float flowIntensity = 1f;
-    public bool reverseDirection;
     public bool isFlowing = true;
     public bool isGhostSupply;
     [HideInInspector] public bool useSharedProcessClock;
-    [Tooltip("Visible molar/phase fractions for multi-species routes. Values are normalized by Apply().")]
-    public Vector3 speciesFractions = new(1f, 0f, 0f);
 
-    static readonly int FlowColor=Shader.PropertyToID("_FlowColor"), A=Shader.PropertyToID("_SpeciesColorA"),
-        B=Shader.PropertyToID("_SpeciesColorB"), C=Shader.PropertyToID("_SpeciesColorC"),
-        Count=Shader.PropertyToID("_SpeciesCount"), Offset=Shader.PropertyToID("_FlowOffset"),
-        Fractions=Shader.PropertyToID("_SpeciesFractions"),
-        Tiling=Shader.PropertyToID("_Tiling"), Alpha=Shader.PropertyToID("_BaseAlpha"),
-        Intensity=Shader.PropertyToID("_FlowIntensity"), Ghost=Shader.PropertyToID("_GhostMode"),
-        Liquid=Shader.PropertyToID("_IsLiquid"), TwoPhase=Shader.PropertyToID("_IsTwoPhase"),
-        UseObjectFlow=Shader.PropertyToID("_UseObjectFlow"), FlowAxisOS=Shader.PropertyToID("_FlowAxisOS"),
-        FlowMin=Shader.PropertyToID("_FlowMin"), FlowLength=Shader.PropertyToID("_FlowLength");
+    [Header("Route geometry (world space)")]
+    [Tooltip("A point on this segment's axis where the route distance equals flowStart.")]
+    public Vector3 flowOrigin;
+    [Tooltip("Direction the stream travels through this segment.")]
+    public Vector3 flowDirection = Vector3.up;
+    [Tooltip("Route distance in metres at flowOrigin, so consecutive segments continue one pattern.")]
+    public float flowStart;
+    bool hasRoute;
+
+    static readonly int FlowColor = Shader.PropertyToID("_FlowColor"), Offset = Shader.PropertyToID("_FlowOffset"),
+        Scale = Shader.PropertyToID("_FlowScale"), Alpha = Shader.PropertyToID("_BaseAlpha"),
+        Intensity = Shader.PropertyToID("_FlowIntensity"), Ghost = Shader.PropertyToID("_GhostMode"),
+        Liquid = Shader.PropertyToID("_IsLiquid"), TwoPhase = Shader.PropertyToID("_IsTwoPhase"),
+        Dashed = Shader.PropertyToID("_Dashed"), OriginWS = Shader.PropertyToID("_FlowOriginWS"),
+        DirWS = Shader.PropertyToID("_FlowDirWS");
     Renderer target;
     MaterialPropertyBlock block;
     float offset;
@@ -41,24 +46,36 @@ public sealed class PipeFlowAnimator : MonoBehaviour
     void Update()
     {
         Ensure();
-        if (target == null) return;
-        if (useSharedProcessClock) return;
+        if (target == null || useSharedProcessClock) return;
         bool simulationRunning = PlantProcessSimulator.Instance == null || PlantProcessSimulator.Instance.IsRunning;
         if (isFlowing && simulationRunning)
-            offset = Mathf.Repeat(
-                offset + Time.deltaTime * speed * (reverseDirection ? -1f : 1f),
-                SeamlessOffsetPeriod);
-        target.GetPropertyBlock(block); block.SetFloat(Offset,offset); target.SetPropertyBlock(block);
+            offset = Mathf.Repeat(offset + Time.deltaTime * speed * featureScale, NoisePeriod);
+        PushOffset();
     }
 
     /// <summary>
-    /// Drives this renderer from the plant-wide transport clock. This prevents
-    /// individual pipe objects from restarting their own decorative loop.
+    /// Drives this renderer from its route's shared transport offset (in noise cells), so
+    /// every segment of one route advances as one continuous stream.
     /// </summary>
-    public void SetSharedProcessOffset(float processOffset)
+    public void SetSharedProcessOffset(float routeOffset)
     {
         useSharedProcessClock = true;
-        offset = Mathf.Repeat(processOffset, SeamlessOffsetPeriod);
+        offset = Mathf.Repeat(routeOffset, NoisePeriod);
+        PushOffset();
+    }
+
+    /// <summary>Places this segment on its route: world origin, travel direction and the
+    /// route distance at the origin.</summary>
+    public void SetRoute(Vector3 origin, Vector3 direction, float startDistance)
+    {
+        flowOrigin = origin;
+        flowDirection = direction.sqrMagnitude > 1e-6f ? direction.normalized : Vector3.up;
+        flowStart = startDistance;
+        hasRoute = true;
+    }
+
+    void PushOffset()
+    {
         Ensure();
         if (target == null) return;
         target.GetPropertyBlock(block);
@@ -68,63 +85,51 @@ public sealed class PipeFlowAnimator : MonoBehaviour
 
     public void Apply()
     {
-        Ensure(); if(target==null)return;
-        // Species tracers are drawn in their own legend colours, so composition inside a mixed
-        // stream is readable without inventing hues the legend never explains.
-        Color h2=PlantStreamLegend.WaterHydrogen, co2=PlantStreamLegend.AmineCapturedCo2,
-            syngas=PlantStreamLegend.CompressedSyngas, crude=PlantStreamLegend.CrudeMethanol;
-        Color a=flowColor,b=flowColor,c=flowColor; float count=1,liquid=0,twoPhase=0;
-        switch(flowKind)
+        Ensure(); if (target == null) return;
+        if (!hasRoute) DeriveRouteFromMesh();
+        float liquid = 0f, twoPhase = 0f;
+        switch (flowKind)
         {
-            case PlantFlowKind.MixedFeed:
-            case PlantFlowKind.SyngasCold:
-            case PlantFlowKind.SyngasHeated:
-            case PlantFlowKind.RecycleGas:
-                // Fresh H2, fresh CO2 and the recycled gas remain individually identifiable
-                // after the T-junction instead of becoming one flat colour.
-                a=h2; b=co2; c=syngas; count=3; break;
-            case PlantFlowKind.ReactorEffluent:
-                // At reactor outlet conditions (250 C, 70 bar) everything is still vapour —
-                // methanol only condenses downstream of the cooler, so this runs as a gas.
-                a=crude; b=h2; c=syngas; count=3; break;
-            case PlantFlowKind.CrudeMethanolVapourLiquid:
-                // Species A is the condensed liquid, species B the gas still above it.
-                a=crude; b=syngas; count=2; twoPhase=1; break;
+            case PlantFlowKind.CrudeMethanolVapourLiquid: twoPhase = 1f; break;
             case PlantFlowKind.RichAmine:
             case PlantFlowKind.LeanAmine:
             case PlantFlowKind.LiquidCrudeMethanol:
-            case PlantFlowKind.MethanolProduct: liquid=1; break;
+            case PlantFlowKind.MethanolProduct: liquid = 1f; break;
         }
         target.GetPropertyBlock(block);
-        block.SetColor(FlowColor,flowColor); block.SetColor(A,a); block.SetColor(B,b); block.SetColor(C,c);
-        Vector3 fractions=speciesFractions;
-        float total=Mathf.Max(.0001f,fractions.x+fractions.y+fractions.z);
-        fractions/=total;
-        block.SetVector(Fractions,new Vector4(fractions.x,fractions.y,fractions.z,0f));
-        block.SetFloat(Count,count); block.SetFloat(Tiling,density); block.SetFloat(Alpha,pipeAlpha);
-        block.SetFloat(Intensity,isFlowing?flowIntensity:0); block.SetFloat(Ghost,isGhostSupply?1:0);
-        block.SetFloat(Liquid,liquid); block.SetFloat(TwoPhase,twoPhase); block.SetFloat(Offset,offset);
-        ApplyGeometricCoordinates(block);
+        block.SetColor(FlowColor, flowColor);
+        block.SetFloat(Scale, featureScale); block.SetFloat(Alpha, pipeAlpha);
+        block.SetFloat(Intensity, isFlowing ? flowIntensity : 0f); block.SetFloat(Ghost, isGhostSupply ? 1f : 0f);
+        block.SetFloat(Liquid, liquid); block.SetFloat(TwoPhase, twoPhase);
+        block.SetFloat(Dashed, flowKind == PlantFlowKind.RecycleGas ? 1f : 0f);
+        block.SetFloat(Offset, offset);
+        block.SetVector(OriginWS, new Vector4(flowOrigin.x, flowOrigin.y, flowOrigin.z, flowStart));
+        block.SetVector(DirWS, flowDirection);
         target.SetPropertyBlock(block);
     }
-    void ApplyGeometricCoordinates(MaterialPropertyBlock properties)
+
+    /// <summary>Removes every per-renderer override so the renderer's own material draws
+    /// exactly as authored.</summary>
+    public void ClearOverrides()
     {
-        MeshFilter filter=GetComponent<MeshFilter>();
-        Mesh mesh=filter!=null?filter.sharedMesh:null;
-        if(mesh==null){properties.SetFloat(UseObjectFlow,0f);return;}
-        Bounds bounds=mesh.bounds;
-        Vector3 size=bounds.size;
-        int longest=size.x>=size.y&&size.x>=size.z?0:(size.y>=size.z?1:2);
-        float major=longest==0?size.x:(longest==1?size.y:size.z);
-        float otherA=longest==0?size.y:size.x;
-        float otherB=longest==2?size.y:size.z;
-        bool straight=major>Mathf.Max(otherA,otherB)*1.35f;
-        Vector3 axis=longest==0?Vector3.right:(longest==1?Vector3.up:Vector3.forward);
-        float center=Vector3.Dot(bounds.center,axis);
-        properties.SetFloat(UseObjectFlow,straight?1f:0f);
-        properties.SetVector(FlowAxisOS,axis);
-        properties.SetFloat(FlowMin,center-major*.5f);
-        properties.SetFloat(FlowLength,Mathf.Max(.0001f,major));
+        Ensure();
+        if (target != null) target.SetPropertyBlock(null);
     }
-    void Ensure(){ if(target==null)target=GetComponent<Renderer>(); if(block==null)block=new MaterialPropertyBlock(); }
+
+    /// <summary>Fallback for a standalone animator: run along the mesh's longest axis.</summary>
+    void DeriveRouteFromMesh()
+    {
+        MeshFilter filter = GetComponent<MeshFilter>();
+        Mesh mesh = filter != null ? filter.sharedMesh : null;
+        if (mesh == null) { flowOrigin = transform.position; flowDirection = transform.up; flowStart = 0f; return; }
+        Bounds bounds = mesh.bounds;
+        Vector3 size = bounds.size;
+        Vector3 axis = size.x >= size.y && size.x >= size.z ? Vector3.right : (size.y >= size.z ? Vector3.up : Vector3.forward);
+        float major = Vector3.Dot(size, axis);
+        flowOrigin = transform.TransformPoint(bounds.center - axis * major * .5f);
+        flowDirection = transform.TransformDirection(axis).normalized;
+        flowStart = 0f;
+    }
+
+    void Ensure() { if (target == null) target = GetComponent<Renderer>(); if (block == null) block = new MaterialPropertyBlock(); }
 }

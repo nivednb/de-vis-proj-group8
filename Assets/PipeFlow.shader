@@ -2,27 +2,19 @@ Shader "Custom/PipeFlow"
 {
     Properties
     {
-        _MainTex ("Flow Texture", 2D) = "white" {}
-        _FlowColor ("Carrier Colour", Color) = (0.2,0.8,0.3,1)
-        _SpeciesColorA ("Species A", Color) = (0.2,1,0.3,1)
-        _SpeciesColorB ("Species B", Color) = (0.7,0.9,1,1)
-        _SpeciesColorC ("Species C", Color) = (1,0.8,0.2,1)
-        _SpeciesCount ("Species Count", Range(1,3)) = 1
-        _SpeciesFractions ("Species Fractions", Vector) = (1,0,0,0)
-        _FlowSpeed ("Flow Speed", Float) = 1
-        _Tiling ("Tracer Density", Float) = 18
+        _FlowColor ("Stream Colour (legend)", Color) = (0.2,0.8,0.3,1)
+        _FlowScale ("Feature Scale (cells per metre)", Float) = 0.6
+        _FlowOffset ("Advected Offset (cells)", Float) = 0
         _BaseAlpha ("Pipe Alpha", Range(0,1)) = 0.2
         _FlowIntensity ("Flow Intensity", Range(0,2)) = 1.1
         [Toggle] _GhostMode ("Ghost Supply", Float) = 0
         _GhostAlphaMul ("Ghost Alpha", Range(0,1)) = 0.4
-        _GhostTilingMul ("Ghost Spacing", Range(0.1,1)) = 0.5
         _IsLiquid ("Liquid", Float) = 0
         _IsTwoPhase ("Two Phase", Float) = 0
+        _Dashed ("Dashed (recycle loop)", Float) = 0
         _Highlight ("Probe Highlight", Range(0,1)) = 0
-        _UseObjectFlow ("Use Object Flow Coordinates", Float) = 0
-        _FlowAxisOS ("Flow Axis (Object Space)", Vector) = (0,1,0,0)
-        _FlowMin ("Flow Axis Minimum", Float) = -0.5
-        _FlowLength ("Flow Axis Length", Float) = 1
+        _FlowOriginWS ("Route Origin (xyz), Route Distance There (w)", Vector) = (0,0,0,0)
+        _FlowDirWS ("Flow Direction (world)", Vector) = (0,1,0,0)
     }
     SubShader
     {
@@ -35,154 +27,151 @@ Shader "Custom/PipeFlow"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma target 3.0
             #include "UnityCG.cginc"
-            sampler2D _MainTex;
-            float4 _MainTex_ST;
-            fixed4 _FlowColor, _SpeciesColorA, _SpeciesColorB, _SpeciesColorC;
-            float4 _SpeciesFractions;
-            float _SpeciesCount, _Tiling, _BaseAlpha, _FlowIntensity, _FlowOffset;
-            float _GhostMode, _GhostAlphaMul, _GhostTilingMul, _IsLiquid, _IsTwoPhase;
-            float _Highlight;
-            float _UseObjectFlow, _FlowMin, _FlowLength;
-            float4 _FlowAxisOS;
 
-            // --- procedural noise -------------------------------------------------
-            // Continuous fields replace the old per-species packet masks. Gas and liquid
-            // differ in how the field is used, not just in colour: a gas is a turbulent
-            // cloud whose density varies everywhere, a liquid is a filled bore whose
-            // surface merely ripples.
-            float hash21(float2 p)
+            fixed4 _FlowColor;
+            float _FlowScale, _FlowOffset, _BaseAlpha, _FlowIntensity;
+            float _GhostMode, _GhostAlphaMul, _IsLiquid, _IsTwoPhase, _Dashed, _Highlight;
+            float4 _FlowOriginWS, _FlowDirWS;
+            // Plant-wide evolution clock, set once per frame by FinalPlantFlowRuntime.
+            float _PipeFlowTime;
+
+            // --- periodic value noise ---------------------------------------------
+            // Every lattice repeats after a whole number of cells, and the C# side wraps
+            // the advected offset and the clock at exactly those periods. The field is
+            // therefore seamless for ever: nothing ever jumps back or restarts.
+            float hash31(float3 p)
             {
-                float3 p3 = frac(float3(p.xyx) * 0.1031);
-                p3 += dot(p3, p3.yzx + 33.33);
-                return frac((p3.x + p3.y) * p3.z);
+                p = frac(p * 0.1031);
+                p += dot(p, p.zyx + 31.32);
+                return frac((p.x + p.y) * p.z);
             }
-            float vnoise(float2 p)
+            float3 wrapCell(float3 c, float3 period) { return c - period * floor(c / period); }
+            float vnoise(float3 p, float3 period)
             {
-                float2 ip = floor(p), f = frac(p);
+                float3 i = floor(p), f = frac(p);
                 f = f * f * (3.0 - 2.0 * f);
-                float a = hash21(ip);
-                float b = hash21(ip + float2(1,0));
-                float c = hash21(ip + float2(0,1));
-                float d = hash21(ip + float2(1,1));
-                return lerp(lerp(a,b,f.x), lerp(c,d,f.x), f.y);
-            }
-            float fbm2(float2 p) { return vnoise(p) * 0.64 + vnoise(p * 2.17 + 4.7) * 0.36; }
-            float fbm3(float2 p)
-            {
-                return vnoise(p) * 0.52 + vnoise(p * 2.11 + 3.3) * 0.32 + vnoise(p * 4.23 + 9.1) * 0.16;
+                float n000 = hash31(wrapCell(i, period));
+                float n100 = hash31(wrapCell(i + float3(1,0,0), period));
+                float n010 = hash31(wrapCell(i + float3(0,1,0), period));
+                float n110 = hash31(wrapCell(i + float3(1,1,0), period));
+                float n001 = hash31(wrapCell(i + float3(0,0,1), period));
+                float n101 = hash31(wrapCell(i + float3(1,0,1), period));
+                float n011 = hash31(wrapCell(i + float3(0,1,1), period));
+                float n111 = hash31(wrapCell(i + float3(1,1,1), period));
+                float a = lerp(lerp(n000, n100, f.x), lerp(n010, n110, f.x), f.y);
+                float b = lerp(lerp(n001, n101, f.x), lerp(n011, n111, f.x), f.y);
+                return lerp(a, b, f.z);
             }
 
-            struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; float2 uv:TEXCOORD0; };
-            struct v2f
-            {
-                float4 pos:SV_POSITION; float2 uv:TEXCOORD0; float3 normal:TEXCOORD1;
-                float3 view:TEXCOORD2; float3 objectPos:TEXCOORD3; float3 objectNormal:TEXCOORD4;
-            };
+            struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; };
+            struct v2f { float4 pos:SV_POSITION; float3 worldPos:TEXCOORD0; float3 normal:TEXCOORD1; };
+
             v2f vert(appdata v)
             {
-                v2f o; o.pos=UnityObjectToClipPos(v.vertex); o.uv=TRANSFORM_TEX(v.uv,_MainTex);
-                o.normal=UnityObjectToWorldNormal(v.normal); o.view=normalize(WorldSpaceViewDir(v.vertex));
-                o.objectPos=v.vertex.xyz; o.objectNormal=normalize(v.normal); return o;
+                v2f o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.normal = UnityObjectToWorldNormal(v.normal);
+                return o;
             }
+
             fixed4 frag(v2f i):SV_Target
             {
-                float3 wn=normalize(i.normal);
-                float ndv=saturate(dot(wn,normalize(i.view)));
-                float rim=1-ndv;
-                fixed3 shell=lerp(fixed3(.28,.31,.35),fixed3(.62,.68,.74),pow(rim,2.5));
-                float core=pow(ndv,1.35);
-                float tiling=_Tiling*lerp(1,_GhostTilingMul,_GhostMode);
-                float3 axis=normalize(_FlowAxisOS.xyz);
-                float objectT=saturate((dot(i.objectPos,axis)-_FlowMin)/max(_FlowLength,.0001));
-                float3 an=abs(axis);
-                float objectLane=(an.y>an.x && an.y>an.z)
-                    ? atan2(i.objectNormal.z,i.objectNormal.x)/6.2831853+.5
-                    : ((an.x>an.z)
-                        ? atan2(i.objectNormal.y,i.objectNormal.z)/6.2831853+.5
-                        : atan2(i.objectNormal.y,i.objectNormal.x)/6.2831853+.5);
-                float longitudinal=lerp(i.uv.y,objectT,saturate(_UseObjectFlow));
-                float lane=frac(lerp(i.uv.x,objectLane,saturate(_UseObjectFlow)));
+                float3 wn = normalize(i.normal);
+                float3 view = normalize(_WorldSpaceCameraPos - i.worldPos);
+                float ndv = abs(dot(wn, view));
+                float rim = 1 - ndv;
+                float core = pow(ndv, 1.35);
 
-                // Advected axial coordinate, and a circumferential coordinate mirrored so
-                // the noise has no visible seam where the lane wraps.
-                float y=longitudinal*tiling+_FlowOffset;
-                float laneM=abs(frac(lane)*2.0-1.0);
-                // Which way is down on this part of the bore — lets a condensing stream
-                // actually pool along the bottom of a horizontal run. Near zero on vertical
-                // runs, where the phases correctly stop separating.
-                float down=saturate(-wn.y);
+                // Distance along the whole route in metres. Every segment of a route carries
+                // its own origin and the route distance at that origin, so consecutive
+                // segments continue one another instead of each restarting the pattern.
+                float3 dir = normalize(_FlowDirWS.xyz);
+                float s = _FlowOriginWS.w + dot(i.worldPos - _FlowOriginWS.xyz, dir);
+                float a = s * _FlowScale - _FlowOffset;
 
-                float carrier=.82+.18*sin(longitudinal*3.14159+_FlowOffset*.4);
-                float flowOn=saturate(_FlowIntensity);
+                // Angle around the bore, measured in a frame built from the flow direction.
+                float3 refAxis = abs(dir.y) < 0.95 ? float3(0,1,0) : float3(1,0,0);
+                float3 u = normalize(cross(refAxis, dir));
+                float3 w = cross(dir, u);
+                float lane = atan2(dot(wn, w), dot(wn, u)) / 6.2831853 + 0.5;
 
-                fixed3 fluid=0; float fill=0; float bodyAlpha=0;
-                if(_IsLiquid>.5)
+                float flowOn = saturate(_FlowIntensity);
+                float3 c = _FlowColor.rgb;
+                float3 fluid = 0; float fill = 0; float bodyAlpha = 0;
+
+                if (_IsLiquid > .5 || _IsTwoPhase > .5)
                 {
-                    // A liquid fills the bore. Nearly uniform colour, slow advected shading
-                    // for depth, and one bright curvature highlight — no gaps, no packets.
-                    float ripple=fbm2(float2(y*.13,laneM*1.6));
-                    float deep=fbm2(float2(y*.05+21.0,laneM*.8));
-                    float sheen=pow(saturate(1.0-abs(laneM-.30)*2.2),3.5);
-                    fluid=_FlowColor.rgb*(.58+.26*ripple+.16*deep)+sheen*.30;
-                    fill=1.0;
-                    bodyAlpha=.88;
-                }
-                else if(_IsTwoPhase>.5)
-                {
-                    // Condensed liquid runs along the underside with a wavy interface; gas
-                    // rides above it, carrying entrained droplets.
-                    float wave=fbm2(float2(y*.20,laneM*1.8));
-                    float level=saturate((down-(.46-.16*wave))*3.2);
-                    float mist=smoothstep(.32,.80,fbm3(float2(y*.16+17.0,laneM*3.0)));
-                    float drops=smoothstep(.74,.97,fbm2(float2(y*.55+5.0,laneM*3.4)));
-                    fixed3 liq=_SpeciesColorA.rgb*(.52+.30*wave);
-                    fixed3 gas=_SpeciesColorB.rgb*(.18+.46*mist);
-                    fluid=lerp(gas,liq,level)+drops*(1.0-level)*.28;
-                    fill=lerp(.14+.44*mist+drops*.34,1.0,level);
-                    bodyAlpha=lerp(.10+.30*mist,.84,level);
+                    // A liquid fills the bore: nearly uniform legend colour, slow rolling
+                    // shading and thin bright flow lines stretched along the pipe.
+                    float t = _PipeFlowTime * 0.2;
+                    float roll = vnoise(float3(a, lane * 4, t), float3(256, 4, 256));
+                    float deep = vnoise(float3(a * 0.5 + 11.0, lane * 4, t * 0.5), float3(128, 4, 128));
+                    float lines = vnoise(float3(a * 0.5, lane * 16, t), float3(128, 16, 256));
+                    lines = smoothstep(0.62, 0.95, lines);
+                    float sheen = pow(saturate(1.0 - abs(ndv - 0.72) * 3.0), 3.0);
+                    float3 liquid = c * (0.55 + 0.25 * roll + 0.15 * deep) + lines * 0.22 + sheen * 0.18;
+
+                    if (_IsTwoPhase > .5)
+                    {
+                        // Condensate runs along the underside with a wavy surface; the vapour
+                        // above it is the same stream, lighter and thinner, carrying mist.
+                        float down = saturate(-wn.y);
+                        float level = saturate((down - (0.42 - 0.18 * roll)) * 3.2);
+                        float mist = smoothstep(0.35, 0.85,
+                            vnoise(float3(a * 2 + 5.0, lane * 8, t * 2), float3(512, 8, 512)));
+                        float3 vapour = lerp(c, 1, 0.35) * (0.30 + 0.55 * mist);
+                        fluid = lerp(vapour, liquid, level);
+                        fill = lerp(0.30 + 0.45 * mist, 1.0, level);
+                        bodyAlpha = lerp(0.18 + 0.35 * mist, 0.86, level);
+                    }
+                    else
+                    {
+                        fluid = liquid;
+                        fill = 1.0;
+                        bodyAlpha = 0.86;
+                    }
                 }
                 else
                 {
-                    // A gas is compressible and turbulent: density varies continuously and
-                    // nothing has a hard edge. Composition shows as colour drifting through
-                    // the cloud, each species riding its own eddy, rather than as a train of
-                    // separate solid pellets.
-                    // Low axial frequency against a higher circumferential one stretches each
-                    // eddy along the bore, so the gas reads as streaming rather than bubbling.
-                    float e1=fbm3(float2(y*.12,laneM*2.4));
-                    float e2=fbm3(float2(y*.155+13.7,laneM*2.9+5.5));
-                    float e3=fbm3(float2(y*.10+27.1,laneM*2.0+9.3));
-                    float3 w=saturate(_SpeciesFractions.xyz);
-                    w.y*=step(1.5,_SpeciesCount);
-                    w.z*=step(2.5,_SpeciesCount);
-                    float s1=w.x*e1, s2=w.y*e2, s3=w.z*e3;
-                    float sum=max(s1+s2+s3,1e-4);
-                    fixed3 tint=(_SpeciesColorA.rgb*s1+_SpeciesColorB.rgb*s2+_SpeciesColorC.rgb*s3)/sum;
-                    float wsum=max(w.x+w.y+w.z,1e-4);
-                    // Value noise clusters around 0.5, which on its own reads as uniform fog.
-                    // Stretching it to the full range and squaring gives real gaps between
-                    // real puffs — the contrast is what makes it look like a gas.
-                    float raw=sum/wsum;
-                    float turb=smoothstep(.30,.80,raw);
-                    turb*=turb;
-                    // The route's legend colour stays dominant; the species tint modulates it.
-                    fluid=lerp(_FlowColor.rgb,tint,.55)*(.26+.70*turb);
-                    fill=.10+.62*turb;
-                    bodyAlpha=.05+.40*turb;
+                    // A gas is turbulent: its density varies continuously, eddies stream along
+                    // the pipe and slowly evolve while they travel, so the stream never reads
+                    // as a rigid texture sliding past.
+                    float t = _PipeFlowTime * 0.5;
+                    float big  = vnoise(float3(a, lane * 4, t), float3(256, 4, 256));
+                    float mid  = vnoise(float3(a * 2 + 17.0, lane * 8, t * 2), float3(512, 8, 512));
+                    float fine = vnoise(float3(a * 4 + 3.0, lane * 16, t * 2), float3(1024, 16, 512));
+                    float streak = vnoise(float3(a * 0.5, lane * 16, t * 0.5), float3(128, 16, 128));
+                    float dens = smoothstep(0.30, 0.80, big * 0.55 + mid * 0.30 + fine * 0.15);
+                    float wisp = smoothstep(0.55, 0.95, streak);
+                    float body = saturate(dens * 0.85 + wisp * 0.35);
+
+                    if (_Dashed > .5)
+                    {
+                        // The recycle loop is dashed in the legend, so here the gas travels
+                        // as separated slugs (period 4 cells keeps the wrap seamless).
+                        float p = frac(a * 0.25);
+                        float dash = smoothstep(0.02, 0.12, p) * (1.0 - smoothstep(0.55, 0.65, p));
+                        body *= lerp(0.12, 1.0, dash);
+                    }
+
+                    fluid = c * (0.40 + 0.80 * body) + pow(body, 3.0) * 0.16;
+                    fill = 0.30 + 0.70 * body;
+                    bodyAlpha = 0.14 + 0.62 * body;
                 }
 
-                float ghost=lerp(1,_GhostAlphaMul,_GhostMode);
-                fixed3 shellLit=shell*(.84+.60*_Highlight);
+                float ghost = lerp(1, _GhostAlphaMul, _GhostMode);
+                fixed3 shell = lerp(fixed3(.28,.31,.35), fixed3(.62,.68,.74), pow(rim, 2.5));
+                shell *= (.84 + .60 * _Highlight);
                 fixed4 result;
-                // Every tube draws both faces and runs unlit over a bloomed scene, so the
-                // fluid is deliberately kept below 1 — brightness here accumulates across
-                // overlapping pipes and blows out fast.
-                fixed3 body=saturate(fluid*(.80+.28*_FlowIntensity));
-                result.rgb=lerp(shellLit,body,saturate(core*.55+fill*.80*flowOn));
-                result.rgb+=_Highlight*(.10+.26*pow(rim,2.0));
-                result.a=saturate((.12+_BaseAlpha*(.65+.35*carrier)*core+bodyAlpha*_FlowIntensity)*ghost
-                    +_Highlight*.30);
+                // Every tube draws both faces over a bloomed scene, so the fluid is kept
+                // below 1 — brightness accumulates across overlapping pipes.
+                fixed3 body = saturate(fluid * (.80 + .20 * saturate(_FlowIntensity)));
+                result.rgb = lerp(shell, body, saturate(core * .35 + fill * .85) * flowOn);
+                result.rgb += _Highlight * (.10 + .26 * pow(rim, 2.0));
+                result.a = saturate((.12 + _BaseAlpha * core + bodyAlpha * _FlowIntensity) * ghost + _Highlight * .30);
                 return result;
             }
             ENDCG

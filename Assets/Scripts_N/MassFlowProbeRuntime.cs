@@ -38,6 +38,9 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
     private Text headingText;
     private Text bodyText;
     private Texture2D cursorTexture;
+    private Canvas cursorCanvas;
+    private RectTransform cursorRect;
+    private int cursorPixelSize;
 
     private readonly List<Renderer> pipeRenderers = new List<Renderer>();
     private MaterialPropertyBlock probeBlock;
@@ -46,6 +49,8 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
     private bool active;
 
     private static readonly int HighlightId = Shader.PropertyToID("_Highlight");
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly Color HighlightTint = new Color(0.30f, 0.85f, 1f, 1f);
 
     public bool IsActive => active;
 
@@ -86,11 +91,11 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
         if (active)
         {
             EnsureColliders();
-            Cursor.SetCursor(GetCursorTexture(), new Vector2(15f, 15f), CursorMode.Auto);
+            EnsureCursorGraphic();
         }
         else
         {
-            Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+            ShowCrosshair(false);
             ClearHighlight();
             if (readout != null) readout.SetActive(false);
         }
@@ -146,6 +151,11 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
 
         Vector2 screen = mouse.position.ReadValue();
         bool overUi = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+        // Over the dashboard the normal arrow comes back, so buttons still look clickable.
+        bool inWindow = screen.x >= 0f && screen.y >= 0f && screen.x <= Screen.width && screen.y <= Screen.height;
+        bool crosshair = !overUi && inWindow && Application.isFocused;
+        ShowCrosshair(crosshair);
+        if (crosshair) PlaceCrosshair(screen);
         if (overUi) { ClearHighlight(); HideReadout(); return; }
 
         Ray ray = cam.ScreenPointToRay(screen);
@@ -179,12 +189,25 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
         highlighted = null;
     }
 
-    /// <summary>Read-modify-write so the flow animator's own property-block values survive.</summary>
+    /// <summary>
+    /// Read-modify-write so the flow animator's own property-block values survive. With the
+    /// Flow Lab closed a pipe draws with its authored opaque material, which has no probe
+    /// highlight of its own, so it is tinted through its base colour instead.
+    /// </summary>
     private void ApplyHighlight(Renderer renderer, float amount)
     {
         if (renderer == null) return;
+        Material material = renderer.sharedMaterial;
         renderer.GetPropertyBlock(probeBlock);
-        probeBlock.SetFloat(HighlightId, amount);
+        if (material != null && material.HasProperty(HighlightId))
+        {
+            probeBlock.SetFloat(HighlightId, amount);
+        }
+        else if (material != null && material.HasProperty(BaseColorId))
+        {
+            Color authored = material.GetColor(BaseColorId);
+            probeBlock.SetColor(BaseColorId, amount > 0f ? Color.Lerp(authored, HighlightTint, 0.55f) : authored);
+        }
         renderer.SetPropertyBlock(probeBlock);
     }
 
@@ -314,62 +337,142 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
     // ---- cursor -------------------------------------------------------------
 
     /// <summary>
-    /// A measuring crosshair drawn procedurally — a ringed reticle with a centre dot, in the
-    /// dashboard accent colour with a dark outline so it stays readable over the plant, the
-    /// sky and the dark UI alike.
+    /// The crosshair is drawn by the app itself on a top-most canvas rather than handed to
+    /// the OS as a hardware cursor: Windows rescales hardware cursors to its own cursor size,
+    /// which is what made the old 32 px texture look blocky. Drawn here it is generated at the
+    /// exact on-screen pixel size for the display's DPI and never resampled.
     /// </summary>
-    private Texture2D GetCursorTexture()
+    private void EnsureCursorGraphic()
     {
-        if (cursorTexture != null) return cursorTexture;
-
-        const int size = 32;
-        const float centre = 15.5f;
-        cursorTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        if (cursorCanvas == null)
         {
-            filterMode = FilterMode.Bilinear,
-            wrapMode = TextureWrapMode.Clamp
-        };
-        Color[] pixels = new Color[size * size];
-        Color ink = new Color(0.45f, 0.88f, 1f, 1f);
-        Color edge = new Color(0f, 0.04f, 0.08f, 1f);
+            GameObject canvasObject = new GameObject("Mass Flow Crosshair Canvas");
+            canvasObject.transform.SetParent(transform, false);
+            cursorCanvas = canvasObject.AddComponent<Canvas>();
+            cursorCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // Above everything, including the tutorial overlay (300).
+            cursorCanvas.sortingOrder = 1000;
 
-        // Every shape is built from a signed distance and resolved with smooth coverage rather
-        // than a hard in/out test, so the strokes antialias instead of stair-stepping. The dark
-        // outline is the same shapes grown by a pixel, composited underneath.
+            GameObject cursorObject = new GameObject("Crosshair", typeof(RectTransform));
+            cursorObject.transform.SetParent(canvasObject.transform, false);
+            cursorRect = cursorObject.GetComponent<RectTransform>();
+            cursorRect.anchorMin = cursorRect.anchorMax = Vector2.zero;
+            cursorRect.pivot = new Vector2(0.5f, 0.5f);
+            RawImage image = cursorObject.AddComponent<RawImage>();
+            image.raycastTarget = false;
+        }
+
+        float dpiScale = Screen.dpi > 1f ? Screen.dpi / 96f : 1f;
+        int pixels = Mathf.Clamp(Mathf.RoundToInt(44f * dpiScale), 36, 128);
+        if (cursorTexture == null || cursorPixelSize != pixels)
+        {
+            if (cursorTexture != null) Destroy(cursorTexture);
+            cursorPixelSize = pixels;
+            cursorTexture = BuildCrosshairTexture(pixels);
+        }
+        cursorRect.GetComponent<RawImage>().texture = cursorTexture;
+        // An overlay canvas without a scaler maps one canvas unit to one screen pixel.
+        cursorRect.sizeDelta = new Vector2(pixels, pixels);
+        cursorCanvas.gameObject.SetActive(false);
+    }
+
+    private void ShowCrosshair(bool visible)
+    {
+        if (cursorCanvas != null && cursorCanvas.gameObject.activeSelf != visible)
+            cursorCanvas.gameObject.SetActive(visible);
+        Cursor.visible = !visible;
+    }
+
+    private void PlaceCrosshair(Vector2 screen)
+    {
+        if (cursorRect == null) return;
+        // Land every texel on exactly one screen pixel so the strokes stay crisp.
+        float half = cursorPixelSize * 0.5f;
+        cursorRect.anchoredPosition = new Vector2(Mathf.Round(screen.x - half) + half, Mathf.Round(screen.y - half) + half);
+    }
+
+    /// <summary>
+    /// A precision reticle: four crosshair arms around an open centre, a thin ring and a
+    /// centre dot. White strokes with a dark halo and a soft outer shadow stay legible over the
+    /// pale sky, the grey plant and the dark dashboard alike. Every shape is an analytic
+    /// signed distance supersampled 4x4 per pixel, so the edges stay smooth at any DPI.
+    /// </summary>
+    private static Texture2D BuildCrosshairTexture(int size)
+    {
+        var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Point,
+            wrapMode = TextureWrapMode.Clamp,
+            name = "Mass Flow Crosshair"
+        };
+        float unit = size / 44f;            // geometry is designed on a 44 px grid
+        float centre = size * 0.5f;
+        float armWidth = 0.9f * unit;       // half-width of an arm stroke
+        float gap = 5.5f * unit;            // open centre radius
+        float armEnd = 20f * unit;
+        float ringRadius = 11f * unit;
+        float ringWidth = 0.75f * unit;
+        float dotRadius = 1.6f * unit;
+        float halo = 1.35f * unit;
+        float shadow = 2.6f * unit;
+
+        Color ink = Color.white;
+        Color accent = new Color(0.22f, 0.83f, 1f, 1f);
+        Color haloColor = new Color(0.02f, 0.06f, 0.10f, 1f);
+
+        var pixels = new Color[size * size];
+        const int ss = 4;
+        const float samples = ss * ss;
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
-                float dx = x - centre, dy = y - centre;
-                float r = Mathf.Sqrt(dx * dx + dy * dy);
-
-                // Ring, four ticks reaching outwards from it, and a centre dot.
-                float ringD = Mathf.Abs(r - 8.6f) - 1.05f;
-                float tickD = Mathf.Max(
-                    Mathf.Min(Mathf.Abs(dx), Mathf.Abs(dy)) - 0.85f,
-                    Mathf.Max(8.6f - r, r - 13.6f));
-                float dotD = r - 2.0f;
-                float shape = Mathf.Min(Mathf.Min(ringD, tickD), dotD);
-
-                float inkA = Coverage(shape);
-                float edgeA = Coverage(shape - 1.15f);
-                Color c = Color.clear;
-                if (edgeA > 0f) c = new Color(edge.r, edge.g, edge.b, edgeA * 0.92f);
-                if (inkA > 0f)
+                float inkA = 0f, dotA = 0f, haloA = 0f, shadowA = 0f;
+                for (int sy = 0; sy < ss; sy++)
                 {
-                    float a = inkA + c.a * (1f - inkA);
-                    Color rgb = Color.Lerp(c, ink, a > 0f ? inkA / a : 1f);
-                    c = new Color(rgb.r, rgb.g, rgb.b, a);
+                    for (int sx = 0; sx < ss; sx++)
+                    {
+                        float px = x + (sx + 0.5f) / ss - centre;
+                        float py = y + (sy + 0.5f) / ss - centre;
+                        float ax = Mathf.Abs(px), ay = Mathf.Abs(py);
+                        float r = Mathf.Sqrt(px * px + py * py);
+
+                        // Arms: one horizontal and one vertical bar, each cut back from the centre.
+                        float hArm = Mathf.Max(ay - armWidth, Mathf.Max(gap - ax, ax - armEnd));
+                        float vArm = Mathf.Max(ax - armWidth, Mathf.Max(gap - ay, ay - armEnd));
+                        float ring = Mathf.Abs(r - ringRadius) - ringWidth;
+                        float strokes = Mathf.Min(Mathf.Min(hArm, vArm), ring);
+                        float dot = r - dotRadius;
+                        float all = Mathf.Min(strokes, dot);
+
+                        if (strokes <= 0f) inkA += 1f;
+                        if (dot <= 0f) dotA += 1f;
+                        if (all <= halo) haloA += 1f;
+                        shadowA += Mathf.Clamp01(1f - Mathf.Max(0f, all - halo) / shadow);
+                    }
                 }
+                inkA /= samples; dotA /= samples; haloA /= samples; shadowA /= samples;
+
+                // Back to front: soft shadow, dark halo, white strokes, accent centre dot.
+                Color c = new Color(haloColor.r, haloColor.g, haloColor.b, shadowA * shadowA * 0.35f);
+                c = Over(c, haloColor, haloA * 0.9f);
+                c = Over(c, ink, inkA);
+                c = Over(c, accent, dotA);
                 pixels[y * size + x] = c;
             }
         }
-
-        cursorTexture.SetPixels(pixels);
-        cursorTexture.Apply();
-        return cursorTexture;
+        texture.SetPixels(pixels);
+        texture.Apply(false, true);
+        return texture;
     }
 
-    /// <summary>Antialiased coverage for a signed distance, one pixel wide at the boundary.</summary>
-    private static float Coverage(float signedDistance) => Mathf.Clamp01(0.5f - signedDistance);
+    /// <summary>Straight-alpha "source over destination".</summary>
+    private static Color Over(Color dst, Color src, float srcA)
+    {
+        if (srcA <= 0f) return dst;
+        float outA = srcA + dst.a * (1f - srcA);
+        if (outA <= 1e-5f) return Color.clear;
+        Color rgb = (src * srcA + dst * (dst.a * (1f - srcA))) / outA;
+        return new Color(rgb.r, rgb.g, rgb.b, outA);
+    }
 }

@@ -109,7 +109,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         yAxisNameLabel.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f);
 
         Text xAxisNameLabel = MakeText("X Axis Name", root, "X:  " + XLabel, 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
-        StretchWithOffset(xAxisNameLabel.rectTransform, Vector2.zero, Vector2.one, new Vector2(58f, 2f), new Vector2(-8f, 18f));
+        StretchWithOffset(xAxisNameLabel.rectTransform, Vector2.zero, new Vector2(1f, 0f), new Vector2(58f, 2f), new Vector2(-8f, 18f));
 
         GameObject plotObject = new GameObject("Plot Area", typeof(RectTransform));
         plotArea = plotObject.GetComponent<RectTransform>();

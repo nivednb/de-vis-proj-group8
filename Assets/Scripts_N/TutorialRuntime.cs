@@ -8,7 +8,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Step-by-step guided tour of the whole application.
 ///
-/// It runs automatically the first time the app is launched and can be replayed at any time
+/// It runs automatically every time the app is launched and can be replayed at any time
 /// from HELP -> START TUTORIAL. Each step dims the screen except the part of the UI being
 /// explained, and drives the dashboard into the matching state first, so the tour points at
 /// the real controls rather than at a description of them.
@@ -17,7 +17,6 @@ using UnityEngine.UI;
 public sealed class TutorialRuntime : MonoBehaviour
 {
     private const string RuntimeRootName = "Generated Tutorial Overlay";
-    private const string CompletedKey = "PtmDigitalTwin.TutorialCompleted";
 
     private static readonly Color DimColor = new Color(0.012f, 0.035f, 0.05f, 0.78f);
     private static readonly Color CardColor = new Color32(9, 29, 41, 252);
@@ -115,13 +114,14 @@ public sealed class TutorialRuntime : MonoBehaviour
     {
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        BuildSteps();
+        BuildSteps(ExternalAnalyticsWindow.IsSupported);
         BuildOverlay();
-        if (PlayerPrefs.GetInt(CompletedKey, 0) == 0) StartCoroutine(AutoStartWhenReady());
+        StartCoroutine(AutoStartWhenReady());
     }
 
-    /// <summary>The dashboard builds itself in its own Start(), so the first-launch tour waits
-    /// for that canvas to exist before it tries to spotlight anything on it.</summary>
+    /// <summary>The tour opens on every launch. The dashboard builds itself in its own
+    /// Start(), so the tour waits for that canvas to exist before it tries to spotlight
+    /// anything on it.</summary>
     private IEnumerator AutoStartWhenReady()
     {
         float deadline = Time.unscaledTime + 8f;
@@ -155,8 +155,6 @@ public sealed class TutorialRuntime : MonoBehaviour
         if (!running) return;
         running = false;
         currentTarget = null;
-        PlayerPrefs.SetInt(CompletedKey, 1);
-        PlayerPrefs.Save();
         IcodosDashboardRuntime.Instance?.TutorialRestoreDefaults();
         if (fade != null) StopCoroutine(fade);
         fade = StartCoroutine(FadeOverlay(false));
@@ -192,17 +190,13 @@ public sealed class TutorialRuntime : MonoBehaviour
     /// the explanation card still fits below it instead of being pushed over the spotlight.</summary>
     private static readonly Rect PlantArea = new Rect(0.21f, 0.42f, 0.58f, 0.32f);
 
-    private void BuildSteps()
+    private void BuildSteps(bool separateAnalyticsWindow)
     {
         Add("WELCOME TO THE POWER-TO-METHANOL DIGITAL TWIN",
-            "This short tour walks through every part of the application: the 3D plant, the six sections in the top bar, the equipment controls, the analytics window and the footer tools.\n\n" +
-            "Use NEXT and PREVIOUS to move through the tour, or SKIP TUTORIAL to jump straight in. You can reopen it at any time from HELP -> START TUTORIAL.\n\n" +
+            "This short tour walks through every part of the application: the 3D plant, the six sections in the top bar, the Flow Lab, the equipment controls, the analytics window and the footer tools.\n\n" +
+            "It opens every time the application starts. Use NEXT and PREVIOUS to move through it, or SKIP TUTORIAL to jump straight in. You can reopen it at any time from HELP -> START TUTORIAL.\n\n" +
             "Keyboard: Enter or Space = next, Backspace = previous, Esc = skip.",
             apply: () => Dashboard(d => d.TutorialRestoreDefaults()));
-
-        Add("THE APPLICATION WINDOW",
-            "The slim bar at the very top is the application's window chrome. The X on its right closes the application. Everything below it is the digital twin itself.",
-            "App Title Bar");
 
         Add("THE MAIN NAVIGATION",
             "Six sections live in the header: OVERVIEW, PROCESS MAP, FLOW LAB, REACTOR LAB, ANALYTICS and SIMULATION. Selecting one opens its panel and moves the camera to a matching view, and the highlighted button always shows where you are.\n\n" +
@@ -236,8 +230,8 @@ public sealed class TutorialRuntime : MonoBehaviour
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
         Add("STREAM LEGEND",
-            "Every pipe in the plant is colour-coded by what it carries: water and hydrogen, amine and captured CO2, compressed syngas, hot reactor effluent, refined methanol, and the dashed gas recycle loop.\n\n" +
-            "Packet speed and density inside the pipes follow the calculated flow rates, so the animation is driven by the process model rather than looping at a fixed speed.",
+            "The legend lists what the pipes carry and the colour each stream is drawn in: water and hydrogen, amine and captured CO2, compressed syngas, hot reactor effluent, crude methanol, refined methanol, and the dashed gas recycle loop.\n\n" +
+            "Those colours come alive in the FLOW LAB, covered in a moment: open it and every pipe shows its stream moving in exactly these legend colours.",
             "Process Flow Legend",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
@@ -263,9 +257,23 @@ public sealed class TutorialRuntime : MonoBehaviour
             "Guided Process",
             apply: () => Dashboard(d => d.TutorialShowPage("process")));
 
-        Add("FLOW LAB",
-            "FLOW LAB filters the pipe network by subsystem: ALL STREAMS, FEED GASES, CAPTURE LOOP, SYNTHESIS LOOP or PRODUCT PATH. Only the selected routes keep their moving packets, which makes a single loop easy to follow through the plant.\n\n" +
-            "SHOW / HIDE STREAM VISUALS switches the animated packets off entirely so you can inspect the bare plant.",
+        Add("FLOW LAB - SWITCHING THE FLOW ON",
+            "FLOW LAB is an on/off switch for the animated process flow. While it is on, the pipes turn see-through and show the stream inside them moving from source to destination; while it is off, the pipes are the normal solid plant pipework.\n\n" +
+            "Click FLOW LAB (or SHOW STREAMS in the footer) to switch it on; its panel opens with it. The flow stays on until you click FLOW LAB again, which switches it straight back to the normal pipes. It is on right now for this part of the tour.",
+            "FLOW LAB",
+            apply: () => Dashboard(d => d.TutorialShowPage("flow")),
+            arrowToTarget: true, arrowLabel: "CLICK TO TURN THE FLOW ON / OFF");
+
+        Add("FLOW LAB - READING THE STREAMS",
+            "Every stream is drawn in its legend colour. Gases - hydrogen, CO2, syngas and the hot reactor effluent - move as turbulent eddies. Liquids - the amine loop and methanol - fill the bore and flow more slowly. Crude methanol shows liquid along the bottom with vapour above it, and the recycle loop runs in dashes, just like its legend swatch.\n\n" +
+            "Speed and brightness follow the calculated mass flow, so moving a slider visibly changes the stream. The plant is live here: drag to orbit and scroll to zoom.",
+            null, PlantArea,
+            () => Dashboard(d => d.TutorialShowPage("flow")),
+            allowInteraction: true);
+
+        Add("FLOW LAB - FILTERS AND CLOSING",
+            "The panel filters the network by subsystem: ALL STREAMS, FEED GASES, CAPTURE LOOP, SYNTHESIS LOOP or PRODUCT PATH. Only the selected routes keep flowing, which makes one loop easy to follow through the plant.\n\n" +
+            "The X in the panel's top-right corner only closes this panel - the flow keeps running, so you can orbit and zoom around the plant with it on. HIDE STREAM VISUALS pauses the effect without leaving the lab.",
             "Flow Lab",
             apply: () => Dashboard(d => d.TutorialShowPage("flow")));
 
@@ -281,50 +289,69 @@ public sealed class TutorialRuntime : MonoBehaviour
             "Simulation",
             apply: () => Dashboard(d => d.TutorialShowPage("simulation")));
 
-        Add("ANALYTICS - STATS",
-            "ANALYTICS opens a window you can drag anywhere by its title bar. PAUSE and RESET sit in that title bar, so you can control the run without closing the window.\n\n" +
-            "The STATS tab shows the five headline metrics as bars: overall efficiency, CO2 capture, reactor yield, methanol purity and storage fill. Hover any bar to read its exact live value.",
-            "Analytics Window",
-            apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, null)));
+        if (separateAnalyticsWindow)
+        {
+            Add("ANALYTICS - ITS OWN WINDOW",
+                "ANALYTICS opens in a separate window of its own, next to this one. Like any other application window you can move it, resize it, minimise or maximise it, or put it on a second monitor - and it keeps showing this plant's live data the whole time.\n\n" +
+                "Only one analytics window can be open at a time: while it is open this button is greyed out, and it becomes clickable again as soon as you close the window with its X.",
+                "ANALYTICS",
+                apply: () => Dashboard(d => d.TutorialShowPage("overview")),
+                arrowToTarget: true, arrowLabel: "OPENS A SEPARATE WINDOW");
 
-        Add("ANALYTICS - VISUALISE",
-            "The VISUALISE tab holds four graph views:\n\n" +
-            "REACTOR YIELD - yield against one reactor parameter\n" +
-            "EFFICIENCY - overall efficiency against one reactor parameter\n" +
-            "OFAT TIMELINE - a guided one-factor-at-a-time study\n" +
-            "LIVE PROGRESS - strip charts of the run as it happens",
-            "Visualise Sub Tabs",
-            apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "yield")));
+            Add("INSIDE THE ANALYTICS WINDOW",
+                "PAUSE and RESET sit in the window's own title bar, so you can control the run from there.\n\n" +
+                "STATS shows five headline metrics as bars - hover one for its exact live value. VISUALISE holds four graph views: REACTOR YIELD and EFFICIENCY plot the response against one reactor parameter (picking a parameter locks the other reactor sliders for a clean one-factor-at-a-time scan), OFAT TIMELINE records a guided study against time with EXPORT, and LIVE PROGRESS strip-charts the run as it happens.",
+                "ANALYTICS",
+                apply: () => Dashboard(d => d.TutorialShowPage("overview")));
+        }
+        else
+        {
+            Add("ANALYTICS - STATS",
+                "ANALYTICS opens a window you can drag anywhere by its title bar. PAUSE and RESET sit in that title bar, so you can control the run without closing the window.\n\n" +
+                "The STATS tab shows the five headline metrics as bars: overall efficiency, CO2 capture, reactor yield, methanol purity and storage fill. Hover any bar to read its exact live value.",
+                "Analytics Window",
+                apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, null)));
 
-        Add("CORRELATION GRAPHS AND THE VARIABLE LOCK",
-            "REACTOR YIELD and EFFICIENCY plot the response against one reactor parameter at a time: Temp, Pressure, H2:CO2, GHSV or Feed.\n\n" +
-            "Picking a parameter here locks every other reactor slider in place. That way the curve you build up is a clean one-factor-at-a-time scan instead of a tangle of several variables moving at once.",
-            "Reactor Yield Param Row",
-            apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "yield")));
+            Add("ANALYTICS - VISUALISE",
+                "The VISUALISE tab holds four graph views:\n\n" +
+                "REACTOR YIELD - yield against one reactor parameter\n" +
+                "EFFICIENCY - overall efficiency against one reactor parameter\n" +
+                "OFAT TIMELINE - a guided one-factor-at-a-time study\n" +
+                "LIVE PROGRESS - strip charts of the run as it happens",
+                "Visualise Sub Tabs",
+                apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "yield")));
 
-        Add("OFAT TIMELINE",
-            "OFAT TIMELINE records a guided one-factor-at-a-time study against time. Pick the variable to vary under VARY ONE, choose the response under SHOW (YIELD, EFFICIENCY or METHANOL), then move that slider while the rest stay locked.\n\n" +
-            "LINE ONLY and WITH POINTS change the plot style, PREV / NEXT / LIVE page through the recorded timeline, and EXPORT writes the series out to a file.",
-            "OFAT Timeline Sub Panel",
-            apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "ofat")));
+            Add("CORRELATION GRAPHS AND THE VARIABLE LOCK",
+                "REACTOR YIELD and EFFICIENCY plot the response against one reactor parameter at a time: Temp, Pressure, H2:CO2, GHSV or Feed.\n\n" +
+                "Picking a parameter here locks every other reactor slider in place. That way the curve you build up is a clean one-factor-at-a-time scan instead of a tangle of several variables moving at once.",
+                "Reactor Yield Param Row",
+                apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "yield")));
 
-        Add("LIVE PROGRESS",
-            "LIVE PROGRESS strip-charts the run as it happens. EFFICIENCY and METHANOL OUTPUT switch between the two charts, and both keep recording in the background so switching never loses history.\n\n" +
-            "The output chart also reports the cumulative amount already in the tank when you hover it.",
-            "Live Sub Panel",
-            apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "live")));
+            Add("OFAT TIMELINE",
+                "OFAT TIMELINE records a guided one-factor-at-a-time study against time. Pick the variable to vary under VARY ONE, choose the response under SHOW (YIELD, EFFICIENCY or METHANOL), then move that slider while the rest stay locked.\n\n" +
+                "LINE ONLY and WITH POINTS change the plot style, PREV / NEXT / LIVE page through the recorded timeline, and EXPORT writes the series out to a file.",
+                "OFAT Timeline Sub Panel",
+                apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "ofat")));
+
+            Add("LIVE PROGRESS",
+                "LIVE PROGRESS strip-charts the run as it happens. EFFICIENCY and METHANOL OUTPUT switch between the two charts, and both keep recording in the background so switching never loses history.\n\n" +
+                "The output chart also reports the cumulative amount already in the tank when you hover it.",
+                "Live Sub Panel",
+                apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "live")));
+        }
 
         Add("FOOTER TOOLS",
             "The footer is available from every section:\n\n" +
             "PAUSE / RESUME and RESET control the run\n" +
             "VIEW INFORMATION opens the about box\n" +
-            "SHOW STREAMS toggles the pipe animation\n" +
+            "SHOW STREAMS switches the Flow Lab's animated pipe flow on and off\n" +
+            "MASS FLOW TOOL turns the cursor into a crosshair - point it at any pipe to read its mass flow, velocity and conditions\n" +
             "PREVIOUS MODULE and NEXT MODULE step the camera through the equipment\n" +
             "RESET VIEW returns to the full plant overview",
             "Footer",
             apply: () => Dashboard(d =>
             {
-                d.TutorialSetAnalyticsView(false, null);
+                if (!d.AnalyticsIsExternal) d.TutorialSetAnalyticsView(false, null);
                 d.TutorialShowPage("overview");
             }));
 
@@ -342,7 +369,7 @@ public sealed class TutorialRuntime : MonoBehaviour
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
         Add("YOU ARE READY",
-            "That is the whole application: the 3D plant and its camera, the six header sections, the equipment sliders, the analytics window and the footer tools.\n\n" +
+            "That is the whole application: the 3D plant and its camera, the six header sections, the Flow Lab, the equipment sliders, the analytics window and the footer tools.\n\n" +
             "One reminder before you start: every number and animation here is a simplified educational representation. This is not CFD, Aspen, industrial control software, or a validated process model.\n\n" +
             "Press FINISH to start exploring.");
     }
@@ -599,6 +626,9 @@ public sealed class TutorialRuntime : MonoBehaviour
         {
             if (candidate == null || candidate == canvas) continue;
             if (candidate.transform.IsChildOf(transform)) continue;
+            // Only the main window's overlay canvases can be spotlit; the separate analytics
+            // window renders off-screen.
+            if (candidate.isRootCanvas && candidate.renderMode != RenderMode.ScreenSpaceOverlay) continue;
             RectTransform found = FindRecursive(candidate.transform, name);
             if (found != null) return found;
         }

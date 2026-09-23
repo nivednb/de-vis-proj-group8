@@ -1,30 +1,15 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-#if UNITY_EDITOR
-using UnityEditor;
-using UnityEditor.SceneManagement;
-#endif
-
 /// <summary>
-/// Automatically apply FluidFlow shader to all pipes on scene load.
-/// No menu needed - just add to scene and it works!
+/// Legacy: applies the old FluidFlow shader to all pipes when called explicitly.
+///
+/// This used to hook EditorSceneManager.sceneOpened. The build pipeline opens scenes too, so
+/// every player build silently baked FluidFlow materials (which render magenta under URP)
+/// into the pipes. Pipe materials are now owned by FinalPlantFlowRuntime, so the hook is gone.
 /// </summary>
 public class AutoApplyFluidFlow : MonoBehaviour
 {
-#if UNITY_EDITOR
-    [InitializeOnLoadMethod]
-    private static void Initialize()
-    {
-        EditorSceneManager.sceneOpened += OnSceneOpened;
-    }
-
-    private static void OnSceneOpened(UnityEngine.SceneManagement.Scene scene, UnityEditor.SceneManagement.OpenSceneMode mode)
-    {
-        ApplyFluidFlowToPipes();
-    }
-#endif
-
     public static void ApplyFluidFlowToPipes()
     {
         Shader fluidFlowShader = Shader.Find("Custom/FluidFlow");

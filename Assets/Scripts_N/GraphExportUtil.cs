@@ -88,13 +88,21 @@ public static class GraphExportUtil
             int y = Mathf.RoundToInt(Mathf.Min(c0.y, c2.y));
             int w = Mathf.RoundToInt(Mathf.Abs(c2.x - c0.x));
             int h = Mathf.RoundToInt(Mathf.Abs(c2.y - c0.y));
-            x = Mathf.Clamp(x, 0, Mathf.Max(0, Screen.width - 1));
-            y = Mathf.Clamp(y, 0, Mathf.Max(0, Screen.height - 1));
-            w = Mathf.Clamp(w, 1, Screen.width - x);
-            h = Mathf.Clamp(h, 1, Screen.height - y);
+            // A canvas drawn into a render texture (the separate analytics window) is read
+            // from that texture; an overlay canvas from the back buffer.
+            RenderTexture source = cam != null ? cam.targetTexture : null;
+            int sourceWidth = source != null ? source.width : Screen.width;
+            int sourceHeight = source != null ? source.height : Screen.height;
+            x = Mathf.Clamp(x, 0, Mathf.Max(0, sourceWidth - 1));
+            y = Mathf.Clamp(y, 0, Mathf.Max(0, sourceHeight - 1));
+            w = Mathf.Clamp(w, 1, sourceWidth - x);
+            h = Mathf.Clamp(h, 1, sourceHeight - y);
 
             tex = new Texture2D(w, h, TextureFormat.RGB24, false);
+            RenderTexture previous = RenderTexture.active;
+            if (source != null) RenderTexture.active = source;
             tex.ReadPixels(new Rect(x, y, w, h), 0, 0);
+            RenderTexture.active = previous;
             tex.Apply();
 
             Directory.CreateDirectory(ExportDirectory);
