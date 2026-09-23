@@ -23,10 +23,10 @@ public static class MassBalanceCsvExporter
     public static string BuildCsv(PlantProcessSimulator simulator)
     {
         if (simulator == null) throw new ArgumentNullException(nameof(simulator));
+        PlantProcessSimulator.ProcessSnapshot s = simulator.GetSteadyStateSnapshot();
         RecycleMassBalanceEngine b = simulator.MassBalance;
         if (b == null) throw new InvalidOperationException("Recycle mass-balance engine is unavailable.");
-        b.UpdatePlantMassBalance();
-        PlantProcessSimulator.ProcessSnapshot s = simulator.Current;
+
         StringBuilder csv = new StringBuilder(4096);
         csv.AppendLine("section,quantity,symbol,value,unit,basis_or_equation");
         Row(csv, "Metadata", "Export timestamp", "", DateTime.Now.ToString("O", CsvCulture), "ISO-8601", "Local computer time");

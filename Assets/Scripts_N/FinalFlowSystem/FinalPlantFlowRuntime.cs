@@ -42,7 +42,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void AutoCreate()
     {
-        if (FindFirstObjectByType<FinalPlantFlowRuntime>() != null) return;
+        if (FindAnyObjectByType<FinalPlantFlowRuntime>() != null) return;
         new GameObject("Final Engineering Flow Runtime").AddComponent<FinalPlantFlowRuntime>();
     }
 
@@ -53,7 +53,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
         EnsureCatalystIndicator();
         simulator = PlantProcessSimulator.Instance != null
             ? PlantProcessSimulator.Instance
-            : FindFirstObjectByType<PlantProcessSimulator>();
+            : FindAnyObjectByType<PlantProcessSimulator>();
         if (simulator != null)
         {
             simulator.SnapshotUpdated += ApplySnapshot;
@@ -105,7 +105,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
 
     static void EnsureCatalystIndicator()
     {
-        GameObject[] objects = FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        GameObject[] objects = FindObjectsByType<GameObject>(FindObjectsInactive.Include);
         foreach (GameObject candidate in objects)
         {
             if (!candidate.name.Equals("Catalyst_Bed", StringComparison.OrdinalIgnoreCase)) continue;
@@ -155,7 +155,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     void ConfigureRoutes()
     {
         bindings.Clear();
-        GameObject[] objects = FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        GameObject[] objects = FindObjectsByType<GameObject>(FindObjectsInactive.Include);
         var classifiedRenderers = new List<ClassifiedRenderer>();
         foreach (GameObject root in objects)
         {

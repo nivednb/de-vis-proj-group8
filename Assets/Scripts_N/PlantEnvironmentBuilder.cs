@@ -50,7 +50,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void BuildRuntimeEnvironment()
     {
-        if (FindFirstObjectByType<PlantEnvironmentBuilder>() != null)
+        if (FindAnyObjectByType<PlantEnvironmentBuilder>() != null)
         {
             return;
         }
@@ -126,7 +126,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
 
     private void ConfigureIndustrialBackdrop()
     {
-        Camera[] cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Camera[] cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include);
         foreach (Camera sceneCamera in cameras)
         {
             if (sceneCamera == null || sceneCamera.targetTexture != null)
@@ -146,7 +146,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [ContextMenu("Clear Plant Environment")]
     public void ClearEnvironment()
     {
-        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsInactive.Include);
         foreach (GameObject existing in allObjects)
         {
             if (existing == null)
@@ -172,7 +172,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
 
     private Bounds CalculatePlantBounds()
     {
-        Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+        Renderer[] renderers = FindObjectsByType<Renderer>();
         bool hasBounds = false;
         Bounds bounds = new Bounds(Vector3.zero, Vector3.zero);
 
@@ -496,7 +496,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
             return;
         }
 
-        Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsInactive.Exclude);
         foreach (Renderer renderer in renderers)
         {
             if (renderer == null)
@@ -790,7 +790,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [MenuItem("Tools/Nived/Build Plant Environment")]
     private static void BuildEnvironmentFromMenu()
     {
-        PlantEnvironmentBuilder builder = FindFirstObjectByType<PlantEnvironmentBuilder>();
+        PlantEnvironmentBuilder builder = FindAnyObjectByType<PlantEnvironmentBuilder>();
         if (builder == null)
         {
             GameObject builderObject = new GameObject("Plant Environment Builder");

@@ -13,7 +13,7 @@ public sealed class LightweightReactorVisual : MonoBehaviour
 
     public static void Configure(GameObject owner)
     {
-        GameObject[] objects = FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        GameObject[] objects = FindObjectsByType<GameObject>(FindObjectsInactive.Include);
         Renderer shell = null, top = null, bottom = null, catalyst = null;
         foreach (GameObject obj in objects)
         {

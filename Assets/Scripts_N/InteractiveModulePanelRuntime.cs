@@ -74,7 +74,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
     {
-        if (FindFirstObjectByType<InteractiveModulePanelRuntime>() != null)
+        if (FindAnyObjectByType<InteractiveModulePanelRuntime>() != null)
         {
             return;
         }
@@ -86,7 +86,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     private void Start()
     {
         RemoveOldStaticEyeUi();
-        mainCamera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+        mainCamera = Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         Build();
@@ -302,7 +302,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         registeredSliders.Clear();
         if (canvas != null)
         {
-            DestroyObject(canvas.gameObject);
+            DestroyOwnedObject(canvas.gameObject);
             canvas = null;
         }
     }
@@ -335,7 +335,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             Destroy(oldUi);
         }
 
-        Button[] legacyButtons = FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Button[] legacyButtons = FindObjectsByType<Button>(FindObjectsInactive.Include);
         foreach (Button legacyButton in legacyButtons)
         {
             if (legacyButton.name.EndsWith("InfoButton", StringComparison.OrdinalIgnoreCase) ||
@@ -681,7 +681,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 
     private PlantProcessSimulator Simulator()
     {
-        return PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance : FindFirstObjectByType<PlantProcessSimulator>();
+        return PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance : FindAnyObjectByType<PlantProcessSimulator>();
     }
 
     private string BuildReactorStatus(PlantProcessSimulator.ProcessSnapshot s)
@@ -737,7 +737,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 
     private Transform FindTarget(string[] names)
     {
-        Transform[] all = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Transform[] all = FindObjectsByType<Transform>(FindObjectsInactive.Include);
         foreach (string name in names)
         {
             foreach (Transform t in all)
@@ -834,7 +834,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         rect.offsetMax = Vector2.zero;
     }
 
-    private void DestroyObject(UnityEngine.Object target)
+    private void DestroyOwnedObject(UnityEngine.Object target)
     {
         if (target == null) return;
         if (Application.isPlaying) Destroy(target);

@@ -23,7 +23,7 @@ public class SafetyWarningRuntime : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
     {
-        if (FindFirstObjectByType<SafetyWarningRuntime>() != null)
+        if (FindAnyObjectByType<SafetyWarningRuntime>() != null)
         {
             return;
         }

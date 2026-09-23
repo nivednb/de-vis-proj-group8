@@ -39,3 +39,8 @@ sysinfo.txt
 *.app
 *.apk
 *.aab
+
+# Local submission execution artifacts
+/unity-*.log
+/Release/
+/ValidationClone/

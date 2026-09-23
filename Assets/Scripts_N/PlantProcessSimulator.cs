@@ -244,7 +244,7 @@ public class PlantProcessSimulator : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
     {
-        if (FindFirstObjectByType<PlantProcessSimulator>() != null)
+        if (FindAnyObjectByType<PlantProcessSimulator>() != null)
         {
             return;
         }
@@ -562,7 +562,7 @@ public class PlantProcessSimulator : MonoBehaviour
     private void SyncVisibleControlSliders()
     {
         const string suffix = " Slider";
-        Slider[] sliders = FindObjectsByType<Slider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Slider[] sliders = FindObjectsByType<Slider>(FindObjectsInactive.Include);
         foreach (Slider slider in sliders)
         {
             if (slider == null || !slider.name.EndsWith(suffix, StringComparison.Ordinal))
@@ -580,6 +580,10 @@ public class PlantProcessSimulator : MonoBehaviour
         UpdateOptionalLabels();
         SnapshotUpdated?.Invoke(current);
     }
+
+    /// <summary>Refreshes the balance from current controls for an internally consistent
+    /// export. Does not alter controls, inventory, or the smoothed displayed snapshot.</summary>
+    public ProcessSnapshot GetSteadyStateSnapshot() => CalculateSnapshot();
 
     private ProcessSnapshot CalculateSnapshot()
     {
@@ -640,10 +644,13 @@ public class PlantProcessSimulator : MonoBehaviour
 
         float powerFactor = Mathf.Clamp01(i.electrolyzerPower / 100f);
         float waterFactor = Mathf.Clamp01(i.waterFeed / 100f);
-        float electrolyzerFactor = Mathf.Min(powerFactor, Mathf.Lerp(0.15f, 1.1f, waterFactor));
-        float h2Input = designH2InputKgH * plantRamp * electrolyzerFactor;
         float waterFeed = designWaterFeedKgH * plantRamp * waterFactor;
-        float oxygen = h2Input * 8f;
+        // 2 H2O -> 2 H2 + O2. Electricity and water independently limit production.
+        // Unconsumed feed water is not counted as hydrogen/oxygen product.
+        const float hydrogenMassFractionInWater = 2.01588f / 18.01528f;
+        float h2Input = Mathf.Min(designH2InputKgH * plantRamp * powerFactor,
+            waterFeed * hydrogenMassFractionInWater);
+        float oxygen = h2Input * (18.01528f - 2.01588f) / 2.01588f;
 
         float flueGasFactor = Mathf.Clamp01(i.flueGasFlow / 100f);
         float amineFactor = Mathf.Pow(Mathf.Clamp01(amineFlow / 100f), 0.55f);
@@ -786,7 +793,7 @@ public class PlantProcessSimulator : MonoBehaviour
 
     private void FindSceneControls()
     {
-        Slider[] sliders = FindObjectsByType<Slider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Slider[] sliders = FindObjectsByType<Slider>(FindObjectsInactive.Include);
         foreach (Slider slider in sliders)
         {
             string n = slider.name.ToLowerInvariant();
@@ -799,7 +806,7 @@ public class PlantProcessSimulator : MonoBehaviour
             else if (regenTempSlider == null && n.Contains("regen")) regenTempSlider = slider;
         }
 
-        TMP_Text[] labels = FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        TMP_Text[] labels = FindObjectsByType<TMP_Text>(FindObjectsInactive.Include);
         foreach (TMP_Text label in labels)
         {
             string n = label.name.ToLowerInvariant();

@@ -124,7 +124,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
     {
-        if (FindFirstObjectByType<IcodosDashboardRuntime>() != null) return;
+        if (FindAnyObjectByType<IcodosDashboardRuntime>() != null) return;
         new GameObject(RuntimeRootName).AddComponent<IcodosDashboardRuntime>();
     }
 
@@ -165,7 +165,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        cameraController = FindFirstObjectByType<OrbitCameraController>();
+        cameraController = FindAnyObjectByType<OrbitCameraController>();
         if (cameraController != null) cameraController.BackgroundClicked += OnBackgroundClicked;
         HideLegacyDashboard();
         Build();
@@ -197,7 +197,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void HideLegacyDashboard()
     {
-        Canvas[] existing = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Canvas[] existing = FindObjectsByType<Canvas>(FindObjectsInactive.Include);
         foreach (Canvas candidate in existing)
         {
             if (candidate.transform.IsChildOf(transform)) continue;
@@ -242,6 +242,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     }
 
     private const float TitleBarHeight = 26f;
+    private const float AnalyticsSplitStart = 0.54f;
 
     /// <summary>
     /// Slim OS-style window chrome above the functional header — app name/icon on the
@@ -385,7 +386,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     /// </summary>
     private void ApplyMaximumEfficiency()
     {
-        InteractiveModulePanelRuntime panels = FindFirstObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
+        InteractiveModulePanelRuntime panels = FindAnyObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
         panels?.ApplyMaximumEfficiencyPreset();
         PlantProcessSimulator.Instance?.Play();
         Refresh();
@@ -623,10 +624,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         analyticsWindow = CreatePanel("Analytics Window", parent, new Color32(9, 29, 41, 246)).gameObject;
         RectTransform win = analyticsWindow.GetComponent<RectTransform>();
-        // Keep the plant, its navigation, and its module controls visible: Analytics is a
-        // responsive right-side dock, not a centre-screen modal. Anchors preserve a useful
-        // plant viewport at common desktop aspect ratios without a fixed pixel width.
-        win.anchorMin = new Vector2(0.62f, 0f);
+        // Analytics has a dedicated right-side pane. The remaining left-side viewport stays
+        // clear for the 3D plant and its hover-driven module controls at any scaled size.
+        win.anchorMin = new Vector2(AnalyticsSplitStart, 0f);
         win.anchorMax = new Vector2(1f, 1f);
         win.pivot = new Vector2(1f, 0.5f);
         win.offsetMin = new Vector2(12f, 70f);
@@ -865,7 +865,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private InteractiveModulePanelRuntime ModulePanels()
     {
-        if (modulePanels == null) modulePanels = FindFirstObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
+        if (modulePanels == null) modulePanels = FindAnyObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
         return modulePanels;
     }
 
@@ -903,7 +903,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private void ExportMassBalanceCsv()
     {
         PlantProcessSimulator simulator = PlantProcessSimulator.Instance;
-        if (simulator == null) simulator = FindFirstObjectByType<PlantProcessSimulator>();
+        if (simulator == null) simulator = FindAnyObjectByType<PlantProcessSimulator>();
 
         try
         {
@@ -1332,18 +1332,21 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void ApplyPageVisibility()
     {
-        // Analytics is a dock, so it deliberately does not suppress the underlying plant
-        // page. The information panel remains modal because it is explanatory content.
+        // Analytics uses a deliberate split view: hide only dashboard panels that would be
+        // covered by its dedicated right pane, while leaving the 3D plant, header, footer,
+        // and module controls available on the left. The information panel remains modal.
         bool modalOpen = helpPanelOpen;
-        if (processPanel != null) processPanel.SetActive(!modalOpen && currentPage == DashboardPage.Process);
-        if (equipmentPanel != null) equipmentPanel.SetActive(!modalOpen && currentPage == DashboardPage.Equipment);
-        if (simulationPanel != null) simulationPanel.SetActive(!modalOpen && currentPage == DashboardPage.Simulation);
-        if (flowInspectionPanel != null) flowInspectionPanel.SetActive(!modalOpen && currentPage == DashboardPage.FlowInspection);
-        if (processWorkflowBanner != null) processWorkflowBanner.SetActive(!modalOpen && currentPage == DashboardPage.Process);
-        if (legendPanel != null) legendPanel.SetActive(!modalOpen &&
+        bool splitViewOpen = analyticsWindowOpen && !modalOpen;
+        bool showPagePanels = !modalOpen && !splitViewOpen;
+        if (processPanel != null) processPanel.SetActive(showPagePanels && currentPage == DashboardPage.Process);
+        if (equipmentPanel != null) equipmentPanel.SetActive(showPagePanels && currentPage == DashboardPage.Equipment);
+        if (simulationPanel != null) simulationPanel.SetActive(showPagePanels && currentPage == DashboardPage.Simulation);
+        if (flowInspectionPanel != null) flowInspectionPanel.SetActive(showPagePanels && currentPage == DashboardPage.FlowInspection);
+        if (processWorkflowBanner != null) processWorkflowBanner.SetActive(showPagePanels && currentPage == DashboardPage.Process);
+        if (legendPanel != null) legendPanel.SetActive(showPagePanels &&
             (currentPage == DashboardPage.Overview || currentPage == DashboardPage.Process || currentPage == DashboardPage.FlowInspection));
-        if (plantStatusPanel != null) plantStatusPanel.SetActive(!modalOpen && currentPage == DashboardPage.Overview);
-        if (kpiStrip != null) kpiStrip.SetActive(!modalOpen &&
+        if (plantStatusPanel != null) plantStatusPanel.SetActive(showPagePanels && currentPage == DashboardPage.Overview);
+        if (kpiStrip != null) kpiStrip.SetActive(showPagePanels &&
             (currentPage == DashboardPage.Overview || currentPage == DashboardPage.Process || currentPage == DashboardPage.Simulation));
     }
 
@@ -1400,7 +1403,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void Focus(int index)
     {
-        if (cameraController == null) cameraController = FindFirstObjectByType<OrbitCameraController>();
+        if (cameraController == null) cameraController = FindAnyObjectByType<OrbitCameraController>();
         if (cameraController == null) return;
         if (index < 0) cameraController.FocusOverview();
         else cameraController.FocusModule(index);
@@ -1408,7 +1411,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void ToggleStreams()
     {
-        FinalPlantFlowRuntime flow = FindFirstObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
+        FinalPlantFlowRuntime flow = FindAnyObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
         if (flow == null) return;
 
         flow.ToggleVisuals();
@@ -1432,13 +1435,13 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void SetFlowInspectionMode(int mode)
     {
-        FinalPlantFlowRuntime flow = FindFirstObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
+        FinalPlantFlowRuntime flow = FindAnyObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
         if (flow != null) flow.SetInspectionMode(mode);
     }
 
     private void ToggleModulePanels(bool visible)
     {
-        InteractiveModulePanelRuntime panels = FindFirstObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
+        InteractiveModulePanelRuntime panels = FindAnyObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
         if (panels != null) panels.SetSelectionVisible(visible);
     }
 

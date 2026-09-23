@@ -141,7 +141,7 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     {
         ownerCanvas = canvas;
         labelFont = font;
-        panels = FindFirstObjectByType<InteractiveModulePanelRuntime>();
+        panels = FindAnyObjectByType<InteractiveModulePanelRuntime>();
 
         float designMethanol = PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance.DesignMethanolKgH : 1250f;
         responses = new[]
@@ -583,7 +583,7 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
 
     private void ApplyLock()
     {
-        if (panels == null) panels = FindFirstObjectByType<InteractiveModulePanelRuntime>();
+        if (panels == null) panels = FindAnyObjectByType<InteractiveModulePanelRuntime>();
         if (panels == null) return;
         if (subTabVisible && currentVar != Variable.Free)
             panels.SetReactorVariableLock(Vars[currentVar].SliderParam);

@@ -158,7 +158,7 @@ public class OrbitCameraController : MonoBehaviour
 
     private void FrameWholePlantFromRenderers()
     {
-        Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+        Renderer[] renderers = FindObjectsByType<Renderer>();
         bool found = false;
         Bounds bounds = default;
         foreach (Renderer renderer in renderers)
