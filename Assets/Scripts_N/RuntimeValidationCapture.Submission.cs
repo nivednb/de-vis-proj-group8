@@ -42,6 +42,15 @@ public sealed partial class RuntimeValidationCapture
         validationFolder=Path.GetFullPath(folder);
         Directory.CreateDirectory(validationFolder);
         Application.runInBackground=true;
+        // Isolate the opt-in automated player from real keystrokes intended for other apps.
+        // Camera/UI checks still traverse the real Input System using synthetic devices.
+        foreach(var device in UnityEngine.InputSystem.InputSystem.devices.ToArray())
+            if(device.native && (device is UnityEngine.InputSystem.Mouse || device is UnityEngine.InputSystem.Keyboard))
+                UnityEngine.InputSystem.InputSystem.DisableDevice(device);
+        UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Mouse>();
+        UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Keyboard>();
+        UnityEngine.InputSystem.InputSystem.settings.backgroundBehavior=UnityEngine.InputSystem.InputSettings.BackgroundBehavior.IgnoreFocus;
+
         Application.logMessageReceived+=ObserveLog;
         float duration=900f;
         for(int i=0;i<args.Length-1;i++) if(args[i]=="-ptmeoh-duration" && float.TryParse(args[i+1],out float parsed)) duration=Mathf.Max(30f,parsed);
@@ -56,6 +65,7 @@ public sealed partial class RuntimeValidationCapture
         Check(FindAnyObjectByType<SafetyWarningRuntime>()!=null,"Warning overlay startup");
         Check(FindObjectsByType<PipeFlowAnimator>().Length>=35,"Flow animator coverage");
         if(sim==null){Application.Quit(1);yield break;}
+        yield return ValidateTutorial();
         foreach(string page in new[]{"OVERVIEW","PLANT PROCESS","FLOW LAB","REACTOR LAB","SIMULATION","ANALYTICS"})
         {
             var b=NamedButton(page);Check(b!=null && b.interactable,"Navigation exists "+page);
@@ -100,6 +110,7 @@ public sealed partial class RuntimeValidationCapture
         File.WriteAllText(Path.Combine(validationFolder,"player-mass-balance.csv"),csv);
         Check(csv.Contains("External closure") && csv.Contains("Assumption"),"Player mass-balance CSV generation and file write");
         Check(Mathf.Abs(sim.MassBalance.recycleFraction-sim.CurrentInputs.recycleRatio/100f)<0.00001f,"Player CSV current recycle basis");
+        validationReport.AppendLine("CSV_EXTERNAL_CLOSURE_PERCENT "+sim.MassBalance.externalMassBalanceErrorPercent.ToString("R",System.Globalization.CultureInfo.InvariantCulture));
         Check(sim.MassBalance.converged && sim.MassBalance.externalMassBalanceErrorPercent<0.001f,"Player CSV converged external closure below 0.001%");
         Check(Mathf.Abs(sim.MassBalance.freshCo2KgHr+sim.MassBalance.freshH2KgHr-sim.MassBalance.methanolProductKgHr-sim.MassBalance.waterProductKgHr-sim.MassBalance.purgeCo2KgHr-sim.MassBalance.purgeH2KgHr)<0.002f,"Player CSV external input/output stream closure");
         Check(sim.ApplyMaximumEfficiencyOperatingPoint(),"High-output preset applied");

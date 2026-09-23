@@ -133,6 +133,65 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Instance = this;
     }
 
+    /// <summary>True once <see cref="Build"/> has produced the dashboard canvas.</summary>
+    public bool IsBuilt => canvas != null;
+
+    /// <summary>
+    /// Opens one of the header sections by name ("overview", "process", "flow", "reactor",
+    /// "simulation"). Exists so the guided tutorial can put the dashboard into the state a
+    /// tour step is describing without duplicating any page logic of its own.
+    /// </summary>
+    public void TutorialShowPage(string pageId)
+    {
+        switch (pageId)
+        {
+            case "overview": SelectPage(DashboardPage.Overview); break;
+            case "process": SelectPage(DashboardPage.Process); break;
+            case "flow": SelectPage(DashboardPage.FlowInspection); break;
+            case "reactor": SelectPage(DashboardPage.Equipment); break;
+            case "simulation": SelectPage(DashboardPage.Simulation); break;
+        }
+    }
+
+    /// <summary>
+    /// Tutorial hook for the analytics window. A null or empty <paramref name="subTab"/> means
+    /// the STATS tab; "yield", "efficiency", "ofat" or "live" select the VISUALISE tab and the
+    /// matching sub-tab.
+    /// </summary>
+    public void TutorialSetAnalyticsView(bool open, string subTab)
+    {
+        if (!open)
+        {
+            CloseAnalyticsWindow();
+            return;
+        }
+
+        OpenAnalyticsWindow();
+        if (string.IsNullOrEmpty(subTab))
+        {
+            SetAnalyticsTab(AnalyticsTab.Stats);
+            return;
+        }
+
+        SetAnalyticsTab(AnalyticsTab.Visualise);
+        switch (subTab)
+        {
+            case "yield": SelectSubTab(VisualiseSubTab.Yield); break;
+            case "efficiency": SelectSubTab(VisualiseSubTab.Efficiency); break;
+            case "ofat": SelectSubTab(VisualiseSubTab.Ofat); break;
+            case "live": SelectSubTab(VisualiseSubTab.Live); break;
+        }
+    }
+
+    /// <summary>Returns the dashboard to its normal starting view — used when the tutorial
+    /// finishes or is skipped part-way through an analytics step.</summary>
+    public void TutorialRestoreDefaults()
+    {
+        CloseHelpPanel();
+        CloseAnalyticsWindow();
+        SelectPage(DashboardPage.Overview);
+    }
+
     /// <summary>
     /// True while the docked analytics panel is open and the given screen point falls within
     /// its current rect. Other systems use this precise hit test to reserve only the right
@@ -421,24 +480,35 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         processPanel = BuildContextPanel("Guided Process", parent, new Vector2(0.60f, 0.20f), new Vector2(0.985f, 0.66f), "PLANT PROCESS - INPUT TO PRODUCT");
         RectTransform process = processPanel.GetComponent<RectTransform>();
-        processStepText = CreateText("Step", process, "", 12, FontStyle.Bold, TextAnchor.UpperLeft, AccentColor);
-        Pin(processStepText.rectTransform, new Vector2(0f, 0.76f), new Vector2(1f, 0.90f), new Vector2(24f, 0f), new Vector2(-24f, 0f));
-        processTitleText = CreateText("Process Title", process, "", 20, FontStyle.Bold, TextAnchor.UpperLeft, Color.white);
-        Pin(processTitleText.rectTransform, new Vector2(0f, 0.64f), new Vector2(1f, 0.79f), new Vector2(24f, 0f), new Vector2(-24f, 0f));
+        RectTransform processHeader = process.Find("Panel Title").GetComponent<RectTransform>();
+        processHeader.anchorMax = new Vector2(0.74f, 1f);
+        processStepText = CreateText("Step", process, "", 12, FontStyle.Bold, TextAnchor.MiddleRight, AccentColor);
+        // Laid out in pixels measured from the panel's own top and bottom edges rather than in
+        // fractions of its height: the panel is short, so fractional rows landed on top of the
+        // 42px panel-title band and each other.
+        Pin(processStepText.rectTransform, new Vector2(0.75f, 1f), new Vector2(1f, 1f), new Vector2(0f, -42f), new Vector2(-18f, -10f));
+        processTitleText = CreateText("Process Title", process, "", 19, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
+        Pin(processTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -86f), new Vector2(-18f, -50f));
+
+        RectTransform processRule = CreatePanel("Process Rule", process, AccentColor);
+        Pin(processRule, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -92f), new Vector2(-18f, -90f));
+        processRule.GetComponent<Image>().raycastTarget = false;
+
         processBodyText = CreateText("Explanation", process, "", 13, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Pin(processBodyText.rectTransform, new Vector2(0f, 0.18f), new Vector2(0.66f, 0.62f), new Vector2(24f, 8f), new Vector2(-18f, 0f));
+        Pin(processBodyText.rectTransform, Vector2.zero, new Vector2(0.66f, 1f), new Vector2(20f, 62f), new Vector2(-16f, -104f));
+
+        RectTransform columnRule = CreatePanel("Process Column Rule", process, new Color32(38, 66, 82, 255));
+        Pin(columnRule, new Vector2(0.66f, 0f), new Vector2(0.66f, 1f), new Vector2(0f, 62f), new Vector2(2f, -104f));
+        columnRule.GetComponent<Image>().raycastTarget = false;
+
         processStreamsText = CreateText("Streams", process, "", 12, FontStyle.Normal, TextAnchor.UpperLeft, MutedTextColor);
-        RectTransform streamCard = CreatePanel("Step Streams Card", process, PanelLightColor);
-        Pin(streamCard, new Vector2(0.68f, 0.18f), new Vector2(0.97f, 0.62f), Vector2.zero, Vector2.zero);
-        Text streamHeading = CreateText("Step Streams Heading", streamCard, "MATERIALS AT THIS STEP", 10, FontStyle.Bold, TextAnchor.UpperLeft, AccentColor);
-        Pin(streamHeading.rectTransform, new Vector2(0f, 0.78f), Vector2.one, new Vector2(14f, 0f), new Vector2(-10f, -10f));
-        processStreamsText.transform.SetParent(streamCard, false);
-        Pin(processStreamsText.rectTransform, Vector2.zero, new Vector2(1f, 0.80f), new Vector2(14f, 10f), new Vector2(-10f, 0f));
+        Pin(processStreamsText.rectTransform, new Vector2(0.66f, 0f), Vector2.one, new Vector2(16f, 62f), new Vector2(-18f, -104f));
+
         previousProcessStepButton = CreateButton("Previous Step", process, "PREVIOUS STEP", HeaderColor, 11);
-        Pin(previousProcessStepButton.GetComponent<RectTransform>(), new Vector2(0.02f, 0.03f), new Vector2(0.20f, 0.18f), Vector2.zero, Vector2.zero);
+        Pin(previousProcessStepButton.GetComponent<RectTransform>(), Vector2.zero, Vector2.zero, new Vector2(20f, 16f), new Vector2(170f, 50f));
         previousProcessStepButton.onClick.AddListener(() => SetProcessStep(processStepIndex - 1));
         nextProcessStepButton = CreateButton("Next Step", process, "NEXT STEP", AccentColor, 11);
-        Pin(nextProcessStepButton.GetComponent<RectTransform>(), new Vector2(0.80f, 0.03f), new Vector2(0.98f, 0.18f), Vector2.zero, Vector2.zero);
+        Pin(nextProcessStepButton.GetComponent<RectTransform>(), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-170f, 16f), new Vector2(-20f, 50f));
         nextProcessStepButton.onClick.AddListener(() => SetProcessStep(processStepIndex + 1));
 
         equipmentPanel = BuildContextPanel("Reactor Lab", parent, new Vector2(0.69f, 0.25f), new Vector2(0.985f, 0.72f), "REACTOR REACTION LAB");
@@ -609,15 +679,26 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             "MODEL BASIS\nMolar masses: H2 2.01588, CO2 44.00950, CH3OH 32.04186, H2O 18.01528 kg/kmol. The synthesis export uses a steady-state external boundary: fresh H2 + fresh CO2 = methanol + water + purge H2 + purge CO2. Internal recycle is excluded from external totals.\n\n" +
             "ASSUMPTIONS\nPerfect methanol/water removal before gas recycle; identical separator recycle fraction for unreacted H2 and CO2; no CO, reverse-water-gas-shift, inerts, dissolved gas, heat loss or pressure drop. T/P/ratio/GHSV response and separation recovery are educational correlations, not fitted plant kinetics. Maximum product purity is 99.85%.\n\n" +
             "MASS-BALANCE CHECK\nOpen ANALYTICS and select EXPORT CSV. The file contains inputs, reactor inlet, products, recycle, purge, closure error, operating point, molar masses and assumptions. Verify the External closure rows; downstream refined methanol is reported separately because unrecovered material is outside the simplified synthesis boundary.\n\n" +
-            "CONTROLS & CONSTRAINTS\nUse top navigation, equipment selection and module arrows. SET MAXIMUM EFFICIENCY applies the modeled optimum but cannot bypass the tank high-high interlock.\n\n" +
+            "CONTROLS & CONSTRAINTS\nUse top navigation, equipment selection and module arrows. SET MAXIMUM EFFICIENCY applies the educational high-output preset but cannot bypass the tank high-high interlock.\n\n" +
             "CAMERA / NAVIGATION\nArrow keys orbit; A/D pan; W/S zoom.\n\n" +
             "This educational application is not CFD, Aspen, industrial control software, or a validated process model.",
             11, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
         Pin(body.rectTransform, Vector2.zero, Vector2.one, new Vector2(28f, 56f), new Vector2(-28f, -64f));
+        Button tutorial = CreateButton("Start Tutorial", panel, "START TUTORIAL", Hex("1E7A46"), 13);
+        AnchorBottomLeft(tutorial.GetComponent<RectTransform>(), new Vector2(24f, 18f), new Vector2(200f, 36f));
+        tutorial.onClick.AddListener(StartTutorial);
+
         Button close = CreateButton("Close", panel, "CLOSE", AccentColor, 13);
         AnchorBottomRight(close.GetComponent<RectTransform>(), new Vector2(-24f, 18f), new Vector2(120f, 36f));
         close.onClick.AddListener(CloseHelpPanel);
         helpPanel.SetActive(false);
+    }
+
+    /// <summary>Closes the about box and hands over to the guided tour.</summary>
+    private void StartTutorial()
+    {
+        CloseHelpPanel();
+        TutorialRuntime.Instance?.StartTutorial();
     }
 
     private void BuildAnalyticsWindow(Transform parent)
@@ -1581,6 +1662,12 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private static void AnchorBottomRight(RectTransform rect, Vector2 position, Vector2 size)
     {
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+    }
+    private static void AnchorBottomLeft(RectTransform rect, Vector2 position, Vector2 size)
+    {
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 0f);
         rect.anchoredPosition = position;
         rect.sizeDelta = size;
     }
