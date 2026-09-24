@@ -1,0 +1,3 @@
+elapsed_seconds,frame_count,allocated_bytes,objects,storage_percent,interlock
+0.0006637573,20187,117382591,732,1.46332,False
+15.0089,22863,117803447,732,5.323864,False

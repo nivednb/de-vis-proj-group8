@@ -1,3 +1,5 @@
+> Historical sprint record. Current release behavior and evidence are in SUBMISSION_STATUS.md, IMPLEMENTATION_REFERENCE.md and SCIENTIFIC_VALIDATION.md. Historical passes are not fresh final-submission passes.
+
 # Sprint Feedback Implementation
 
 ## Branch policy
@@ -32,7 +34,7 @@ Unity 6000.4.7f1 compiled the integrated branch in batch mode. The recycle balan
 
 - Release-scene validation passed with 480 scene objects, 35 required process-route segments, no missing scripts, reactor catalyst/shell checks, pipe shader, and camera controls.
 - Professor-feedback control validation passed: temperature, pressure, H2/CO2 ratio, and feed flow each changed the calculated result with the other test parameters held constant.
-- Added direct UI helpers for total-feed/molar-ratio splitting and reactor operating conditions, plus a 260 C hotspot-alarm query. The verified 1024-iteration safety cap is retained because the default 95% recycle case requires more than 100 iterations at the configured numerical tolerance.
+- Added direct UI helpers for total-feed/molar-ratio splitting and reactor operating conditions, plus a 260 C hotspot-alarm query. The former 1024-iteration cap was superseded on final-submission by the fresh-feed-scaled convergence criterion and 32768 cap; see SCIENTIFIC_VALIDATION.md.
 - Windows x86_64 build succeeded with zero errors.
 - Player startup and front whole-plant framing were visually inspected at 1280x720 and 1920x1080.
 - Non-readable imported meshes now use bounds colliders for equipment hover selection, removing repeated runtime collision-mesh errors.

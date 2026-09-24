@@ -31,6 +31,8 @@ def main():
     import re
     match=re.search(r'PtMeOH Windows build result: Succeeded; errors: (\d+); warnings: (\d+)',build_log)
     if not match or match[1]!='0':raise SystemExit('Successful build evidence missing.')
+    numerical=(root/'docs/evidence/numerical-validation.txt').read_text(encoding='utf-8')
+    if 'PASS assertions=' not in numerical:raise SystemExit('Numerical validation evidence missing.')
     for name in ('final-runtime-1080','final-runtime-720'):
         report=(root/'docs/evidence'/name/'runtime-validation.txt').read_text(encoding='utf-8')
         if 'RUNTIME_VALIDATION_PASS' not in report or '\nFAIL ' in report:raise SystemExit('Runtime validation failed/missing: '+name)
@@ -38,20 +40,27 @@ def main():
             seconds=float(re.search(r'SOAK_SECONDS ([\d.]+)',report)[1])
             if seconds<900:raise SystemExit('15-minute soak not completed.')
     if not (package/'PtMeOH-DigitalTwin.exe').is_file():raise SystemExit('Executable missing.')
-    shutil.copytree(root/'docs',package/'docs',dirs_exist_ok=True)
+    execution=json.loads((root/'docs/evidence/verification-execution.json').read_text(encoding='utf-8-sig'))
+    if execution['source_commit']!=build_commit or not execution['all_stages_passed']:
+        raise SystemExit('Build execution record does not match source.')
+    if execution['library_existed_at_start'] or execution['initial_git_status']:
+        raise SystemExit('Final validation did not start in a clean checkout without Library.')
+    for name, expected in execution['tested_build_sha256'].items():
+        if digest(package/name)!=expected:raise SystemExit('Tested binary changed: '+name)
+    shutil.copytree(root/'docs' ,package/'docs',dirs_exist_ok=True)
     shutil.copy2(root/'README.md',package/'README.md')
     source_zip=package/'PtMeOH-Source.zip'
     subprocess.run(['git','-C',str(root),'archive','--format=zip','--prefix=PtMeOH-Source/','-o',str(source_zip),commit],check=True)
-    files={p.relative_to(package).as_posix():digest(p) for p in sorted(package.rglob('*')) if p.is_file() and p.name!='release-manifest.json'}
+    files={p.relative_to(package).as_posix():digest(p) for p in sorted(package.rglob('*')) if p.is_file() and p!=package/'release-manifest.json'}
     manifest={
         'schema_version':1,'created_utc':datetime.now(timezone.utc).isoformat(),
         'branch':git(root,'branch','--show-current'),'source_commit':commit,
-        'build_source_commit':build_commit,'build_inputs_identical_to_final_commit':True,
+        'build_source_commit':build_commit,'fresh_clone_without_library':True,'build_inputs_identical_to_final_commit':True,
         'unity_version':'6000.4.7f1','platform':'Windows x86_64',
         'build_identity':'PtMeOH-FinalSubmission-Windows-x64-'+commit[:12],
         'build_result':'Succeeded','build_errors':int(match[1]),'build_warnings':int(match[2]),
         'build_log_sha256':digest(pathlib.Path(args.build_log)),
-        'runtime_status':'Automated callbacks/API/soak passed; manual visual and physical input sign-off remains',
+        'runtime_status':'Automated callbacks/API/synthetic-input/soak passed; physical input and team visual sign-off remain',
         'academic_status':'Numerically verified educational model; not empirically calibrated',
         'team_signoff':'Institution, team attribution and original model/icon permissions remain team input',
         'git_input_trees':{name:git(root,'rev-parse',commit+':'+name) for name in ('Assets','Packages','ProjectSettings')},

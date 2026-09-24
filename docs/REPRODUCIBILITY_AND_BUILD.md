@@ -1,73 +1,52 @@
-# Reproducibility and Windows Build
+# Reproduce the final submission
 
-## Required software
+## Requirements
 
-- Git
-- Unity Hub
-- Unity Editor `6000.4.7f1` with Windows Build Support
+Windows, Git, a valid Unity licence, Unity 6000.4.7f1 with Windows Build Support. Keep the package manifest/lock pinned. Python 3 is used only for manifest/archive generation. A clean clone may use the machine's existing package download cache but must not copy Library, Temp or Builds from another checkout.
 
-The project uses URP `17.4.0`. Unity's Navigation package and built-in AI module
-provide NavMesh and pathfinding support.
+## Source identity
 
-## Clean-clone verification
+The distributable manifest records the final source commit (including report/evidence) and the tested build-source commit. Documentation is finalized after execution. The manifest tool refuses packaging if these commits differ under Assets, Packages or ProjectSettings, and records those Git tree identities. Thus a commit does not need to contain its own SHA. `PtMeOH-Source.zip` is created with git archive from the final commit. A mutable branch name alone is not release identity.
 
-1. Clone the repository into a short local path with sufficient free space.
-2. Check out the evaluated commit or release tag.
-3. Open the folder in Unity Hub with `6000.4.7f1`.
-4. Wait for package import and shader compilation to finish.
-5. Open `Assets/Scenes/SampleScene.unity`.
-6. Clear the Console, enter Play Mode, and exercise the acceptance checklist.
+## Fresh-clone verification
 
-## Structural validation
+Clone/check out the exact manifest SHA, or extract the source archive into a fresh folder. Then run:
 
-Run `Tools > Power-to-Methanol > Validate Release Scene`. A successful run logs
-`RELEASE_VALIDATION_OK`. This checks required route segments, catalyst and
-reactor-shell renderers, the flow shader, camera panning, and missing scripts.
-It does not replace visual, chemical, performance, or build testing.
-
-## Windows build
-
-Run `Tools > Power-to-Methanol > Build Windows Application`. The default output
-is:
-
-```text
-Builds/Windows/PtMeOH-DigitalTwin.exe
+```powershell
+.\tools\Validate-Submission.ps1 -Editor 'C:\Program Files\Unity\Hub\Editor\6000.4.7f1\Editor\Unity.exe'
 ```
 
-For automated or alternate output, set `PTMEOH_BUILD_PATH` to the full `.exe`
-path before starting Unity. The editor script uses Windows x86_64 and StrictMode,
-so a build error fails the build.
+Optional `-Project` and `-Output` parameters select other folders. The script waits for exit codes and success markers from:
 
-## Release evidence
+1. `SubmissionValidation.Run`: scene, recycle, professor-control, CSV and expanded numerical checks;
+2. `WindowsBuild.BuildWindows`: Windows x86_64 StrictMode build;
+3. the resulting player at 1920x1080 with a 900-second soak;
+4. the same player at 1280x720 with a 30-second soak phase.
 
-Store these outside the Unity source tree or in a release attachment:
+Logs remain in Logs; compact reports, CSVs and captures go to docs/evidence. Player validation invokes UI callbacks/component APIs and synthetic Unity Input System mouse/keyboard events, not physical hardware input. It forces the tutorial first-launch path without reading or writing the normal completion preference, then checks replay, navigation, warning arrow, layout and camera input. It runs only with an explicit validation argument. Run one player at a time.
 
-- exact Git commit SHA and optional signed tag;
-- Unity Editor version;
-- validation Console log;
-- build log and warning review;
-- executable SHA-256;
-- short acceptance-test recording;
-- final screenshots and known-issues list.
+For direct Unity execution use `-batchmode -nographics -quit -projectPath <project> -executeMethod SubmissionValidation.Run -logFile <log>`; use `WindowsBuild.BuildWindows` for building and set `PTMEOH_BUILD_PATH` to the desired EXE path. On Windows, wait for the process: invoking Unity.exe alone can return before it finishes.
 
-Never submit `Library`, `Temp`, `Logs`, `UserSettings`, `.vs`, `obj`, or a stale
-build from a different commit.
+## Freeze and package
 
-## Validation record for this release branch
+After committing source/docs and reviewing successful evidence:
 
-On 3 August 2026, Unity 6000.4.7f1 completed the automated release-scene
-validation and a Windows build in batch mode.
+```powershell
+python tools/release_manifest.py --package Release/PtMeOH-FinalSubmission-Windows-x64 --build-source-commit <tested-sha> --build-log <successful-build-log>
+```
 
-- Validation passed (`RELEASE_VALIDATION_OK`), reporting 480 scene objects, 35
-  process segments, the runtime-animated catalyst, reactor shell, and camera pan.
-- The Windows build succeeded with 0 errors. The build was written to an
-  external release directory so generated binaries were not committed to the
-  Unity source tree.
-- The compiler reported 40 warnings. These are primarily Unity 6 API
-  deprecation warnings in existing runtime-discovery calls, plus one
-  member-hiding warning. They do not block this build, but should be removed in
-  a future maintenance pass rather than hidden from the submission record.
+The tool requires a clean checkout, matching application input trees, successful build/player markers and a completed >=900-second soak. It copies docs/README, includes the Git source archive, hashes package files, creates release-manifest.json, archives the whole folder and emits a ZIP SHA-256 sidecar. It does not perform or invent validation. Raw machine-specific logs remain local.
 
-The executable is not a single-file deliverable. Distribute it together with
-`PtMeOH-DigitalTwin_Data`, `UnityPlayer.dll`, `UnityCrashHandler64.exe`,
-`MonoBleedingEdge`, and the other files produced in the same build directory.
+The EXE is not a single-file deliverable. Distribute its `_Data` folder, UnityPlayer.dll, MonoBleedingEdge and every other produced player file. Exact executed results and package paths are in SUBMISSION_STATUS.md.
+
+## Manual sign-off
+
+Review live UI/readability/contrast and pipe continuity, physical input and graph-export UX, and launch on a second machine/presentation display. Complete team, asset and institution sign-off. Automated PASS markers do not establish these facts.
+
+## Recorded frozen-source execution
+
+The final run used `9e3ea9c192d506e33e4227586efdd5cd5da994bd` in `../final-tutorial-clean`, with empty initial Git status and no Library. The existing run completed on 2026-09-23; it was inspected and documented afterward, not rerun under a different source SHA. Both resolutions used the same fresh executable. See SUBMISSION_STATUS.md for all results.
+
+Unity's initial import can run its API Updater against cached ShaderGraph sources; this run recovered two transient GUID diagnostics automatically. Seven serialized files received only line-ending rewrites, confirmed equivalent to HEAD. Preserve pinned packages; do not hand-edit cached dependencies to conceal import problems. The visible player is required for valid screenshots. Native input is isolated only in the automated test process, and synthetic events exercise the real Unity input path.
+
+The committed evidence manifest identifies the tested application commit and binary hashes. Packaging is performed after the evidence commit, so the external manifest and source archive can identify the exact final release SHA. ZIP hashes are sidecars outside the ZIP to avoid circular hashes.

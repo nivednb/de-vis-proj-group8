@@ -1,0 +1,23 @@
+{
+    "timeline": 100.0,
+    "storageInterlockLatched": false,
+    "storedMethanolKg": 0.0,
+    "electrolyzerPower": 75.0,
+    "waterFeed": 100.0,
+    "flueGasFlow": 100.0,
+    "amineFlow": 65.0,
+    "regeneratorSteam": 70.0,
+    "regenTemp": 105.0,
+    "compressionRatio": 3.0,
+    "temperature": 240.0,
+    "pressure": 70.0,
+    "ratio": 3.0,
+    "ghsv": 8000.0,
+    "reactorFeedFlow": 100.0,
+    "coolingWaterFlow": 70.0,
+    "coolingWaterTemperature": 24.0,
+    "separatorTemperature": 34.0,
+    "recycleRatio": 25.0,
+    "refluxRatio": 3.200000047683716,
+    "distillationReboilerTemp": 98.0
+}

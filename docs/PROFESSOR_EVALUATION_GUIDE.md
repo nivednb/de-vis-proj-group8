@@ -1,47 +1,18 @@
-# Professor Evaluation Guide
+# Examiner walkthrough
 
-## Purpose
+This is an educational Power-to-Methanol process simulator and visualization. It has no live plant connection and is not a calibrated kinetic, thermodynamic or safety package.
 
-This Unity application is an educational Power-to-Methanol digital-twin
-demonstrator. It combines a navigable plant, process controls, stream
-visualisation, simplified steady-state calculations, warnings, and engineering
-explanations. It is intended to communicate system behaviour; it is not a CFD,
-kinetic, control-system, or process-safety design package.
+1. Launch `PtMeOH-DigitalTwin.exe` from its complete Windows folder. Complete or skip the first-launch tutorial; replay it with HELP → START TUTORIAL. Read the overview and process legend.
+2. Follow PLANT PROCESS through electrolysis, capture, mixing, synthesis, separation/recycle and storage. Use module focus to inspect equipment.
+3. Set water feed to zero: after display smoothing settles, hydrogen and oxygen production approach zero. Restore/reset the inputs.
+4. In REACTOR LAB/ANALYTICS, compare temperature, pressure, ratio and feed sweeps. Explain which values are held constant and why feed changes throughput without changing the per-pass correlation.
+5. Compare single-pass conversion with overall recycle utilization. Use the mass-balance CSV to distinguish internal recycle from external inputs/outputs.
+6. Inspect mixed-species streams, transparent reactor and catalyst-state color. These are explanatory visuals, not CFD or literal catalyst chemistry.
+7. Exercise pause/resume and reset. Observe the accelerated tank high-high shutdown and reset behavior.
+8. Read SCIENTIFIC_VALIDATION.md and the actual evidence files. Numerical balance verification does not establish empirical accuracy.
 
-## Recommended evaluation route
+Keyboard controls: arrows orbit, A/D pan, W/S zoom, Shift+arrows change focus, Home overview. Physical input and visual review status is recorded in SUBMISSION_STATUS.md.
 
-1. Launch `PtMeOH-DigitalTwin.exe` at 1920 x 1080 if available.
-2. Open **Overview** and inspect the complete plant and process legend.
-3. Visit Electrolyzer, Carbon Capture, Synthesis, Separation, and Storage.
-4. Change one operating control at a time and compare the numeric result,
-   stream speed/density, warning state, and analytics response.
-5. Use **Show Streams** and confirm mixed-feed routes contain distinct H2, CO2,
-   and recycle tracer packets.
-6. Focus the reactor and observe its transparent shell and catalyst-bed colour
-   response.
-7. Test storage-capacity warnings and reset behaviour.
-8. Export analytics, if enabled in the evaluated build.
+The legacy efficiency label is a material-recovery index, not energy efficiency. MAX is a predefined high-recovery preset, not a demonstrated global optimum. See IMPLEMENTATION_REFERENCE.md for the exact formulas and warning thresholds.
 
-## Controls
-
-| Input | Action |
-| --- | --- |
-| Arrow keys | Orbit around the current focus |
-| A / D | Pan left / right |
-| W / S | Zoom in / out |
-| Shift + arrow keys | Select previous / next module |
-| Home | Restore overview |
-
-## Evidence supplied
-
-- Architecture, equations, assumptions, and limitations: `FINAL_PROJECT_REPORT.md`
-- Script-to-feature mapping: `IMPLEMENTATION_REFERENCE.md`
-- Current visual record: `progress-screenshots.md`
-- Repeatable validation/build procedure: `REPRODUCIBILITY_AND_BUILD.md`
-- Team/tool provenance: `TOOLS_AND_ASSISTANCE.md`
-
-## Important limitations
-
-Displayed values are simplified educational process values. They must not be
-used for equipment sizing, relief design, hazard studies, emissions compliance,
-commercial forecasting, or plant operation.
+The release manifest identifies the source commit and file hashes. Team/institution and asset-permission confirmations remain in TOOLS_AND_ASSISTANCE.md and REFERENCES_AND_ASSET_PROVENANCE.md until signed off by the team.

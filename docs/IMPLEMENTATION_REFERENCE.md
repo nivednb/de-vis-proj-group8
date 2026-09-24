@@ -1,344 +1,65 @@
-# Implementation and Engineering Reference
+# Implementation and engineering reference
 
-This appendix records the current implementation at source-code level. Paths
-are relative to the repository root.
+Current branch: `final-submission`. Paths are repository-relative. This supersedes the earlier approximate equation inventory.
 
-## 1. Core file inventory
+## Source map
 
-### 1.1 Integrated runtime
+| Source | Role |
+|---|---|
+| `Assets/Scripts_N/PlantProcessSimulator.cs` | Live input owner, `ProcessInputs`, `ProcessSnapshot`, `Simulate`, storage clock/interlock |
+| `Assets/Scripts_N/RecycleMassBalanceEngine.cs` | Species-resolved iterative recycle/purge balance and per-pass correlation |
+| `Assets/Scripts_N/MassBalanceCsvExporter.cs` | Synthesis-boundary CSV with units and assumptions |
+| `Assets/Scripts_N/FinalFlowSystem/FinalPlantFlowRuntime.cs` | Prefix-based routes, shared clock, staged activation, species/flow coupling |
+| `Assets/PipeFlowAnimator.cs`, `Assets/PipeFlow.shader` | Per-renderer flow properties and shader |
+| `Assets/Scripts_N/FinalFlowSystem/LightweightReactorVisual.cs` | Bounded educational reactor upflow effect |
+| `Assets/Scripts_N/FinalFlowSystem/CatalystBedColorAnimator.cs` | Operating-state catalyst color |
+| `Assets/Scripts_N/IcodosDashboardRuntime.cs` | Six-page dashboard, split analytics pane, help, preset/export actions |
+| `Assets/Scripts_N/InteractiveModulePanelRuntime.cs` | Equipment controls and slider bindings |
+| `Assets/Scripts_N/OfatTimelineGraphRuntime.cs` | Controlled sweeps and time-series experiment recording |
+| `Assets/Scripts_N/SafetyWarningRuntime.cs` | Educational warning thresholds |
+| `Assets/OrbitCameraController.cs` | Mouse/keyboard camera navigation and focus |
+| `Assets/Scripts_N/RuntimeValidationCapture*.cs` | Opt-in screenshot and player acceptance harness |
+| `Assets/Editor/SubmissionValidation.cs` | Numerical oracle, edge cases, evidence CSVs |
+| `Assets/Editor/*Validation.cs`, `WindowsBuild.cs` | Existing scene/control/recycle/CSV checks and Windows build |
 
-| File | Current role |
-| --- | --- |
-| `Assets/Scripts_N/PlantProcessSimulator.cs` | Central process inputs, equations, snapshot |
-| `Assets/Scripts_N/FinalFlowSystem/FinalPlantFlowRuntime.cs` | Route discovery and process-to-flow coupling |
-| `Assets/PipeFlowAnimator.cs` | Per-segment shader property animation |
-| `Assets/PipeFlow.shader` | Transparent carrier and moving species packets |
-| `Assets/Scripts_N/FinalFlowSystem/PlantFlowKind.cs` | Stream classifications |
-| `Assets/Scripts_N/FinalFlowSystem/LightweightReactorVisual.cs` | Low-cost upflow reactor visual |
-| `Assets/Scripts_N/FinalFlowSystem/CatalystBedColorAnimator.cs` | Catalyst operating-state color |
-| `Assets/Scripts_N/IcodosDashboardRuntime.cs` | Main application dashboard |
-| `Assets/Scripts_N/InteractiveModulePanelRuntime.cs` | Equipment panels and controls |
-| `Assets/Scripts_N/SafetyWarningRuntime.cs` | Educational warnings |
-| `Assets/OrbitCameraController.cs` | Camera navigation and focus |
-| `Assets/Scripts_N/PlantEnvironmentBuilder.cs` | Runtime industrial environment |
-| `Assets/Scripts_N/RuntimeValidationCapture.cs` | Automated runtime screenshot helper |
+## Baseline and dimensions
 
-### 1.2 Editor and release tooling
+Exact baseline fields and results are generated in `docs/evidence/nominal-inputs.json` and `nominal-output.json`. Defaults include 250 C, 70 bar, H2/CO2=3 mol/mol, GHSV=8000 h^-1, 65% recycle, 75% electrolyzer power, 100% water and reactor feed. Timeline=100 produces a 95% plant ramp under the retained startup schedule. Design assumptions are 215 kg/h H2, 1510 kg/h CO2, 1935 kg/h water, 1250 kg/h methanol cap and 12000 kg storage.
 
-| File | Role |
-| --- | --- |
-| `Assets/Editor/ProjectInventory.cs` | Deep hierarchy/asset inventory |
-| `Assets/Editor/ReleaseValidation.cs` | Structural release validation |
-| `Assets/Editor/WindowsBuild.cs` | Reproducible Windows build entry point |
+## Equations
 
-### 1.3 Legacy and support files
+For ramp L, power fraction p and water fraction w (each capacity fraction clamped to 0..1):
 
-| File | Status |
-| --- | --- |
-| `Assets/AbsorberController.cs` | Earlier absorber panel/controller |
-| `Assets/ReactorController.cs` | Earlier reactor panel/controller |
-| `Assets/OverviewPanelController.cs` | Earlier overview UI |
-| `Assets/CameraController.cs` | Earlier camera support |
-| `Assets/PlantPipeManager.cs` | Legacy primitive pipe generator; disabled by default |
-| `Assets/ReactorPanelToggle.cs` | Legacy reactor-panel toggle |
-| `Assets/Scripts_N/FlowPath.cs` | Waypoint path support/prototype |
-| `Assets/Scripts_N/FlowFollower.cs` | Waypoint follower support/prototype |
-| `Assets/Scripts_N/PipeWaypointGenerator.cs` | Waypoint generation support/prototype |
+`water = 1935 L w`
 
-These files should not be described as the primary integrated architecture.
+`H2 = min(215 L p, water * 2.01588/18.01528)`
 
-## 2. Nominal process inputs
+`O2 = H2 * 15.99940/2.01588`
 
-| Variable | Nominal/default |
-| --- | ---: |
-| Plant throughput | 100% |
-| Electrolyzer power | 75% |
-| Water feed | 100% |
-| Flue-gas feed | 100% |
-| Amine circulation | 65% |
-| Regeneration steam | 70% |
-| Regenerator temperature | 105 °C |
-| Compressor pressure ratio | 3 |
-| Reactor temperature | 250 °C |
-| Reactor pressure | 70 bar |
-| H2/CO2 ratio | 3.0 |
-| GHSV | 8,000 h⁻¹ |
-| Reactor feed | 100% |
-| Cooling rate | 70% |
-| Cooling temperature | 24 °C |
-| Separator temperature | 34 °C |
-| Recycle | 65% |
-| Reflux ratio | 3.2 |
-| Reboiler temperature | 98 °C |
+A 130% slider setting may saturate at design capacity; percentages above 100 are not evidence of modeled overload physics.
 
-Design reference rates:
+Capture efficiency is `clamp01(0.18 + 0.46 a^0.55 + 0.22 t + 0.14 s^0.45)` with a=amine/100, s=steam/100, and t=InverseLerp(82,118,regenerator C). Captured CO2 is available flue-gas CO2 times this factor.
 
-| Stream | Rate |
-| --- | ---: |
-| H2 | 215 kg/h |
-| CO2 | 1,510 kg/h |
-| Water feed | 1,935 kg/h |
-| Methanol | 1,250 kg/h |
-| Storage capacity | 12,000 kg |
+Per-pass conversion is `clamp(0.25 exp[-0.0005(T-240)^2] (max(1,P)/70)^0.35 (8000/max(1000,GHSV))^0.2 * q, 0.05, 0.35)`, where `q=1-0.42 clamp01(abs(ratio-3)/3)`. This is an educational response curve, not fitted kinetics. The live model limits reactor feeds by both available species and the requested molar ratio.
 
-## 3. Process equations
+The recycle solver iterates species recycle until change is below `max(1e-9,1e-10*max(1,F_CO2,F_H2))` kmol/h or 32768 iterations. r is bounded to 0..0.999. It reports convergence and external mass error. The independent algebraic solution and boundary conditions are in `SCIENTIFIC_VALIDATION.md`.
 
-### 3.1 Electrolyzer
+Condenser recovery is 0.55..0.98 from cooling flow/temperature; separator recovery has a maximum at 34 C; distillation recovery combines reflux and reboiler factors. Refined methanol equals min(reactor methanol,1250) times all three recovery factors. Product purity is a separate heuristic (88..99.85%). Reactor-product water is from reaction extent, before downstream recovery, not inferred from refined methanol.
 
-```text
-powerFactor = powerPercent / 100
-waterFactor = waterPercent / 100
-electrolyzerFactor = min(powerFactor, Lerp(0.15, 1.10, waterFactor))
-H2 = designH2 × plantRamp × electrolyzerFactor
-waterFeed = designWater × plantRamp × waterFactor
-O2 = H2 × 8
-```
+The legacy efficiency field is `100 * clamp01(refined methanol/max(stoichiometric methanol,1))`. It is a material recovery index. Compressor ratio has UI/warning effects but no compressor work or thermodynamic pressure calculation.
 
-### 3.2 Capture
+## Time and warnings
 
-```text
-amineFactor = (aminePercent / 100)^0.55
-regenFactor = InverseLerp(82, 118, regenerationTemperature)
-steamFactor = (steamPercent / 100)^0.45
-captureEfficiency =
-    clamp(0.18 + 0.46×amineFactor
-               + 0.22×regenFactor
-               + 0.14×steamFactor)
-capturedCO2 = inputCO2 × captureEfficiency
-```
+Snapshot displays are exponentially smoothed with rate 4.5/s. Storage adds production times 0.035 simulated hours per real second. A 99% high-high inventory condition latches production shutdown until reset/unload. This is accelerated teaching behavior, not validated process dynamics. Pause stops model updates and flow clock.
 
-### 3.3 Synthesis feed and yield
+Visible reactor overlay: critical at >=285 C, caution above 270 C, low-temperature caution <=215 C, low-pressure caution <60 bar, H2 deficiency <2.5 and excess >4.5, high GHSV >9500 h^-1. The separate engine helper `IsHotspotAlarmActive` tests >260 C; it is not the visible overlay threshold. These thresholds are project assumptions, not certified equipment limits.
 
-```text
-syngasFeed = (H2 + capturedCO2) × feedFactor
-temperatureRate = InverseLerp(210, 255, reactorTemperature)
-highTemperaturePenalty = 0 … 0.32 between 255 and 310 °C
-pressureFactor = reactorPressure / 100
-ratioFactor = 1 - clamp(|H2CO2Ratio - 3| / 3) × 0.42
-residenceFactor = clamp(8000 / GHSV, 0.35, 1.35)
-recycleBoost = Lerp(0.86, 1.18, recyclePercent / 100)
-reactorYield = bounded product of the above factors
-```
+## Validation boundaries
 
-Stoichiometric production:
+No broad NUnit EditMode/PlayMode suite exists. Custom batch-compatible editor validators now provide repeatable numerical tests. The runtime harness checks component behavior and callback wiring; human visual/input inspection is still required. No empirical calibration, energy balance, side chemistry, real-time data feed or user study is implemented.
 
-```text
-theoreticalFromH2 = H2 × 32 / 6
-theoreticalFromCO2 = capturedCO2 × 32 / 44
-theoreticalMethanol = min(theoreticalFromH2, theoreticalFromCO2)
-```
+## Guided tutorial integration
 
-### 3.4 Recovery and purification
+The 23-step `TutorialRuntime` is selectively ported from `chaitanya-dev` commits cf8db347, 973cc52b and a25253e5. That branch was not merged. Dashboard hooks reuse current page/analytics methods and preserve the right-side analytics pane and reactor/OFAT lock ownership. `PLANT PROCESS` is the current label for the Process Map requested in the integration brief. Its title/counter, content columns and buttons have separate rectangles.
 
-```text
-condenserRecovery = Lerp(0.55, 0.98, coolingFactor)
-separatorFactor = 1 - temperature penalty around 34 °C
-distillationFactor =
-    0.72 + 0.11×normalizedReflux + 0.17×normalizedReboiler
-methanolPurity =
-    clamp(90 + 7.2×normalizedReflux + 2.4×normalizedReboiler,
-          88, 99.85)
-distillationEnergyIndex =
-    18 + 12×refluxRatio + 36×normalizedReboiler
-methanol =
-    min(designMethanol, theoreticalMethanol)
-    × reactorYield
-    × condenserRecovery
-    × separatorFactor
-    × distillationFactor
-recycleGas = unconvertedGas × recycleFraction × 0.36
-overallEfficiency = methanol / theoreticalMethanol
-waterProduct = methanol × 18 / 32
-```
-
-### 3.5 Methanol storage and live ETA
-
-```text
-storedMethanol += methanolProductionKgH
-                  * storageSimulationHoursPerSecond
-                  * realDeltaTimeSeconds
-storageFillPercent = 100 * storedMethanol / storageCapacityKg
-operationalFullKg = storageCapacityKg * storageHighHighPercent / 100
-timeRemainingSeconds =
-    (operationalFullKg - storedMethanol)
-    / (methanolProductionKgH * storageSimulationHoursPerSecond)
-```
-
-The Plant Status panel reads these values from the same authoritative process
-snapshot used by the tank and safety logic. It displays
-`fill % (MM:SS left)` (or `H:MM:SS` for longer durations), `PAUSED` when there
-is no production, and `FULL / INTERLOCK` at the configured operational-full
-threshold. The default high-high threshold is 99% of the 12,000 kg capacity;
-the countdown therefore reports simulated real time until that safety limit,
-not an independent UI estimate.
-
-### 3.6 Plant Status values and MAX operating point
-
-The Plant Status values are live outputs of `PlantProcessSimulator`; they are
-not decorative UI constants. Methanol production responds to plant load and
-available H2/CO2 feed as well as reactor, recovery, separation, and
-distillation performance. CO2 utilization is calculated from methanol output
-and captured CO2, while the tank fill and ETA use the production rate described
-above. Overall efficiency is the actual-to-stoichiometric methanol ratio, so
-quality/conversion controls affect it directly while a pure throughput change
-can change kg/h without materially changing the percentage.
-
-The additional `MAX` button beside the efficiency percentage applies the best
-high-throughput operating point represented by the current educational model
-(stoichiometric H2/CO2 ratio, reactor temperature/pressure/GHSV, cooling,
-separation, recycle, and distillation settings). It updates the authoritative
-simulator inputs and synchronizes existing and subsequently opened UI sliders;
-all KPI and flow responses therefore recalculate through the normal model. It
-is disabled while the methanol-storage high-high interlock is active and never
-clears or bypasses that safety state. `MAX` means maximum within this simplified
-simulation envelope, not a plant-wide real-world economic optimizer.
-
-## 4. Flow response
-
-`FinalPlantFlowRuntime` refresh interval: 0.08 s.
-
-```text
-response = sqrt(normalizedMassFlow)
-speed = baseSpeed × Lerp(0.35, 1.35, response)
-density = baseDensity × Lerp(0.55, 1.30, normalizedMassFlow)
-intensity = baseIntensity × Lerp(0.25, 1.25, response)
-visible = normalizedMassFlow >= 0.005
-```
-
-Reference normalizations:
-
-| Route family | Reference rate |
-| --- | ---: |
-| H2 | 215 kg/h |
-| CO2 | 1,510 kg/h |
-| Synthesis feed | 1,725 kg/h |
-| Methanol | 1,250 kg/h |
-| Crude condensate | 1,953.125 kg/h |
-| Recycle | 450 kg/h |
-
-## 5. Stream/species mapping
-
-| Process stream | Visual species |
-| --- | --- |
-| H2 route | H2 |
-| CO2 route | CO2 |
-| Mixed synthesis feed | calculated H2 + CO2 + recycle |
-| Recycle gas | 74% recycle, 20% CO2, 6% H2 (illustrative) |
-| Reactor effluent | 58% hot product, 32% recycle, 10% water (illustrative) |
-| Crude condensed product | 64% methanol, 36% water (illustrative) |
-| Purified product | methanol |
-
-Mixed-feed molar weighting:
-
-```text
-nH2 = H2 mass rate / 2.016
-nCO2 = CO2 mass rate / 44.01
-nRecycle = recycle mass rate / 12.5
-species fraction = species molar estimate / total molar estimate
-```
-
-The recycle effective molecular weight and fixed effluent fractions are visual
-approximations because the central model does not expose a complete
-component-by-component stream table.
-
-## 6. Stream colors
-
-Values below are approximate sRGB hex conversions of the configured Unity
-colors.
-
-| Species/stream | Unity RGB | Hex |
-| --- | --- | --- |
-| Hydrogen | (0.10, 1.00, 0.22) | `#1AFF38` |
-| Carbon dioxide | (0.86, 0.94, 1.00) | `#DBF0FF` |
-| Recycle gas | (0.72, 0.28, 1.00) | `#B847FF` |
-| Rich amine | (0.04, 0.72, 0.42) | `#0AB86B` |
-| Lean amine | (0.05, 0.92, 0.52) | `#0DEB85` |
-| Hot syngas | (1.00, 0.58, 0.12) | `#FF941F` |
-| Reactor effluent | (1.00, 0.42, 0.12) | `#FF6B1F` |
-| Crude vapor/product | (0.72, 0.18, 1.00) | `#B82EFF` |
-| Crude liquid | (0.35, 0.42, 1.00) | `#596BFF` |
-| Methanol product | (0.20, 0.78, 1.00) | `#33C7FF` |
-
-Catalyst states:
-
-| State | Unity RGB | Meaning |
-| --- | --- | --- |
-| Idle | (0.72, 0.60, 0.24) | Low/no synthesis load |
-| Active | (0.12, 0.78, 0.40) | Normal loaded operation |
-| Converting | (1.00, 0.48, 0.04) | High conversion/activity |
-| Overtemperature | (1.00, 0.08, 0.02) | Temperature warning |
-
-## 7. Route direction reference
-
-| Route | Engineering direction |
-| --- | --- |
-| Electrolyzer H2 | Electrolyzer → mixing T-junction |
-| Captured CO2 | Capture/compression → mixing T-junction |
-| Recycle gas | Separator/recycle loop → mixing T-junction |
-| Mixed feed/syngas | T-junction → reactor feed preparation → reactor side inlet |
-| Reactor internal | Side/lower inlet → packed bed → top outlet |
-| Reactor effluent | Reactor top outlet → condenser/separation |
-| Crude methanol/water | Condenser/separator → purification |
-| Methanol product | Purification → storage |
-
-`reverse=true` on an imported route means the shader direction is corrected
-against mesh ordering; it does not reverse the engineering process.
-
-## 8. Reactor visual limits
-
-- Maximum live population: approximately 260 particles.
-- Simulation space: world-oriented visual root to avoid inherited 3× imported
-  model scaling.
-- Shell alpha: approximately 0.16.
-- Cap alpha: approximately 0.18.
-- Entry: side/lower product-named geometry used as current feed side in the
-  imported model.
-- Exit: top nozzle.
-- Conversion occupies the catalyst-bed volume.
-- Products shown: methanol vapor, water vapor, remaining gas.
-
-## 9. Educational warning thresholds
-
-| Module | Examples |
-| --- | --- |
-| Electrolyzer | Low water relative to power |
-| Capture | Low capture; flue/amine mismatch |
-| Regeneration | Insufficient steam/temperature; excessive temperature |
-| Compressor | Ratio ≥90 warning, ≥98 critical on UI scale |
-| Reactor | ≥285 °C critical; >270 °C sintering risk; ≤215 °C low rate |
-| Reactor feed | Pressure <60 bar; ratio <2.5 H2-deficient; >4.5 H2-excess |
-| Residence | GHSV >9,500 h⁻¹ |
-| Condenser | Cooling temperature ≥38 °C; cooling rate ≤20%; recovery <70% |
-| Recycle | <25% or >90% |
-| Distillation | Purity <95%; reflux >4.2; reboiler ≥108 °C |
-| Storage | ≥85% warning; ≥95% critical |
-
-These are presentation/teaching thresholds, not certified trip limits.
-
-## 10. Assets and equipment represented
-
-The integrated project contains models for the absorber column, desorber
-column, electrolyzer, compressor, condenser/heat exchanger, flash separator,
-distillation column, reactor and reactor skirt, H2/CO2/methanol tanks, pipe
-bends, T-junction, saddles, skirts, and structural/support elements.
-
-Important reactor children include:
-
-- `Reactor_Shell`;
-- `Catalyst_Bed`;
-- caps;
-- feed/product nozzles;
-- cooling-water nozzles/flanges; and
-- skirt/support geometry.
-
-## 11. Build and validation commands
-
-Editor tooling supplies:
-
-- deep inventory;
-- release validation; and
-- Windows build.
-
-The current logs record a successful structural validation and successful
-Windows build. See `FINAL_PROJECT_REPORT.md` for the exact evidence and
-limitations.
+The tour starts when `PtmDigitalTwin.TutorialCompleted` is absent/zero. SKIP or FINISH marks it complete; HELP → START TUTORIAL always replays it. NEXT/PREVIOUS and Enter/Space, Backspace, Esc navigate. The camera step opens a pointer-accessible spotlight for mouse drag, Shift-drag and wheel zoom. Other steps block pointer interaction beneath the overlay. The arrow targets the actual Warning Panel, even when no warning is visible. Tutorial navigation changes views and lock selection, not process input values. Validation mode isolates the completion preference; it is not a test of OS registry persistence across installations.

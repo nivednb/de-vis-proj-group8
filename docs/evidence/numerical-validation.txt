@@ -1,0 +1,8 @@
+UTC: 2026-09-23T18:08:24.3879660Z
+Unity: 6000.4.7f1
+Recycle: 240 cases against independent analytical solution, carbon/hydrogen and external mass closure.
+CSV: current 25% recycle and 240 C controls, updated balance basis and external closure checked.
+Electrolyzer: 24 water/power cases including zero feed; oxygen stoichiometry; zero-feed downstream output.
+Process: storage shutdown, 65 OFAT points, and nonmutation of live inputs.
+
+PASS assertions=1586

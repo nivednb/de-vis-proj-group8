@@ -1,0 +1,40 @@
+{
+  "frozen_application_commit": "9e3ea9c192d506e33e4227586efdd5cd5da994bd",
+  "fresh_clone_initial_git_status": [],
+  "library_existed_at_start": false,
+  "tracked_application_semantic_diff": false,
+  "serialization_note": "Unity rewrote line endings in seven tracked serialized files; each normalized byte sequence equals HEAD. No semantic source changes.",
+  "unity": "6000.4.7f1",
+  "numerical_assertions": 1586,
+  "scene_objects": 480,
+  "required_route_segments": 35,
+  "editor_csv_external_closure_percent": 1.13699e-09,
+  "player_csv_external_closure_percent": 4.25878532e-09,
+  "build_errors": 0,
+  "build_warnings": 0,
+  "player_1080_checks_passed": 181,
+  "player_720_checks_passed": 177,
+  "player_failures": 0,
+  "soak_seconds": 910.5588,
+  "allocated_bytes_start": 117319154,
+  "allocated_bytes_end": 117529604,
+  "allocated_bytes_delta": 210450,
+  "objects_start": 732,
+  "objects_end": 732,
+  "runtime_errors_observed": 0,
+  "storage_trip_and_reset_passed": true,
+  "runtime_warning": "URP reduced additional punctual light shadow resolution by 2 to fit 6 maps in the 2048x2048 atlas.",
+  "runtime_warning_occurrences": {
+    "1080": 1,
+    "720": 1
+  },
+  "verified_build_file_count": 184,
+  "screenshots_1080": 36,
+  "screenshots_720": 35,
+  "log_sha256": {
+    "submission-numerical.log": "a514fdc6501c948d554f05052dc97e866103aa40e8bf080fcd664d9d5a7897c8",
+    "submission-build.log": "c58bf857df90b70a018a1ff3a1d03c35342aac99cabff4f0c55c73dbc9fae096",
+    "final-player-1080.log": "a6ae52acb09b21b0131a27f82761b8d31fbcba26a30fb6b958bcc345b157d17d",
+    "final-player-720.log": "5c665089e62ada6e2aa339434f95e27e32625838321b1fc719917699f9e1cf46"
+  }
+}

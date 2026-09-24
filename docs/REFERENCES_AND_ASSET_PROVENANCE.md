@@ -1,52 +1,34 @@
-# References and Asset Provenance
+# References and asset provenance
 
-This register is part of the submission record. Complete every blank field before the evaluated release is tagged. Do not infer a licence or author from a filename; confirm it from the original source.
+Status: technical inventory completed; original model/icon ownership and institution-specific permissions await team confirmation. Unknowns are explicit and are not licence grants.
 
-## Unity and package dependencies
+## Scientific references and assumption mapping
 
-| Dependency | Version | Source | Licence / terms | Purpose |
-| --- | --- | --- | --- | --- |
-| Unity Editor | 6000.4.7f1 | Unity Technologies | Verify the institutional licence and current Unity terms | Development and Windows build |
-| Universal Render Pipeline | 17.4.0 | Unity Package Manager | Verify against the installed package documentation | Rendering |
-| TextMesh Pro | Project package lock | Unity Package Manager | Verify against the installed package documentation | Interface text |
-| Unity UI | Project package lock | Unity Package Manager | Verify against the installed package documentation | Runtime interface |
-| Unity AI Navigation | Project package lock | Unity Package Manager | Verify against the installed package documentation | NavMesh/pathfinding support |
+See SCIENTIFIC_VALIDATION.md, sources S1-S4, for full bibliographic details and exactly what each source supports.
 
-Confirm the complete resolved package list in `Packages/packages-lock.json` and add any package not covered above.
+| Topic | Evidence | Boundary |
+|---|---|---|
+| Electrolysis chemistry | S1, DOE reaction explanation | Stoichiometry only, not electrical efficiency |
+| Methanol reaction and operating context | S2, S3 primary research | No fitted kinetic parameters transferred |
+| Process system boundary | S4, JRC report | No cost/emission claims transferred |
+| 215/1510/1935 kg/h capacities and 12000 kg tank | Configured project assumptions | Team must provide original design brief if these were externally specified |
+| Capture, recovery, purity coefficients | Explicit formulas in IMPLEMENTATION_REFERENCE.md | Educational assumptions; uncalibrated |
+| 99% storage trip; reactor warning thresholds | Source-code thresholds, documented in IMPLEMENTATION_REFERENCE.md | Teaching thresholds, not certified limits |
+| Catalyst color and particle appearance | Source-coded visual conventions | No claim of literal chemistry or trajectories |
 
-## Models, textures, materials, icons, fonts, and audio
+## Assets
 
-| Asset or folder | Author / owner | Original source | Licence / permission | Modified by team? | Notes |
-| --- | --- | --- | --- | --- | --- |
-| Plant and equipment FBX assets |  |  |  |  | Confirm each source model and any team-authored modifications. |
-| Runtime materials and shaders |  |  |  |  | Identify team-authored and third-party items separately. |
-| Interface icons and fonts |  |  |  |  | Include the exact font licence and icon source. |
-| Screenshots in `docs/images` | Project team | Project executable / Unity scene | Team-authored evidence | No | Record the exact release commit used for final evidence. |
+`evidence/asset-provenance-inventory.csv` enumerates each FBX/Blender asset with SHA-256. Every imported equipment model needs its original creator/source and permission confirmed by the team. Filenames and Git commits do not establish ownership. This includes reactor, tanks, columns, compressor, condenser, supports, bends and junctions.
 
-## Engineering and scientific references
+| Content | Verified evidence | Remaining action |
+|---|---|---|
+| Liberation Sans | `Assets/TextMesh Pro/Fonts/LiberationSans - OFL.txt`: Google/Red Hat copyright notices and SIL OFL 1.1 | Preserve licence in distributed notices |
+| Other TMP example fonts | Licence files accompany the example fonts under TextMesh Pro/Examples & Extras/Fonts | Preserve applicable notices if included in a distributed artifact |
+| Unity/URP/Input/uGUI and dependencies | Resolved versions and observed licence notices in `evidence/package-licenses.csv` | Keep installed package notices; institution confirms Unity entitlement |
+| Plant/equipment FBX files | Exact asset hashes inventoried | TEAM INPUT REQUIRED: author, origin, modifications, redistribution rights |
+| `Assets/gear.png`, `Assets/Icons/gear.png` | Present in source | TEAM INPUT REQUIRED: original icon source/licence |
+| Runtime C#/shader/material construction | Inspectable repository history | TEAM INPUT REQUIRED: contributions and tool assistance; Git author names are not an authorship certification |
+| New QA screenshots | Captured from this application's QA runs | Record matching source/build manifest; original embedded assets still need permission |
+| ICODOS-style visual inspiration | Existing source/doc naming states inspiration | TEAM INPUT REQUIRED: reference source and permission for copied material; no affiliation is claimed |
 
-| Topic or value | Reference | Page / section / DOI or URL | How it is used |
-| --- | --- | --- | --- |
-| Methanol synthesis stoichiometry |  |  |  |
-| Reactor operating range |  |  |  |
-| Electrolyser assumptions |  |  |  |
-| CO2 capture assumptions |  |  |  |
-| Separation and recycle assumptions |  |  |  |
-| Storage limits and warning thresholds |  |  |  |
-
-## Interface and visual references
-
-List external screenshots, applications, design files, or industrial dashboards used as inspiration. Describe the specific ideas adopted and avoid redistributing external images unless permission allows it.
-
-| Reference | Owner / source | Permission or citation | Ideas used |
-| --- | --- | --- | --- |
-| Team interface concept |  |  | Navigation, information hierarchy, analytics, or visual language |
-| Industrial process-dashboard references |  |  | Stream legend, equipment focus, KPI presentation |
-
-## Final review
-
-- [ ] Every non-team asset has an author, source, and licence or written permission.
-- [ ] Every important engineering value has a traceable source or is clearly labelled as an educational assumption.
-- [ ] External reference images not permitted for redistribution are absent from the repository and release package.
-- [ ] Team-authored assets and individual contributions are identified accurately.
-- [ ] The submitted executable contains no unlicensed third-party content.
+No blanket licence is assigned to unknown assets. Complete pending rows before sharing the final package beyond permitted assessment use. This file is a provenance record, not legal advice or a declaration that all assets are cleared.

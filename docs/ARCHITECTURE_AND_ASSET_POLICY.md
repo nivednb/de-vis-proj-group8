@@ -1,43 +1,11 @@
-# Architecture and Asset Policy
+# Architecture and asset policy
 
-## Design rule
+`PlantProcessSimulator` owns live inputs/storage and publishes `ProcessSnapshot`. Hypothetical OFAT evaluations use copied `ProcessInputs` and the same calculation path. `RecycleMassBalanceEngine` owns the iterative species balance. CSV export evaluates one current steady-state operating point and synchronizes its input/output basis; smoothed display values are not mixed with unrelated engine defaults.
 
-Persist content that represents stable authored design. Generate content at
-runtime when it represents changing simulation state. This preserves manual
-editability without turning transient data into thousands of scene objects.
+UI, warnings, reactor/catalyst and pipe visuals observe shared process state. Runtime creation is intentional and owned by the existing bootstrap components. Flow discovery depends on authored route prefixes. Preserve those names and the single-owner startup behavior.
 
-## Prefer scene objects, prefabs, or ScriptableObjects for
+Prefer serialized assets for stable reusable art and layout when practical; no late blanket prefab conversion is required for this release. Generated particles, live graph samples and process values remain runtime data. Do not delete legacy source or vendor samples without checking references.
 
-- stable equipment placement and reusable equipment assemblies;
-- manually tuned dashboard panels and navigation layout;
-- reusable particle-system appearance/templates;
-- authored process-route definitions and species metadata;
-- equipment descriptions, units, safe ranges, citations, and UI labels;
-- environment modules reused in more than one scene.
+The opt-in runtime acceptance harness extends RuntimeValidationCapture. It is inactive without an explicit validation/capture argument. It may create local output files and quit its own player after testing; ordinary interactive use is unchanged.
 
-ScriptableObjects are preferred for process/equipment data shared by simulation,
-UI, analytics, warnings, and flow visuals. Prefabs are preferred for repeated
-visual hierarchies. Unique plant-wide layout may remain serialized in the scene.
-
-## Keep runtime-generated
-
-- moving tracer particles and mixed-species packets;
-- graph samples and exported datasets;
-- live calculation results and KPI text;
-- temporary warning instances and state highlights;
-- flow density/speed changes driven by controls;
-- pooled effects whose quantity depends on operating state.
-
-## Migration approach
-
-1. Inventory each runtime-created hierarchy and identify its owner.
-2. Separate configuration from transient state.
-3. Create a prefab only for the reusable stable visual hierarchy.
-4. Move process metadata into typed serialized data or ScriptableObjects.
-5. Preserve runtime pooling and state updates.
-6. Compare hierarchy counts, appearance, slider response, memory, and build
-   behaviour before and after each small migration.
-
-Do not convert everything in one pass. It creates duplicated state, broken
-references, larger scenes, and difficult merges. The final submission may retain
-documented runtime composition where it is deterministic and validated.
+Use the pinned Editor/packages and retain asset .meta files. Provenance and font/package notices are tracked separately. Unknown asset permissions are never inferred from a filename or Git author. See REFERENCES_AND_ASSET_PROVENANCE.md.

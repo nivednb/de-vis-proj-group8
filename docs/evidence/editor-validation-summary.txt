@@ -1,0 +1,8 @@
+Frozen application commit: 9e3ea9c192d506e33e4227586efdd5cd5da994bd
+Fresh clone; initial Git status empty; no Library copied.
+RELEASE_VALIDATION_OK scene=Assets/Scenes/SampleScene.unity objects=480 processSegments=35 catalyst=runtime-animated shell=present cameraPan=enabled
+PROFESSOR_FEEDBACK_VALIDATION_OK temperature=responsive pressure=responsive ratio=responsive flow=responsive constants=held
+MASS_BALANCE_CSV_VALIDATION_OK closure=1.13699E-09% rows=40 fileWrite=passed maxEfficiency=84.44%
+SUBMISSION_VALIDATION_PASS assertions=1586
+PtMeOH Windows build result: Succeeded; errors: 0; warnings: 0; output: C:\Users\asus\Documents\Codex\2026-07-09\wh\whole_plant\tmp\de-vis-proj-group8-integration\Release\PtMeOH-FinalSubmission-Windows-x64\PtMeOH-DigitalTwin.exe
+Import note: two transient ShaderGraph GUID CS0246 diagnostics were recovered by Unity API Updater in Library/PackageCache. Later compilation and validator/build completed successfully; no tracked application inputs changed.

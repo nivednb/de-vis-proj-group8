@@ -1,0 +1,185 @@
+UTC 2026-09-23T18:29:36.2343412Z Unity 6000.4.7f1
+Programmatic UI callbacks/API checks; not physical mouse/keyboard or visual sign-off.
+RESOLUTION 1280x720
+PASS Simulator startup
+PASS Single simulator owner
+PASS Single dashboard owner
+PASS Warning overlay startup
+PASS Flow animator coverage
+PASS Tutorial first-launch path (isolated preference override)
+PASS Tutorial PREVIOUS disabled on first step
+PASS Tutorial NEXT
+PASS Tutorial PREVIOUS
+PASS Tutorial SKIP
+PASS HELP offers START TUTORIAL
+PASS HELP tutorial replay
+PASS Replay clears help modal state
+PASS Tutorial step index 0
+PASS Tutorial card inside viewport 0
+PASS Tutorial body fits card 0
+PASS Tutorial step index 1
+PASS Tutorial target resolved 1
+PASS Tutorial card inside viewport 1
+PASS Tutorial body fits card 1
+PASS Tutorial step index 2
+PASS Tutorial target resolved 2
+PASS Tutorial card inside viewport 2
+PASS Tutorial body fits card 2
+PASS Tutorial step index 3
+PASS Tutorial target resolved 3
+PASS Tutorial card inside viewport 3
+PASS Tutorial body fits card 3
+PASS Tutorial step index 4
+PASS Tutorial target resolved 4
+PASS Tutorial card inside viewport 4
+PASS Tutorial body fits card 4
+PASS Tutorial step index 5
+PASS Tutorial target resolved 5
+PASS Tutorial card inside viewport 5
+PASS Tutorial body fits card 5
+PASS Tutorial step index 6
+PASS Tutorial target resolved 6
+PASS Tutorial card inside viewport 6
+PASS Tutorial body fits card 6
+PASS Tutorial step index 7
+PASS Tutorial target resolved 7
+PASS Tutorial card inside viewport 7
+PASS Tutorial body fits card 7
+PASS Tutorial step index 8
+PASS Tutorial card inside viewport 8
+PASS Tutorial body fits card 8
+PASS Camera step releases spotlight input blocker
+PASS Camera tutorial spotlight has no UI raycast obstruction
+PASS Camera tutorial synthetic mouse drag rotates
+PASS Camera tutorial synthetic Shift-drag pans
+PASS Camera tutorial synthetic wheel zooms
+PASS Tutorial step index 9
+PASS Tutorial card inside viewport 9
+PASS Tutorial body fits card 9
+PASS Tutorial step index 10
+PASS Tutorial target resolved 10
+PASS Tutorial card inside viewport 10
+PASS Tutorial body fits card 10
+PASS Process Map positive layout Panel Title
+PASS Process Map no overlap Panel Title / Step
+PASS Process Map no overlap Panel Title / Process Title
+PASS Process Map no overlap Panel Title / Explanation
+PASS Process Map no overlap Panel Title / Streams
+PASS Process Map no overlap Panel Title / Previous Step
+PASS Process Map no overlap Panel Title / Next Step
+PASS Process Map positive layout Step
+PASS Process Map no overlap Step / Process Title
+PASS Process Map no overlap Step / Explanation
+PASS Process Map no overlap Step / Streams
+PASS Process Map no overlap Step / Previous Step
+PASS Process Map no overlap Step / Next Step
+PASS Process Map positive layout Process Title
+PASS Process Map no overlap Process Title / Explanation
+PASS Process Map no overlap Process Title / Streams
+PASS Process Map no overlap Process Title / Previous Step
+PASS Process Map no overlap Process Title / Next Step
+PASS Process Map positive layout Explanation
+PASS Process Map no overlap Explanation / Streams
+PASS Process Map no overlap Explanation / Previous Step
+PASS Process Map no overlap Explanation / Next Step
+PASS Process Map positive layout Streams
+PASS Process Map no overlap Streams / Previous Step
+PASS Process Map no overlap Streams / Next Step
+PASS Process Map positive layout Previous Step
+PASS Process Map no overlap Previous Step / Next Step
+PASS Process Map positive layout Next Step
+PASS Tutorial step index 11
+PASS Tutorial target resolved 11
+PASS Tutorial card inside viewport 11
+PASS Tutorial body fits card 11
+PASS Tutorial step index 12
+PASS Tutorial target resolved 12
+PASS Tutorial card inside viewport 12
+PASS Tutorial body fits card 12
+PASS Tutorial step index 13
+PASS Tutorial target resolved 13
+PASS Tutorial card inside viewport 13
+PASS Tutorial body fits card 13
+PASS Tutorial step index 14
+PASS Tutorial target resolved 14
+PASS Tutorial card inside viewport 14
+PASS Tutorial body fits card 14
+PASS Tutorial step index 15
+PASS Tutorial target resolved 15
+PASS Tutorial card inside viewport 15
+PASS Tutorial body fits card 15
+PASS Tutorial step index 16
+PASS Tutorial target resolved 16
+PASS Tutorial card inside viewport 16
+PASS Tutorial body fits card 16
+PASS Tutorial step index 17
+PASS Tutorial target resolved 17
+PASS Tutorial card inside viewport 17
+PASS Tutorial body fits card 17
+PASS Analytics retains right split pane
+PASS Current automatic OFAT component exists
+PASS Automatic OFAT 13 points temperatureSweepPoints
+PASS Automatic OFAT nonmutation temperatureSweepPoints
+PASS Automatic OFAT 13 points pressureSweepPoints
+PASS Automatic OFAT nonmutation pressureSweepPoints
+PASS Automatic OFAT 13 points ratioSweepPoints
+PASS Automatic OFAT nonmutation ratioSweepPoints
+PASS Automatic OFAT 13 points ghsvSweepPoints
+PASS Automatic OFAT nonmutation ghsvSweepPoints
+PASS Automatic OFAT 13 points feedSweepPoints
+PASS Automatic OFAT nonmutation feedSweepPoints
+PASS Tutorial step index 18
+PASS Tutorial target resolved 18
+PASS Tutorial card inside viewport 18
+PASS Tutorial body fits card 18
+PASS Tutorial step index 19
+PASS Tutorial target resolved 19
+PASS Tutorial card inside viewport 19
+PASS Tutorial body fits card 19
+PASS Tutorial step index 20
+PASS Tutorial target resolved 20
+PASS Tutorial card inside viewport 20
+PASS Tutorial body fits card 20
+PASS Warning-band arrow visible
+PASS Warning arrow targets actual warning strip
+PASS Warning arrowhead emits triangle mesh
+PASS Tutorial step index 21
+PASS Tutorial target resolved 21
+PASS Tutorial card inside viewport 21
+PASS Tutorial body fits card 21
+PASS Tutorial step index 22
+PASS Tutorial card inside viewport 22
+PASS Tutorial body fits card 22
+PASS Tutorial FINISH
+PASS Tutorial restores closed analytics
+PASS Tutorial leaves all process inputs unchanged
+PASS Tutorial preserves paused state
+Tutorial input: synthetic Unity Input System mouse/keyboard events, not physical hardware sign-off.
+PASS Navigation exists OVERVIEW
+PASS Navigation exists PLANT PROCESS
+PASS Navigation exists FLOW LAB
+PASS Navigation exists REACTOR LAB
+PASS Navigation exists SIMULATION
+PASS Navigation exists ANALYTICS
+PASS Analytics split pane opens
+PASS Camera controller
+PASS Camera module focus
+PASS Camera next module
+PASS Water slider exists
+PASS Runtime zero-water regression after display smoothing settles
+PASS Temperature changes live yield
+PASS Pause freezes inventory
+PASS Reset clears storage latch
+PASS Player mass-balance CSV generation and file write
+PASS Player CSV current recycle basis
+CSV_EXTERNAL_CLOSURE_PERCENT 4.25878532E-09
+PASS Player CSV converged external closure below 0.001%
+PASS Player CSV external input/output stream closure
+PASS High-output preset applied
+PASS No duplicate runtime owners after soak
+PASS Bounded object count (allowance 20 transient objects)
+PASS Allocated-memory growth below coarse 32 MiB/20% envelope; not proof of zero leaks
+PASS No observed runtime errors/exceptions
+SOAK_SECONDS 30.04916
+MEMORY_BYTES start=117388003 end=117802976 OBJECTS start=732 end=732
+RUNTIME_VALIDATION_PASS

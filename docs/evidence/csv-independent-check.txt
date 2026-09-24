@@ -1,0 +1,9 @@
+PASS independent parsing of final clean-clone CSV and input/snapshot JSON.
+Current recycle 25%; reactor temperature 240 C; refined product agrees within 0.001 kg/h.
+Sum of serialized external input streams: 1267.9535000 kg/h.
+Sum of serialized external output streams: 1267.9537000 kg/h.
+Rounding residual: -0.0002000000 kg/h (1.57734491012e-05%).
+Serialized aggregate totals: 1267.954 and 1267.954 kg/h.
+CSV's serialized error is rounded to zero; do not infer exact zero mathematical error.
+Executed editor CSV validator internal external-closure error: 1.13699e-09%.
+Executed final player internal external-closure error: 4.25878532e-09% (both resolutions).
