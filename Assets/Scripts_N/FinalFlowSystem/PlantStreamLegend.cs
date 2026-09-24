@@ -34,15 +34,15 @@ public static class PlantStreamLegend
 
     public static readonly Row[] Rows =
     {
-        new Row("Raw Water / H2 Stream", WaterHydrogen, false),
-        new Row("Amine Solvent / Captured CO2", AmineCapturedCo2, false),
-        new Row("Compressed Syngas (3:1 H2:CO2)", CompressedSyngas, false),
-        new Row("Hot Reactor Effluent", HotReactorEffluent, false),
-        new Row("Crude Methanol / Water", CrudeMethanol, false),
-        new Row("Pure Refined Methanol (>99.85%)", RefinedMethanol, false),
+        new Row("Raw water / H₂ stream", WaterHydrogen, false),
+        new Row("Amine solvent / captured CO₂", AmineCapturedCo2, false),
+        new Row("Compressed syngas (3:1 H₂:CO₂)", CompressedSyngas, false),
+        new Row("Hot reactor effluent", HotReactorEffluent, false),
+        new Row("Crude methanol / water", CrudeMethanol, false),
+        new Row("Refined methanol (>99.85%)", RefinedMethanol, false),
         // Recycle is unconverted synthesis gas returning upstream, so it keeps the syngas
         // colour and is distinguished by the dashed swatch rather than by a second hue.
-        new Row("Gas Recycle Loop", CompressedSyngas, true),
+        new Row("Gas recycle loop", CompressedSyngas, true),
     };
 
     /// <summary>The legend colour a given pipe route must be drawn in.</summary>

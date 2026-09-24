@@ -125,46 +125,28 @@ public static class GraphExportUtil
         onComplete?.Invoke(path);
     }
 
-    private static readonly Color ToastBg = new Color(0.03f, 0.16f, 0.11f, 0.97f);
-    private static readonly Color ToastBorder = new Color(0.20f, 0.90f, 0.52f, 0.85f);
-
     public static void ShowToast(Canvas canvas, Font font, string message)
     {
         Debug.Log($"[GraphExport] {message}");
         if (canvas == null) return;
 
-        GameObject go = new GameObject("Export Toast", typeof(RectTransform));
-        go.transform.SetParent(canvas.transform, false);
-        RectTransform rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
-        rt.pivot = new Vector2(0.5f, 0f);
-        rt.anchoredPosition = new Vector2(0f, 70f);
-        rt.sizeDelta = new Vector2(860f, 32f);
+        bool failed = message.IndexOf("fail", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                      message.IndexOf("nothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                      message.IndexOf("no data", StringComparison.OrdinalIgnoreCase) >= 0;
 
-        Image bg = go.AddComponent<Image>();
-        bg.color = ToastBg;
-        Outline outline = go.AddComponent<Outline>();
-        outline.effectColor = ToastBorder;
-        outline.effectDistance = new Vector2(1f, -1f);
+        RectTransform rt = UITheme.Card("Export Toast", canvas.transform, 22f, UITheme.Ink, 26f, 10f, 0.3f, false);
+        rt.GetComponent<UIRaycastTarget>().raycastTarget = false;
+        Image icon = UITheme.IconImage("Icon", rt, failed ? UITheme.Icon.Info : UITheme.Icon.Check, 18f,
+            failed ? UITheme.Hex("FCD34D") : UITheme.Hex("4ADE80"));
+        UITheme.TopLeft(icon.rectTransform, 18f, 13f, 18f, 18f);
+        Text text = UITheme.Label("Text", rt, message, 13f, UITheme.Weight.SemiBold, Color.white);
+        UITheme.TopLeft(text.rectTransform, 46f, 0f, 1000f, 44f);
+        float width = Mathf.Min(1100f, 46f + Mathf.Ceil(text.preferredWidth) + 22f);
+        text.rectTransform.sizeDelta = new Vector2(width - 60f, 44f);
+        UITheme.BottomCenter(rt, 0f, 92f, width, 44f);
 
-        GameObject textObject = new GameObject("Text", typeof(RectTransform));
-        textObject.transform.SetParent(go.transform, false);
-        Text text = textObject.AddComponent<Text>();
-        text.font = font;
-        text.text = message;
-        text.fontSize = 12;
-        text.alignment = TextAnchor.MiddleCenter;
-        text.color = Color.white;
-        text.horizontalOverflow = HorizontalWrapMode.Overflow;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
-        RectTransform trt = textObject.GetComponent<RectTransform>();
-        trt.anchorMin = Vector2.zero;
-        trt.anchorMax = Vector2.one;
-        trt.offsetMin = new Vector2(12f, 4f);
-        trt.offsetMax = new Vector2(-12f, -4f);
-
-        go.AddComponent<ExportToast>();
-        go.transform.SetAsLastSibling();
+        rt.gameObject.AddComponent<ExportToast>();
+        rt.SetAsLastSibling();
     }
 
     private sealed class ExportToast : MonoBehaviour

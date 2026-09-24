@@ -16,8 +16,10 @@ public class SafetyWarningRuntime : MonoBehaviour
     private Canvas canvas;
     private RectTransform panelRect;
     private Image panelImage;
+    private Image panelBorder;
+    private Image iconImage;
+    private Text titleText;
     private Text warningText;
-    private Font font;
     private float nextUpdateTime;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -34,8 +36,6 @@ public class SafetyWarningRuntime : MonoBehaviour
 
     private void Start()
     {
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         BuildOverlay();
     }
 
@@ -57,41 +57,24 @@ public class SafetyWarningRuntime : MonoBehaviour
         canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 72;
-        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1536f, 1024f);
-        scaler.matchWidthOrHeight = 0.5f;
+        UITheme.ConfigureScaler(canvasObject.AddComponent<CanvasScaler>());
 
-        GameObject panel = new GameObject("Warning Panel");
-        panel.transform.SetParent(canvasObject.transform, false);
-        panelRect = panel.AddComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0f, 1f);
-        panelRect.anchorMax = new Vector2(0f, 1f);
-        panelRect.pivot = new Vector2(0f, 1f);
-        panelRect.anchoredPosition = new Vector2(16f, -88f);
-        panelRect.sizeDelta = new Vector2(710f, 48f);
-        panelImage = panel.AddComponent<Image>();
-        panelImage.raycastTarget = false;
-        panelImage.color = new Color(0.12f, 0.04f, 0.02f, 0.82f);
+        // A banner centred just below the navigation bar, in the gap between the stream
+        // legend and the plant-status card.
+        panelRect = UITheme.Card("Warning Panel", canvasObject.transform, 20f, UITheme.DangerSoft2, 22f, 8f, 0.18f, false);
+        UITheme.TopCenter(panelRect, 0f, 80f, 560f, 40f);
+        panelRect.GetComponent<UIRaycastTarget>().raycastTarget = false;
+        panelImage = panelRect.Find("Surface").GetComponent<Image>();
+        panelBorder = UITheme.Border(panelRect, UITheme.WithAlpha(UITheme.Danger, 0.35f), 20f);
 
-        GameObject textObject = new GameObject("Warning Text");
-        textObject.transform.SetParent(panel.transform, false);
-        warningText = textObject.AddComponent<Text>();
-        warningText.font = font;
-        warningText.fontSize = 12;
-        warningText.fontStyle = FontStyle.Bold;
-        warningText.alignment = TextAnchor.MiddleLeft;
-        warningText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        warningText.verticalOverflow = VerticalWrapMode.Truncate;
-        warningText.raycastTarget = false;
-        warningText.color = Color.white;
-        RectTransform textRect = warningText.rectTransform;
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(14f, 8f);
-        textRect.offsetMax = new Vector2(-14f, -8f);
+        iconImage = UITheme.IconImage("Icon", panelRect, UITheme.Icon.Alert, 18f, UITheme.DangerInk);
+        UITheme.TopLeft(iconImage.rectTransform, 16f, 11f, 18f, 18f);
+        titleText = UITheme.Label("Warning Title", panelRect, "Critical", 13f, UITheme.Weight.ExtraBold, UITheme.DangerInk);
+        UITheme.TopLeft(titleText.rectTransform, 42f, 0f, 80f, 40f);
+        warningText = UITheme.Label("Warning Text", panelRect, "", 13f, UITheme.Weight.SemiBold, UITheme.DangerInk);
+        UITheme.TopLeft(warningText.rectTransform, 120f, 0f, 600f, 40f);
 
-        panel.SetActive(false);
+        panelRect.gameObject.SetActive(false);
     }
 
     private void RefreshWarnings()
@@ -124,13 +107,59 @@ public class SafetyWarningRuntime : MonoBehaviour
             return;
         }
 
-        panelImage.color = hasAlarm
-            ? new Color(0.65f, 0.03f, 0.02f, 0.84f)
-            : new Color(0.95f, 0.55f, 0.06f, 0.82f);
+        Color ink = hasAlarm ? UITheme.DangerInk : UITheme.WarningInk;
+        panelImage.color = hasAlarm ? UITheme.DangerSoft2 : UITheme.WarningSoft;
+        panelBorder.color = UITheme.WithAlpha(hasAlarm ? UITheme.Danger : UITheme.Warning, 0.4f);
+        iconImage.color = ink;
+        titleText.color = ink;
+        warningText.color = ink;
+        titleText.text = hasAlarm ? "Critical" : "Warning";
 
         List<string> active = hasAlarm ? alarms : cautions;
-        string prefix = hasAlarm ? "CRITICAL" : "WARNING";
-        warningText.text = $"{prefix}: {string.Join("  |  ", active.GetRange(0, Mathf.Min(active.Count, 2)))}";
+        int shown = Mathf.Min(active.Count, 2);
+        var parts = new List<string>(shown);
+        for (int i = 0; i < shown; i++) parts.Add(Readable(active[i]));
+        string more = active.Count > shown ? $"   +{active.Count - shown} more" : "";
+        warningText.text = UITheme.Pretty(string.Join("   ·   ", parts)) + more;
+
+        // Size the banner to its message; past the cap (the gap between the stream legend and
+        // the right-hand cards) the message wraps onto more lines instead.
+        const float maxWidth = 620f;
+        float titleW = Mathf.Ceil(titleText.preferredWidth);
+        float textLeft = 42f + titleW + 10f;
+        float maxTextWidth = maxWidth - textLeft - 20f;
+        warningText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        float oneLine = Mathf.Ceil(warningText.preferredWidth);
+        float width;
+        float height = 40f;
+        if (oneLine <= maxTextWidth)
+        {
+            width = textLeft + oneLine + 20f;
+            UITheme.TopLeft(warningText.rectTransform, textLeft, 0f, oneLine + 4f, 40f);
+        }
+        else
+        {
+            width = maxWidth;
+            warningText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            UITheme.TopLeft(warningText.rectTransform, textLeft, 11f, maxTextWidth, 20f);
+            float textHeight = Mathf.Ceil(warningText.preferredHeight);
+            warningText.rectTransform.sizeDelta = new Vector2(maxTextWidth, textHeight);
+            warningText.alignment = TextAnchor.UpperLeft;
+            height = textHeight + 22f;
+        }
+        if (oneLine <= maxTextWidth) warningText.alignment = TextAnchor.MiddleLeft;
+        UITheme.TopLeft(titleText.rectTransform, 42f, 0f, titleW + 4f, 40f);
+        panelRect.sizeDelta = new Vector2(width, height);
+    }
+
+    /// <summary>"REACTOR: low temperature …" → "Reactor: low temperature …".</summary>
+    private static string Readable(string message)
+    {
+        int colon = message.IndexOf(':');
+        if (colon <= 0) return message;
+        string head = message.Substring(0, colon).ToLowerInvariant();
+        head = char.ToUpperInvariant(head[0]) + head.Substring(1);
+        return head.Replace("co2", "CO2").Replace("h2", "H2") + message.Substring(colon);
     }
 
     private void AddElectrolyzerWarnings(PlantProcessSimulator.ProcessSnapshot s, List<string> cautions)
@@ -163,7 +192,7 @@ public class SafetyWarningRuntime : MonoBehaviour
             cautions.Add("DESORBER: weak regeneration leaves amine partially loaded");
 
         if (s.regeneratorTemperatureC >= 124f)
-            cautions.Add($"DESORBER: high regeneration temperature ({s.regeneratorTemperatureC:F0} C)");
+            cautions.Add($"DESORBER: high regeneration temperature ({s.regeneratorTemperatureC:F0} °C)");
     }
 
     private void AddCompressorWarnings(PlantProcessSimulator.ProcessSnapshot s, List<string> alarms, List<string> cautions)
@@ -179,12 +208,12 @@ public class SafetyWarningRuntime : MonoBehaviour
         if (s.plantLoadPercent <= 5f) return;
 
         if (s.reactorTemperatureC >= 285f)
-            alarms.Add($"REACTOR: temperature critical ({s.reactorTemperatureC:F0} C)");
+            alarms.Add($"REACTOR: temperature critical ({s.reactorTemperatureC:F0} °C)");
         else if (s.reactorTemperatureC > 270f)
-            cautions.Add($"REACTOR: catalyst sintering risk ({s.reactorTemperatureC:F0} C)");
+            cautions.Add($"REACTOR: catalyst sintering risk ({s.reactorTemperatureC:F0} °C)");
 
         if (s.reactorTemperatureC <= 215f)
-            cautions.Add($"REACTOR: low temperature limits reaction rate ({s.reactorTemperatureC:F0} C)");
+            cautions.Add($"REACTOR: low temperature limits reaction rate ({s.reactorTemperatureC:F0} °C)");
 
         if (s.reactorPressureBar < 60f)
             cautions.Add($"REACTOR: low conversion pressure ({s.reactorPressureBar:F0} bar)");
@@ -195,7 +224,7 @@ public class SafetyWarningRuntime : MonoBehaviour
             cautions.Add($"REACTOR: excess hydrogen feed (H2/CO2 {s.h2Co2Ratio:F1})");
 
         if (s.ghsv > 9500f)
-            cautions.Add($"REACTOR: low residence time (GHSV {s.ghsv:F0} h-1)");
+            cautions.Add($"REACTOR: low residence time (GHSV {s.ghsv:F0} 1/h)");
     }
 
     private void AddCondenserWarnings(PlantProcessSimulator.ProcessSnapshot s, List<string> cautions)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using W = UITheme.Weight;
 
 /// <summary>
 /// A single self-sampling live strip-chart (ECG-style) rendered with plain uGUI elements
@@ -12,7 +13,7 @@ using UnityEngine.UI;
 /// Scrollbar lets the user drag back through the full history; dragging back to the right
 /// edge resumes live auto-follow. The visible window is drawn as a smooth Catmull-Rom
 /// curve with round markers only at points where the user actively changed the relevant
-/// slider, plus a matplotlib-style hover readout available at every recorded sample.
+/// slider, plus a hover readout available at every recorded sample.
 /// </summary>
 public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPointerExitHandler
 {
@@ -34,26 +35,26 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
     private const float HoverRadiusPixels = 16f;
     private const float DotGrowSeconds = 0.3f;
     private const float ChangeMarkerWindowSeconds = 1.2f;
+    private const int TickCount = 5;
+    private const float LegendWidth = 172f;
 
     public string Title;
-    public string XLabel; // e.g. "Reactor Temp" — shown in the hover tooltip, not as an axis
+    public string XLabel; // e.g. "Reactor temp" — shown in the hover tooltip, not as an axis
     public string XUnit = "";
-    public string YLabel; // carries its own unit in parens, e.g. "Overall Efficiency (%)"
+    public string YLabel; // carries its own unit in parens, e.g. "Overall efficiency (%)"
     public string SecondaryLabel; // e.g. "Tank" — only shown in the hover tooltip when set
     public string SecondaryUnit = "";
     public Func<PlantProcessSimulator.ProcessSnapshot, float> XSelector;
     public Func<PlantProcessSimulator.ProcessSnapshot, float> YSelector;
     public Func<PlantProcessSimulator.ProcessSnapshot, float> SecondarySelector;
     public Font LabelFont;
-    public Color LineColor = new Color(0.08f, 0.62f, 0.9f, 1f);
-    public Color PointColor = new Color(0.86f, 0.82f, 0.95f, 1f);
-    public Color AxisColor = new Color(0.7f, 0.75f, 0.8f, 1f);
-    public Color AxisNameColor = new Color(0.86f, 0.92f, 0.98f, 1f);
+    public Color LineColor = UITheme.Accent;
+    public Color PointColor = UITheme.Accent;
 
     // When true, the area between the curve and the Y=0 baseline is filled — used for the
     // methanol-output mode to visually read as "the tank filling up" alongside the line.
     public bool ShadeArea;
-    public Color ShadeColor = new Color(0.08f, 0.62f, 0.9f, 0.18f);
+    public Color ShadeColor = UITheme.WithAlpha(UITheme.Accent, 0.12f);
 
     // Fixed Y domain (e.g. 0-100% or 0-design-output) so the scale never jumps as new
     // samples arrive — a point's height always reads as "% of the real operating range".
@@ -67,16 +68,9 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
     private Canvas ownerCanvas;
     private RectTransform plotArea;
     private RectTransform pointsLayer;
-    private RectTransform linesLayer;
-    private RectTransform shadeLayer;
-    private Text xAxisMinLabel;
-    private Text xAxisMaxLabel;
-    private Text yAxisMinLabel;
-    private Text yAxisMaxLabel;
-    private Text yAxisNameLabel;
-    private GameObject tooltip;
-    private Text tooltipText;
-    private RectTransform tooltipRect;
+    private Text[] xTicks;
+    private Text[] yTicks;
+    private UIGraphTooltip tooltip;
     private RectTransform selfRect;
     private RectTransform hoverDot;
     private RectTransform shadeHighlightBar;
@@ -88,6 +82,7 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
     private UIGraphLine lineGraphic;
     private UIGraphFill fillGraphic;
     private readonly List<Vector2> curveBuffer = new List<Vector2>();
+    private float lastPlotWidth = -1f;
 
     // Drives the time axis instead of Time.unscaledTime directly — real time keeps
     // advancing while paused, but sampling doesn't, which left a gap on the timeline where
@@ -104,214 +99,131 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         ownerCanvas = canvas;
         LabelFont = font;
 
-        Image background = gameObject.GetComponent<Image>();
-        if (background == null) background = gameObject.AddComponent<Image>();
-        background.color = new Color(0.035f, 0.055f, 0.07f, 0.001f); // near-invisible but still a valid raycast target
-        background.raycastTarget = true;
-
         RectTransform root = GetComponent<RectTransform>();
         if (root == null) root = gameObject.AddComponent<RectTransform>();
         root.SetParent(container, false);
-        Stretch(root);
+        UITheme.Fill(root);
         selfRect = root;
+        gameObject.AddComponent<UIRaycastTarget>();
 
-        Text titleText = MakeText("Title", root, Title, 14, FontStyle.Bold, TextAnchor.UpperLeft, Color.white);
-        StretchWithOffset(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -30f), new Vector2(-14f, -6f));
+        Text titleText = UITheme.Label("Title", root, Title, 15f, W.ExtraBold, UITheme.Ink);
+        UITheme.TopBand(titleText.rectTransform, 0f, 0f, LegendWidth + 20f, 20f);
+        Text subtitle = UITheme.Label("Subtitle", root, "Last 30 s of the run. Drag the bar below the chart to look back; markers show slider changes.", 12.5f, W.Medium, UITheme.Subtle);
+        UITheme.TopBand(subtitle.rectTransform, 0f, 22f, LegendWidth + 20f, 18f);
 
-        // Built as a normal horizontal label sized to the plot's height, then rotated 90°
-        // about its own center so it reads bottom-to-top along the left edge — rotating
-        // first and sizing to a narrow fixed width instead wraps the text letter-by-letter
-        // because Text wrapping is computed from the unrotated rect width.
-        yAxisNameLabel = MakeText("Y Axis Name", root, "Y:  " + YLabel, 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
-        yAxisNameLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
-        yAxisNameLabel.rectTransform.anchorMin = yAxisNameLabel.rectTransform.anchorMax = new Vector2(0f, 0.5f);
-        yAxisNameLabel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-        yAxisNameLabel.rectTransform.anchoredPosition = new Vector2(11f, 12f);
-        yAxisNameLabel.rectTransform.sizeDelta = new Vector2(240f, 16f);
-        yAxisNameLabel.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f);
-
-        Text xAxisNameLabel = MakeText("X Axis Name", root, "X:  Time", 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
-        StretchWithOffset(xAxisNameLabel.rectTransform, Vector2.zero, Vector2.one, new Vector2(58f, 4f), new Vector2(-8f, 34f));
+        RectTransform legend = UIGraphKit.ModuleLegend(root, "Colour = module changed", false, LegendWidth);
+        UITheme.TopRight(legend, 0f, 56f, LegendWidth, legend.sizeDelta.y);
 
         GameObject plotObject = new GameObject("Plot Area", typeof(RectTransform));
         plotArea = plotObject.GetComponent<RectTransform>();
         plotArea.SetParent(root, false);
-        // Extra bottom margin (36px vs the usual 20px) leaves room for the scrollbar strip.
-        StretchWithOffset(plotArea, Vector2.zero, Vector2.one, new Vector2(58f, 36f), new Vector2(-14f, -34f));
+        // Extra bottom margin leaves room for the tick labels and the history scrollbar.
+        UITheme.Fill(plotArea, 70f, 62f, LegendWidth + 28f, 58f);
 
-        // Clean L-shaped axis (matches the reference look) instead of a filled box + gridlines.
-        RectTransform yAxisLine = MakePanel("Y Axis Line", plotArea, AxisColor);
-        StretchWithOffset(yAxisLine, Vector2.zero, new Vector2(0f, 1f), new Vector2(-1f, 0f), new Vector2(1f, 0f));
-        RectTransform xAxisLine = MakePanel("X Axis Line", plotArea, AxisColor);
-        StretchWithOffset(xAxisLine, Vector2.zero, new Vector2(1f, 0f), new Vector2(0f, -1f), new Vector2(0f, 1f));
-
-        shadeLayer = new GameObject("Shade", typeof(RectTransform)).GetComponent<RectTransform>();
-        shadeLayer.SetParent(plotArea, false);
-        Stretch(shadeLayer);
+        UIGraphKit.PlotBackground(plotArea);
+        UIGraphKit.HorizontalGrid(plotArea, TickCount - 1);
+        yTicks = UIGraphKit.YTicks(root, plotArea, TickCount, 12f);
+        xTicks = UIGraphKit.XTicks(plotArea, 2, 8f);
+        UIGraphKit.RotatedYTitle(root, plotArea, YLabel);
 
         GameObject fillObject = new GameObject("Fill Mesh", typeof(RectTransform));
-        fillObject.transform.SetParent(shadeLayer, false);
-        Stretch(fillObject.GetComponent<RectTransform>());
+        fillObject.transform.SetParent(plotArea, false);
+        UITheme.Fill((RectTransform)fillObject.transform);
         fillGraphic = fillObject.AddComponent<UIGraphFill>();
         fillGraphic.color = ShadeColor;
         fillGraphic.raycastTarget = false;
 
-        linesLayer = new GameObject("Lines", typeof(RectTransform)).GetComponent<RectTransform>();
-        linesLayer.SetParent(plotArea, false);
-        Stretch(linesLayer);
-
         GameObject lineObject = new GameObject("Line Mesh", typeof(RectTransform));
-        lineObject.transform.SetParent(linesLayer, false);
-        Stretch(lineObject.GetComponent<RectTransform>());
+        lineObject.transform.SetParent(plotArea, false);
+        UITheme.Fill((RectTransform)lineObject.transform);
         lineGraphic = lineObject.AddComponent<UIGraphLine>();
         lineGraphic.color = LineColor;
-        lineGraphic.Thickness = 2.4f;
+        lineGraphic.Thickness = 2.6f;
         lineGraphic.raycastTarget = false;
+
+        BuildShadeHighlight();
 
         pointsLayer = new GameObject("Points", typeof(RectTransform)).GetComponent<RectTransform>();
         pointsLayer.SetParent(plotArea, false);
-        Stretch(pointsLayer);
+        UITheme.Fill(pointsLayer);
 
-        // Built after plotArea (later sibling => draws on top of the curve) so the legend
-        // box stays legible instead of the line passing through it.
-        BuildLegend(root);
-
-        yAxisMaxLabel = MakeText("Y Max", root, "", 10, FontStyle.Normal, TextAnchor.UpperRight, AxisColor);
-        AnchorTopLeft(yAxisMaxLabel.rectTransform, new Vector2(0f, -20f), new Vector2(52f, 16f));
-        yAxisMinLabel = MakeText("Y Min", root, "", 10, FontStyle.Normal, TextAnchor.LowerRight, AxisColor);
-        AnchorBottomLeft(yAxisMinLabel.rectTransform, new Vector2(0f, 36f), new Vector2(52f, 16f));
-
-        xAxisMinLabel = MakeText("X Min", root, "", 10, FontStyle.Normal, TextAnchor.LowerLeft, AxisColor);
-        AnchorBottomLeft(xAxisMinLabel.rectTransform, new Vector2(58f, 20f), new Vector2(70f, 16f));
-        xAxisMaxLabel = MakeText("X Max", root, "", 10, FontStyle.Normal, TextAnchor.LowerRight, AxisColor);
-        AnchorBottomRight(xAxisMaxLabel.rectTransform, new Vector2(-14f, 20f), new Vector2(70f, 16f));
-
-        BuildShadeHighlight();
         BuildHoverDot();
         BuildScrollbar(root);
-        BuildTooltip(root);
+        tooltip = UIGraphTooltip.Create(root);
 
-        yAxisMinLabel.text = YMin.ToString("F0");
-        yAxisMaxLabel.text = YMax.ToString("F0");
+        for (int i = 0; i < TickCount; i++)
+            yTicks[i].text = UIGraphKit.FormatTick(Mathf.Lerp(YMin, YMax, i / (float)(TickCount - 1)));
 
         nextSampleTime = 0f; // sample immediately on first Update
     }
 
     /// <summary>
-    /// Compact boxed legend pinned to the top-right corner of the plot (not spread across
-    /// the full width) so a marker's color can be read back to "which module was just
-    /// adjusted" at a glance, shared by every graph.
-    /// </summary>
-    private void BuildLegend(RectTransform root)
-    {
-        const int columns = 2;
-        int rows = Mathf.CeilToInt(GraphVisualUtils.ModulePalette.Length / (float)columns);
-        const float rowHeight = 15f;
-        const float boxWidth = 176f;
-        float boxHeight = rows * rowHeight + 8f;
-
-        RectTransform legend = MakePanel("Legend", root, new Color(0.02f, 0.05f, 0.07f, 0.88f));
-        legend.anchorMin = legend.anchorMax = new Vector2(1f, 1f);
-        legend.pivot = new Vector2(1f, 1f);
-        legend.anchoredPosition = new Vector2(-14f, -34f);
-        legend.sizeDelta = new Vector2(boxWidth, boxHeight);
-        Outline legendOutline = legend.gameObject.AddComponent<Outline>();
-        legendOutline.effectColor = new Color(1f, 1f, 1f, 0.1f);
-        legendOutline.effectDistance = new Vector2(1f, -1f);
-
-        for (int i = 0; i < GraphVisualUtils.ModulePalette.Length; i++)
-        {
-            int col = i % columns;
-            int row = i / columns;
-
-            RectTransform cell = new GameObject("Legend Cell", typeof(RectTransform)).GetComponent<RectTransform>();
-            cell.SetParent(legend, false);
-            cell.anchorMin = new Vector2(col / (float)columns, 1f);
-            cell.anchorMax = new Vector2((col + 1) / (float)columns, 1f);
-            cell.pivot = new Vector2(0f, 1f);
-            cell.anchoredPosition = new Vector2(0f, -4f - row * rowHeight);
-            cell.sizeDelta = new Vector2(0f, rowHeight);
-
-            RectTransform dot = MakePanel("Swatch", cell, GraphVisualUtils.ModulePalette[i].Color);
-            Image dotImage = dot.GetComponent<Image>();
-            dotImage.sprite = GraphVisualUtils.GetCircleSprite();
-            dotImage.type = Image.Type.Simple;
-            dotImage.raycastTarget = false;
-            dot.anchorMin = dot.anchorMax = new Vector2(0f, 0.5f);
-            dot.pivot = new Vector2(0f, 0.5f);
-            dot.sizeDelta = new Vector2(7f, 7f);
-            dot.anchoredPosition = new Vector2(6f, 0f);
-
-            Text label = MakeText("Label", cell, GraphVisualUtils.ModulePalette[i].Module, 8, FontStyle.Normal, TextAnchor.MiddleLeft, AxisColor);
-            label.horizontalOverflow = HorizontalWrapMode.Overflow;
-            label.rectTransform.anchorMin = new Vector2(0f, 0f);
-            label.rectTransform.anchorMax = new Vector2(1f, 1f);
-            label.rectTransform.offsetMin = new Vector2(16f, 0f);
-            label.rectTransform.offsetMax = new Vector2(-2f, 0f);
-        }
-    }
-
-    /// <summary>
-    /// A vertical bright band from the baseline up to the curve at whichever X the cursor
-    /// is over, shown only for shaded graphs (see ShadeArea) — parented directly under
-    /// plotArea (not shadeLayer, which RebuildVisible clears every tick) so it survives
-    /// redraws and lets hovering anywhere across the filled area — not just the line — pick
-    /// out that moment's cumulative value.
+    /// A soft vertical band from the baseline up to the curve at whichever X the cursor is
+    /// over, shown only for shaded graphs (see ShadeArea) — parented directly under plotArea
+    /// so it survives redraws and lets hovering anywhere across the filled area pick out that
+    /// moment's cumulative value.
     /// </summary>
     private void BuildShadeHighlight()
     {
-        shadeHighlightBar = MakePanel("Shade Highlight", plotArea, new Color(1f, 1f, 1f, 0.28f));
-        shadeHighlightBar.GetComponent<Image>().raycastTarget = false;
+        Image bar = UITheme.Panel("Shade Highlight", plotArea, UITheme.WithAlpha(UITheme.Accent, 0.16f), 3f);
+        shadeHighlightBar = bar.rectTransform;
         shadeHighlightBar.anchorMin = shadeHighlightBar.anchorMax = new Vector2(0.5f, 0.5f);
         shadeHighlightBar.pivot = new Vector2(0.5f, 0f);
         shadeHighlightBar.gameObject.SetActive(false);
     }
 
     /// <summary>
-    /// A single persistent highlight marker (not touched by RebuildVisible's per-tick
-    /// destroy/rebuild since it's parented directly under plotArea, a sibling of the
-    /// lines/points layers rather than a child of them) that snaps to whichever sample is
-    /// nearest the cursor. This is what makes hover work — and visually "highlight" —
-    /// everywhere along the curve, not only at the sparse manual-change/newest markers.
+    /// A single persistent highlight marker that snaps to whichever sample is nearest the
+    /// cursor. This is what makes hover work — and visually "highlight" — everywhere along
+    /// the curve, not only at the sparse manual-change/newest markers.
     /// </summary>
     private void BuildHoverDot()
     {
-        hoverDot = MakePanel("Hover Dot", plotArea, new Color(1f, 1f, 1f, 0.95f));
-        Image img = hoverDot.GetComponent<Image>();
-        img.sprite = GraphVisualUtils.GetCircleSprite();
-        img.type = Image.Type.Simple;
-        img.raycastTarget = false;
-        hoverDot.anchorMin = hoverDot.anchorMax = new Vector2(0.5f, 0.5f);
-        hoverDot.pivot = new Vector2(0.5f, 0.5f);
-        hoverDot.sizeDelta = new Vector2(15f, 15f);
-        Outline outline = hoverDot.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(0.42f, 0.86f, 1f, 0.95f);
-        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        RectTransform dot = UITheme.NewRect("Hover Dot", plotArea);
+        dot.anchorMin = dot.anchorMax = new Vector2(0.5f, 0.5f);
+        dot.pivot = new Vector2(0.5f, 0.5f);
+        dot.sizeDelta = new Vector2(16f, 16f);
+        Image halo = UITheme.Dot("Halo", dot, 28f, UITheme.WithAlpha(UITheme.Accent, 0.2f));
+        UITheme.Center(halo.rectTransform, 28f, 28f);
+        Image ring = UITheme.Dot("Ring", dot, 14f, Color.white);
+        UITheme.Center(ring.rectTransform, 14f, 14f);
+        Image core = UITheme.Dot("Core", dot, 9f, UITheme.Accent);
+        UITheme.Center(core.rectTransform, 9f, 9f);
+        hoverDot = dot;
         hoverDot.gameObject.SetActive(false);
     }
 
     private void BuildScrollbar(RectTransform root)
     {
-        RectTransform sbRect = MakePanel("Scrollbar", root, new Color(1f, 1f, 1f, 0.08f));
-        StretchWithOffset(sbRect, Vector2.zero, new Vector2(1f, 0f), new Vector2(58f, 4f), new Vector2(-14f, 16f));
+        Image track = UITheme.Panel("Scrollbar", root, UITheme.Sunken, 4f, true);
+        RectTransform sbRect = track.rectTransform;
+        sbRect.anchorMin = Vector2.zero;
+        sbRect.anchorMax = new Vector2(1f, 0f);
+        sbRect.pivot = new Vector2(0.5f, 0f);
+        sbRect.offsetMin = new Vector2(70f, 4f);
+        sbRect.offsetMax = new Vector2(-(LegendWidth + 28f), 12f);
 
-        RectTransform slidingArea = new GameObject("Sliding Area", typeof(RectTransform)).GetComponent<RectTransform>();
-        slidingArea.SetParent(sbRect, false);
-        Stretch(slidingArea);
+        RectTransform slidingArea = UITheme.NewRect("Sliding Area", sbRect);
+        UITheme.Fill(slidingArea);
 
-        RectTransform handle = MakePanel("Handle", slidingArea, new Color(0.42f, 0.86f, 1f, 0.9f));
-        handle.anchorMin = Vector2.zero;
-        handle.anchorMax = new Vector2(1f, 1f);
-        handle.offsetMin = Vector2.zero;
-        handle.offsetMax = Vector2.zero;
+        Image handle = UITheme.Panel("Handle", slidingArea, UITheme.LineStrong, 4f, true);
+        UITheme.Fill(handle.rectTransform);
 
         scrollbar = sbRect.gameObject.AddComponent<Scrollbar>();
+        scrollbar.transition = Selectable.Transition.ColorTint;
+        ColorBlock colors = scrollbar.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(0.8f, 0.85f, 0.95f, 1f);
+        colors.pressedColor = new Color(0.6f, 0.7f, 0.9f, 1f);
+        colors.selectedColor = Color.white;
+        scrollbar.colors = colors;
         scrollbar.direction = Scrollbar.Direction.LeftToRight;
-        scrollbar.handleRect = handle;
-        scrollbar.targetGraphic = handle.GetComponent<Image>();
+        scrollbar.handleRect = handle.rectTransform;
+        scrollbar.targetGraphic = handle;
         scrollbar.size = 1f;
         scrollbar.value = 1f;
         scrollbar.onValueChanged.AddListener(OnScrollbarChanged);
+        handle.canvasRenderer.SetColor(Color.white);
     }
 
     private void OnScrollbarChanged(float v)
@@ -343,6 +255,8 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
             float scale = Mathf.Lerp(0.25f, 1f, Mathf.SmoothStep(0f, 1f, t));
             newestDot.localScale = new Vector3(scale, scale, 1f);
         }
+
+        if (plotArea != null && Mathf.Abs(plotArea.rect.width - lastPlotWidth) > 0.5f) RebuildVisible();
 
         bool running = sim != null && sim.IsRunning;
         if (running) clock += Time.unscaledDeltaTime;
@@ -395,7 +309,9 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
     private void RebuildVisible()
     {
-        // Only the sparse marker dots are GameObjects now; the line and fill are persistent
+        if (plotArea == null) return;
+        lastPlotWidth = plotArea.rect.width;
+        // Only the sparse marker dots are GameObjects; the line and fill are persistent
         // meshes updated in place further down.
         for (int i = pointsLayer.childCount - 1; i >= 0; i--) Destroy(pointsLayer.GetChild(i).gameObject);
         pointScreenPositions.Clear();
@@ -404,8 +320,8 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
         if (samples.Count == 0)
         {
-            xAxisMinLabel.text = $"-{WindowSeconds:F0}s";
-            xAxisMaxLabel.text = "now";
+            xTicks[0].text = $"-{WindowSeconds:F0} s";
+            xTicks[1].text = "now";
             if (scrollbar != null) scrollbar.size = 1f;
             if (lineGraphic != null) lineGraphic.ClearPoints();
             if (fillGraphic != null) fillGraphic.ClearCurve();
@@ -435,8 +351,8 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         }
 
         float viewportEnd = viewportStart + WindowSeconds;
-        xAxisMinLabel.text = FormatRelative(viewportStart - latestTime);
-        xAxisMaxLabel.text = FormatRelative(viewportEnd - latestTime);
+        xTicks[0].text = FormatRelative(viewportStart - latestTime);
+        xTicks[1].text = FormatRelative(viewportEnd - latestTime);
 
         Rect plotRect = plotArea.rect;
         float slack = SampleIntervalSeconds * 2f;
@@ -454,9 +370,8 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         }
 
         // One smooth Catmull-Rom curve fed into a single persistent line mesh (and, for the
-        // shaded modes, a single fill mesh). Updating two meshes in place here — rather than
-        // destroying and recreating dozens of rotated Image rects and shade bars on every
-        // sample tick and every scrollbar-drag frame — is what removes the scroll jitter.
+        // shaded modes, a single fill mesh) — updated in place rather than rebuilt from
+        // GameObjects, which is what keeps scrolling smooth.
         GraphCurve.CatmullRom(controlPoints, CurveSubdivisions, curveBuffer);
         if (lineGraphic != null) lineGraphic.SetPoints(curveBuffer);
         if (fillGraphic != null)
@@ -465,9 +380,8 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
             else fillGraphic.ClearCurve();
         }
 
-        // Every sample in view is hoverable, but only manual-change samples (color-coded by
-        // module — see GraphVisualUtils.ModulePalette/legend) and the newest sample get a visible round
-        // marker — sparse dots, matching a real strip chart.
+        // Every sample in view is hoverable, but only manual-change samples (colour-coded by
+        // module) and the newest sample get a visible round marker.
         int last = controlPoints.Count - 1;
         for (int i = 0; i <= last; i++)
         {
@@ -478,19 +392,17 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
             bool changed = !string.IsNullOrEmpty(controlSamples[i].ChangeModule);
             if (!changed && !isNewest) continue;
 
-            // Kept small so a run of manual adjustments doesn't turn into an illegible
-            // cluster — the hover dot (see BuildHoverDot) is what visually "grows" a point.
-            float size = changed ? 4.5f : 5.5f;
+            float size = changed ? 11f : 9f;
             Color markerColor = changed ? GraphVisualUtils.GetModuleColor(controlSamples[i].ChangeModule) : PointColor;
-            RectTransform dot = MakePanel("Point " + i, pointsLayer, markerColor);
-            Image dotImage = dot.GetComponent<Image>();
-            dotImage.sprite = GraphVisualUtils.GetCircleSprite();
-            dotImage.type = Image.Type.Simple;
-            dotImage.raycastTarget = false;
+            RectTransform dot = UITheme.NewRect("Point " + i, pointsLayer);
             dot.anchorMin = dot.anchorMax = new Vector2(0.5f, 0.5f);
             dot.pivot = new Vector2(0.5f, 0.5f);
             dot.sizeDelta = new Vector2(size, size);
             dot.anchoredPosition = controlPoints[i];
+            Image ring = UITheme.Dot("Ring", dot, size + 4f, Color.white);
+            UITheme.Center(ring.rectTransform, size + 4f, size + 4f);
+            Image fill = UITheme.Dot("Fill", dot, size, markerColor);
+            UITheme.Center(fill.rectTransform, size, size);
 
             if (isNewest)
             {
@@ -503,7 +415,7 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
 
     private static string FormatRelative(float secondsFromNow)
     {
-        return secondsFromNow >= -0.05f ? "now" : $"-{Mathf.Abs(secondsFromNow):F0}s";
+        return secondsFromNow >= -0.05f ? "now" : $"-{Mathf.Abs(secondsFromNow):F0} s";
     }
 
     private static string UnitFromLabel(string label)
@@ -541,8 +453,7 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         if (ShadeArea && local.x >= plotRect.xMin && local.x <= plotRect.xMax)
         {
             // Shaded graphs respond to hovering anywhere across the filled area (not just
-            // near the line itself) — nearest sample by X alone, ignoring vertical distance,
-            // so the whole width of the fill is "hoverable" like the reference behaviour.
+            // near the line itself) — nearest sample by X alone.
             float bestDx = float.MaxValue;
             for (int i = 0; i < pointScreenPositions.Count; i++)
             {
@@ -578,19 +489,19 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
         float secondsAgo = clock - s.Time;
         string yUnit = UnitFromLabel(YLabel);
         string yName = LabelWithoutUnit(YLabel);
-        string xLine = !string.IsNullOrEmpty(XLabel) ? $"{XLabel}: {GraphVisualUtils.FormatValue(s.X, XUnit, "0.#")}\n" : "";
-        string secondaryLine = !string.IsNullOrEmpty(SecondaryLabel) ? $"{SecondaryLabel}: {GraphVisualUtils.FormatValue(s.Secondary, SecondaryUnit, "0")}\n" : "";
+        string xLine = !string.IsNullOrEmpty(XLabel) ? $"\n{XLabel}: {GraphVisualUtils.FormatValue(s.X, XUnit, "0.#")}" : "";
+        string secondaryLine = !string.IsNullOrEmpty(SecondaryLabel) ? $"\n{SecondaryLabel}: {GraphVisualUtils.FormatValue(s.Secondary, SecondaryUnit, "0")}" : "";
         string cu = GraphVisualUtils.GetParameterUnit(s.ChangeParameter);
         string changeLine = !string.IsNullOrEmpty(s.ChangeModule)
-            ? $"\n{s.ChangeParameter}: {GraphVisualUtils.FormatValue(s.ChangeFromValue, cu)} → {GraphVisualUtils.FormatValue(s.ChangeToValue, cu)}  ({s.ChangeModule})"
+            ? $"\n<color=#94A3B8>{UITheme.Pretty(s.ChangeParameter)}: {GraphVisualUtils.FormatValue(s.ChangeFromValue, cu)} → {GraphVisualUtils.FormatValue(s.ChangeToValue, cu)} · {UIGraphKit.ModuleDisplayName(s.ChangeModule)}</color>"
             : "";
-        tooltipText.text = $"{xLine}{secondaryLine}{yName}: {GraphVisualUtils.FormatValue(s.Y, yUnit, "0.#")}\n{secondsAgo:F0}s ago" + changeLine;
-        tooltip.SetActive(true);
+        string content = $"<b>{yName}: {GraphVisualUtils.FormatValue(s.Y, yUnit, "0.#")}</b>{xLine}{secondaryLine}\n<color=#94A3B8>{secondsAgo:F0} s ago</color>" + changeLine;
 
         if (hoverDot != null)
         {
             hoverDot.anchoredPosition = pointScreenPositions[nearest];
             hoverDot.gameObject.SetActive(true);
+            hoverDot.SetAsLastSibling();
         }
 
         if (shadeHighlightBar != null)
@@ -598,7 +509,7 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
             if (ShadeArea)
             {
                 float curveY = pointScreenPositions[nearest].y;
-                shadeHighlightBar.sizeDelta = new Vector2(10f, Mathf.Max(0f, curveY - plotRect.yMin));
+                shadeHighlightBar.sizeDelta = new Vector2(8f, Mathf.Max(0f, curveY - plotRect.yMin));
                 shadeHighlightBar.anchoredPosition = new Vector2(pointScreenPositions[nearest].x, plotRect.yMin);
                 shadeHighlightBar.gameObject.SetActive(true);
             }
@@ -608,107 +519,16 @@ public sealed class LiveGraphRuntime : MonoBehaviour, IPointerMoveHandler, IPoin
             }
         }
 
-        // selfRect (this graph's root) has the default centered pivot, so its local-space
-        // origin is at its own center, not its bottom-left corner. tooltipRect is anchored
-        // at (0.5, 0.5) to match that same origin (see BuildTooltip).
         RectTransformUtility.ScreenPointToLocalPointInRectangle(selfRect, eventData.position, cam, out Vector2 tooltipLocal);
-        tooltipRect.anchoredPosition = tooltipLocal + new Vector2(14f, 14f);
-        tooltip.transform.SetAsLastSibling();
+        tooltip.Show(content, tooltipLocal);
     }
 
     public void OnPointerExit(PointerEventData eventData) => HideTooltip();
 
     private void HideTooltip()
     {
-        if (tooltip != null) tooltip.SetActive(false);
+        if (tooltip != null) tooltip.Hide();
         if (hoverDot != null) hoverDot.gameObject.SetActive(false);
         if (shadeHighlightBar != null) shadeHighlightBar.gameObject.SetActive(false);
-    }
-
-    private void BuildTooltip(RectTransform root)
-    {
-        tooltip = new GameObject("Tooltip", typeof(RectTransform)).gameObject;
-        tooltipRect = tooltip.GetComponent<RectTransform>();
-        tooltipRect.SetParent(root, false);
-        tooltipRect.anchorMin = tooltipRect.anchorMax = new Vector2(0.5f, 0.5f);
-        tooltipRect.pivot = Vector2.zero;
-        tooltipRect.sizeDelta = new Vector2(200f, 112f);
-        Image bg = tooltip.AddComponent<Image>();
-        bg.color = new Color(0.02f, 0.05f, 0.07f, 0.96f);
-        bg.raycastTarget = false;
-        Outline outline = tooltip.AddComponent<Outline>();
-        outline.effectColor = new Color(0.42f, 0.86f, 1f, 0.6f);
-        outline.effectDistance = new Vector2(1f, -1f);
-
-        tooltipText = MakeText("Tooltip Text", tooltipRect, "", 11, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Stretch(tooltipText.rectTransform);
-        tooltipText.rectTransform.offsetMin = new Vector2(8f, 4f);
-        tooltipText.rectTransform.offsetMax = new Vector2(-8f, -4f);
-
-        tooltip.SetActive(false);
-    }
-
-    private Text MakeText(string name, Transform parent, string value, int size, FontStyle style, TextAnchor anchor, Color color)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        Text text = go.AddComponent<Text>();
-        text.font = LabelFont;
-        text.text = value;
-        text.fontSize = size;
-        text.fontStyle = style;
-        text.alignment = anchor;
-        text.color = color;
-        text.raycastTarget = false;
-        return text;
-    }
-
-    private RectTransform MakePanel(string name, Transform parent, Color color)
-    {
-        GameObject go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        Image image = go.AddComponent<Image>();
-        image.color = color;
-        return go.GetComponent<RectTransform>();
-    }
-
-    private static void Stretch(RectTransform rect)
-    {
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
-    }
-
-    private static void StretchWithOffset(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
-    {
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.offsetMin = offsetMin;
-        rect.offsetMax = offsetMax;
-    }
-
-    private static void AnchorTopLeft(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-    }
-
-    private static void AnchorBottomLeft(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = new Vector2(0f, 0f);
-        rect.pivot = new Vector2(0f, 0f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-    }
-
-    private static void AnchorBottomRight(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
-        rect.pivot = new Vector2(1f, 0f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
     }
 }

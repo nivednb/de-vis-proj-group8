@@ -30,13 +30,18 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
 
     public static MassFlowProbeRuntime Instance { get; private set; }
 
+    private const float ReadoutWidth = 344f;
+
     private Canvas canvas;
-    private Font font;
     private Camera plantCamera;
     private GameObject readout;
     private RectTransform readoutRect;
+    private Image swatch;
     private Text headingText;
+    private Text subText;
+    private Text labelsText;
     private Text bodyText;
+    private Text compositionText;
     private Texture2D cursorTexture;
     private Canvas cursorCanvas;
     private RectTransform cursorRect;
@@ -69,8 +74,6 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
 
     private void Start()
     {
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         BuildReadout();
     }
 
@@ -235,16 +238,22 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
         // reported is the homogeneous (no-slip) mixture value, and it says so.
         string basis = stream.Phase == StreamPhase.TwoPhase ? " (mixture)" : "";
 
-        headingText.text = $"{stream.Name.ToUpperInvariant()}\n{segmentName}  ·  {phase}";
+        headingText.text = UITheme.Pretty(stream.Name);
+        subText.text = $"{segmentName}  ·  {phase}";
+        swatch.color = PlantStreamLegend.ColorFor(kind);
+        labelsText.text =
+            "Mass flow\nVolume flow\nVelocity\nDensity\nConditions\n" +
+            (stream.MolarMassGMol > 0f ? "Molar mass\n" : "") +
+            "Line";
         bodyText.text =
-            $"Mass flow      {stream.MassFlowKgH:N0} kg/h   ({stream.MassFlowKgH / 3600f:F3} kg/s)\n" +
-            $"Volume flow    {stream.VolumetricFlowM3H:N1} m³/h\n" +
-            $"Velocity       {stream.VelocityMS:F1} m/s{basis}\n" +
-            $"Density        {stream.DensityKgM3:F1} kg/m³{basis}\n" +
-            $"Conditions     {stream.TemperatureC:F0} °C   {stream.PressureBar:F0} bar\n" +
-            (stream.MolarMassGMol > 0f ? $"Molar mass     {stream.MolarMassGMol:F1} g/mol\n" : "") +
-            $"Line           {PipeStreamState.NominalBoreLabel(kind)}  ({stream.BoreMm:F1} mm bore)\n" +
-            $"{stream.Composition}";
+            $"{stream.MassFlowKgH:N0} kg/h  ({stream.MassFlowKgH / 3600f:F3} kg/s)\n" +
+            $"{stream.VolumetricFlowM3H:N1} m³/h\n" +
+            $"{stream.VelocityMS:F1} m/s{basis}\n" +
+            $"{stream.DensityKgM3:F1} kg/m³{basis}\n" +
+            $"{stream.TemperatureC:F0} °C  ·  {stream.PressureBar:F0} bar\n" +
+            (stream.MolarMassGMol > 0f ? $"{stream.MolarMassGMol:F1} g/mol\n" : "") +
+            $"{PipeStreamState.NominalBoreLabel(kind)}  ({stream.BoreMm:F1} mm bore)";
+        compositionText.text = UITheme.Pretty(stream.Composition);
 
         readout.SetActive(true);
         readout.transform.SetAsLastSibling();
@@ -254,9 +263,14 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
         Camera uiCam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, uiCam, out Vector2 local);
 
-        LayoutRebuilder.ForceRebuildLayoutImmediate(readoutRect);
-        float height = Mathf.Max(150f, bodyText.preferredHeight + 62f);
-        readoutRect.sizeDelta = new Vector2(readoutRect.sizeDelta.x, height);
+        float rowsHeight = Mathf.Ceil(Mathf.Max(labelsText.preferredHeight, bodyText.preferredHeight));
+        labelsText.rectTransform.sizeDelta = new Vector2(labelsText.rectTransform.sizeDelta.x, rowsHeight);
+        bodyText.rectTransform.sizeDelta = new Vector2(bodyText.rectTransform.sizeDelta.x, rowsHeight);
+        float compTop = 68f + rowsHeight + 10f;
+        UITheme.TopLeft(compositionText.rectTransform, 16f, compTop, ReadoutWidth - 32f, 20f);
+        float compHeight = string.IsNullOrEmpty(compositionText.text) ? 0f : Mathf.Ceil(compositionText.preferredHeight);
+        float height = compTop + compHeight + 14f;
+        readoutRect.sizeDelta = new Vector2(ReadoutWidth, height);
 
         Rect area = parent.rect;
         Vector2 size = readoutRect.sizeDelta;
@@ -276,62 +290,36 @@ public sealed class MassFlowProbeRuntime : MonoBehaviour
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         // Below the tutorial (300) but above the dashboard chrome (90).
         canvas.sortingOrder = 140;
-        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1536f, 1024f);
-        scaler.matchWidthOrHeight = 0.5f;
+        UITheme.ConfigureScaler(canvasObject.AddComponent<CanvasScaler>());
 
-        GameObject root = new GameObject("Probe Root", typeof(RectTransform));
-        root.transform.SetParent(canvasObject.transform, false);
-        RectTransform rootRect = root.GetComponent<RectTransform>();
-        rootRect.anchorMin = Vector2.zero;
-        rootRect.anchorMax = Vector2.one;
-        rootRect.offsetMin = Vector2.zero;
-        rootRect.offsetMax = Vector2.zero;
+        RectTransform rootRect = UITheme.NewRect("Probe Root", canvasObject.transform);
+        UITheme.Fill(rootRect);
 
-        readout = new GameObject("Probe Readout", typeof(RectTransform));
-        readout.transform.SetParent(rootRect, false);
-        readoutRect = readout.GetComponent<RectTransform>();
+        readoutRect = UITheme.Card("Probe Readout", rootRect, 14f, Color.white, 30f, 10f, 0.22f);
+        readout = readoutRect.gameObject;
+        readoutRect.GetComponent<UIRaycastTarget>().raycastTarget = false;
         readoutRect.anchorMin = readoutRect.anchorMax = new Vector2(0.5f, 0.5f);
         readoutRect.pivot = Vector2.zero;
-        readoutRect.sizeDelta = new Vector2(320f, 170f);
-        Image background = readout.AddComponent<Image>();
-        background.color = new Color(0.02f, 0.05f, 0.07f, 0.96f);
-        background.raycastTarget = false;
-        Outline outline = readout.AddComponent<Outline>();
-        outline.effectColor = new Color(0.42f, 0.86f, 1f, 0.6f);
-        outline.effectDistance = new Vector2(1f, -1f);
+        readoutRect.sizeDelta = new Vector2(ReadoutWidth, 200f);
 
-        headingText = CreateText("Heading", readoutRect, 11, FontStyle.Bold, AccentColor);
-        headingText.rectTransform.anchorMin = new Vector2(0f, 1f);
-        headingText.rectTransform.anchorMax = new Vector2(1f, 1f);
-        headingText.rectTransform.offsetMin = new Vector2(10f, -42f);
-        headingText.rectTransform.offsetMax = new Vector2(-10f, -6f);
+        swatch = UITheme.Dot("Swatch", readoutRect, 10f, UITheme.Accent);
+        UITheme.TopLeft(swatch.rectTransform, 16f, 20f, 10f, 10f);
+        headingText = UITheme.Label("Heading", readoutRect, "", 14f, UITheme.Weight.ExtraBold, UITheme.Ink);
+        UITheme.TopLeft(headingText.rectTransform, 34f, 13f, ReadoutWidth - 50f, 22f);
+        subText = UITheme.Label("Segment", readoutRect, "", 12f, UITheme.Weight.SemiBold, UITheme.Subtle);
+        UITheme.TopLeft(subText.rectTransform, 34f, 34f, ReadoutWidth - 50f, 17f);
+        Image rule = UITheme.Panel("Rule", readoutRect, UITheme.Line);
+        UITheme.TopBand(rule.rectTransform, 16f, 58f, 16f, 1f);
 
-        bodyText = CreateText("Body", readoutRect, 11, FontStyle.Normal, Color.white);
-        bodyText.rectTransform.anchorMin = Vector2.zero;
-        bodyText.rectTransform.anchorMax = Vector2.one;
-        bodyText.rectTransform.offsetMin = new Vector2(10f, 6f);
-        bodyText.rectTransform.offsetMax = new Vector2(-10f, -46f);
+        labelsText = UITheme.Label("Labels", readoutRect, "", 12.5f, UITheme.Weight.SemiBold, UITheme.Subtle, TextAnchor.UpperLeft);
+        labelsText.lineSpacing = 1.3f;
+        UITheme.TopLeft(labelsText.rectTransform, 16f, 68f, 104f, 140f);
+        bodyText = UITheme.Label("Values", readoutRect, "", 12.5f, UITheme.Weight.Bold, UITheme.Ink, TextAnchor.UpperLeft);
+        bodyText.lineSpacing = 1.3f;
+        UITheme.TopLeft(bodyText.rectTransform, 122f, 68f, ReadoutWidth - 138f, 140f);
+        compositionText = UITheme.Label("Composition", readoutRect, "", 12f, UITheme.Weight.Medium, UITheme.Muted, TextAnchor.UpperLeft, true);
 
         readout.SetActive(false);
-    }
-
-    private Text CreateText(string name, Transform parent, int size, FontStyle style, Color color)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        Text text = go.AddComponent<Text>();
-        text.font = font;
-        text.fontSize = size;
-        text.fontStyle = style;
-        text.alignment = TextAnchor.UpperLeft;
-        text.color = color;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
-        text.raycastTarget = false;
-        text.supportRichText = false;
-        return text;
     }
 
     // ---- cursor -------------------------------------------------------------

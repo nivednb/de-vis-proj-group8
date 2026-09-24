@@ -36,7 +36,7 @@ public sealed class ExternalAnalyticsWindow : MonoBehaviour
     private const string WindowClassName = "PtMDigitalTwinAnalyticsWindow";
     private const string WindowTitle = "Analytics & Insights - Power-to-Methanol Digital Twin";
     private static readonly Vector2 ReferenceSize = new Vector2(1180f, 780f);
-    private static readonly Color BackgroundColor = new Color32(9, 29, 41, 255);
+    private static readonly Color BackgroundColor = Color.white;
 
     /// <summary>True in the Windows standalone player, where native windows can be created.</summary>
     public static bool IsSupported

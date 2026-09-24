@@ -4,10 +4,19 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Icon = UITheme.Icon;
+using Kind = UITheme.ButtonKind;
+using W = UITheme.Weight;
 
 /// <summary>
-/// Builds the ICODOS-inspired full-plant presentation at runtime.
+/// Builds the full-plant dashboard at runtime in the "Daylight" design (see
+/// <see cref="UITheme"/>): floating white cards over the 3D plant — brand, pill navigation,
+/// stream legend, plant status, four process tiles and a bottom dock — plus one right-hand
+/// card per section, the about box and the analytics window.
 /// The values are supplied by PlantProcessSimulator and remain educational estimates.
+///
+/// GameObject names of the elements the guided tour spotlights ("Header", "OVERVIEW",
+/// "Plant Status", "Footer", …) are part of the tour's contract and must not change.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class IcodosDashboardRuntime : MonoBehaviour
@@ -16,22 +25,22 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private enum AnalyticsTab { Stats, Visualise }
 
     private const string RuntimeRootName = "Generated ICODOS Plant Dashboard";
+    private const float PageCardWidth = 340f;
 
-    private static readonly Color HeaderColor = new Color32(10, 24, 34, 248);
-    private static readonly Color PanelColor = new Color32(15, 38, 51, 232);
-    private static readonly Color PanelLightColor = new Color32(23, 54, 69, 236);
-    private static readonly Color AccentColor = new Color32(20, 145, 205, 255);
-    private static readonly Color MutedTextColor = new Color32(174, 195, 206, 255);
-    private static readonly Color HealthyColor = new Color32(34, 197, 94, 255);
+    private static readonly Color MetricEfficiency = UITheme.Accent;
+    private static readonly Color MetricCapture = UITheme.Hex("0D9488");
+    private static readonly Color MetricYield = UITheme.Hex("EA580C");
+    private static readonly Color MetricPurity = UITheme.Hex("7C3AED");
+    private static readonly Color MetricStorage = UITheme.Hex("0284C7");
 
-    private readonly List<Text> liveTexts = new List<Text>();
-    private readonly List<Image> navigationImages = new List<Image>();
+    private readonly List<Button> navigationButtons = new List<Button>();
     private readonly List<DashboardPage> navigationPages = new List<DashboardPage>();
-    private readonly List<Image> analyticsBars = new List<Image>();
     private Canvas canvas;
+    private Canvas helpCanvas;
     private Font font;
     private OrbitCameraController cameraController;
     private GameObject helpPanel;
+    private RectTransform helpCard;
     private GameObject legendPanel;
     private GameObject plantStatusPanel;
     private GameObject kpiStrip;
@@ -50,6 +59,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     // Flow Lab *mode* (animated pipes) is independent of its panel: closing the panel keeps
     // the flow running; only FLOW LAB / SHOW STREAMS switch the mode off again.
     private bool flowLabOn;
+    private int flowInspectionMode;
+    private readonly List<Button> flowModeButtons = new List<Button>();
     private GameObject analyticsStatsTab;
     private GameObject analyticsVisualiseTab;
     private Button analyticsNavButton;
@@ -58,6 +69,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private bool analyticsWindowOpen;
     private AnalyticsTab currentAnalyticsTab = AnalyticsTab.Stats;
     private readonly List<Button> runToggleButtons = new List<Button>();
+    private Button dockRunButton;
 
     // VISUALISE tab: four sub-tabs (YIELD / EFFICIENCY correlation graphs, the OFAT
     // timeline, and the live strip chart).
@@ -75,12 +87,13 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private InteractiveModulePanelRuntime modulePanels;
 
     // Five reactor parameters shared by the YIELD and EFFICIENCY correlation sub-tabs.
-    private static readonly string[] ReactorParamNames = { "Temp", "Pressure", "H2:CO2", "GHSV", "Feed" };
+    private static readonly string[] ReactorParamNames = { "Temp", "Pressure", "H₂:CO₂", "GHSV", "Feed" };
+    private static readonly string[] ReactorParamTitles = { "temperature", "pressure", "H₂/CO₂ ratio", "GHSV", "feed flow" };
     // Exact reactor slider labels (InteractiveModulePanelRuntime.CreateControls) for the
     // variable-lock — selecting a parameter tab freezes every reactor slider but this one.
     private static readonly string[] ReactorParamSliderLabels = { "Temp", "Pressure", "H2/CO2", "GHSV", "Feed flow" };
     private static readonly string[] ReactorParamAxisLabels =
-        { "Reactor Temp (C)", "Reactor Pressure (bar)", "H2 / CO2 Ratio", "GHSV (1/h)", "Reactor Feed Flow (%)" };
+        { "Reactor temperature (°C)", "Reactor pressure (bar)", "H₂/CO₂ ratio", "GHSV (1/h)", "Reactor feed flow (%)" };
     private static readonly float[] ReactorParamMin = { 180f, 40f, 1f, 1000f, 20f };
     private static readonly float[] ReactorParamMax = { 300f, 100f, 6f, 20000f, 130f };
     private static readonly Func<PlantProcessSimulator.ProcessSnapshot, float>[] ReactorParamSelectors =
@@ -95,25 +108,48 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private LiveGraphRuntime liveProgressOutputGraph;
     private Button liveProgressEfficiencyButton;
     private Button liveProgressOutputButton;
+
+    // Process map card
     private Text processStepText;
     private Text processTitleText;
     private Text processBodyText;
-    private Text processStreamsText;
-    private Text equipmentSummaryText;
-    private Text simulationSummaryText;
-    private Text analyticsSummaryText;
+    private Text processStreamsLabel;
+    private readonly List<Image> processSegments = new List<Image>();
+    private readonly List<Text> processChipTexts = new List<Text>();
+    private readonly List<Image> processChips = new List<Image>();
+    private RectTransform processChipArea;
+
+    // Reactor lab card
+    private UIValueText reactorTempValue, reactorPressureValue, reactorRatioValue, reactorYieldValue;
+    // Simulation card
+    private UIValueText simLoadValue, simSyngasValue, simMethanolValue, simStorageValue;
+    private Image simCallout;
+    private Image simCalloutIcon;
+    private Text simCalloutText;
+
+    // Analytics
+    private UIValueText[] throughputValues;
+    private UIValueText[] metricValues;
+    private UIProgressBar[] metricBars;
+    private UIValueText[] kpiValues;
+    private UIProgressBar[] kpiBars;
     private Text analyticsInsightsText;
+
     private DashboardPage currentPage = DashboardPage.Overview;
     private int processStepIndex;
-    private Text plantStatusText;
+
+    // Header / overview
+    private Image runStateDot;
+    private Text runStateText;
+    private UIStatusChip plantStatusChip;
+    private Image efficiencyRing;
     private Text efficiencyText;
-    private Text productionText;
-    private Text utilizationText;
-    private Text methanolTankText;
-    private Text electrolyzerKpis;
-    private Text captureKpis;
-    private Text reactorKpis;
-    private Text separationKpis;
+    private UIValueText productionValue;
+    private UIValueText utilizationValue;
+    private Text tankValueText;
+    private UIProgressBar tankBar;
+    private Text tankCaption;
+    private readonly UIValueText[][] tileValues = new UIValueText[4][];
     private float nextRefresh;
 
     public static IcodosDashboardRuntime Instance { get; private set; }
@@ -140,6 +176,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     /// </summary>
     public void TutorialShowPage(string pageId)
     {
+        ModulePanels()?.CloseAllPanels();
         // Every tour stop except the Flow Lab ones shows the plant with its normal pipes.
         if (pageId != "flow") SetFlowLabMode(false);
         switch (pageId)
@@ -186,7 +223,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     /// finishes or is skipped part-way through an analytics step.</summary>
     public void TutorialRestoreDefaults()
     {
-        SetPopupVisible(helpPanel, false);
+        SetPopupVisible(helpPanel, false, helpCard);
+        ModulePanels()?.CloseAllPanels();
         // A separate analytics window belongs to the user; the tour never opens one, so it
         // must not close one either.
         if (!AnalyticsIsExternal) CloseAnalyticsWindow();
@@ -213,8 +251,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void Start()
     {
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        font = UITheme.Font(W.Medium);
         cameraController = FindFirstObjectByType<OrbitCameraController>();
         if (cameraController != null) cameraController.BackgroundClicked += OnBackgroundClicked;
         HideLegacyDashboard();
@@ -265,21 +302,20 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     public void Build()
     {
         if (canvas != null) Destroy(canvas.gameObject);
-        analyticsBars.Clear();
+        if (helpCanvas != null) Destroy(helpCanvas.gameObject);
         runToggleButtons.Clear();
+        navigationButtons.Clear();
+        navigationPages.Clear();
+        flowModeButtons.Clear();
 
         GameObject canvasObject = new GameObject("ICODOS Dashboard Canvas");
         canvasObject.transform.SetParent(transform, false);
         canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        // Above InteractiveModulePanelRuntime's canvas (sortingOrder 75) so the dashboard
-        // chrome and the analytics popup always render on top of the floating hover
-        // info-buttons/panels instead of being covered by them.
+        // Above the warning band (72); the module control drawers (95) sit above this so an
+        // open drawer covers the right-hand cards it replaces.
         canvas.sortingOrder = 90;
-        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1536f, 1024f);
-        scaler.matchWidthOrHeight = 0.5f;
+        UITheme.ConfigureScaler(canvasObject.AddComponent<CanvasScaler>());
         canvasObject.AddComponent<GraphicRaycaster>();
 
         BuildHeader(canvasObject.transform);
@@ -288,35 +324,87 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         BuildKpiStrip(canvasObject.transform);
         BuildPagePanels(canvasObject.transform);
         BuildFooter(canvasObject.transform);
-        BuildHelpPanel(canvasObject.transform);
         BuildAnalyticsWindow(canvasObject.transform);
-        BuildEducationalBadge(canvasObject.transform);
+        BuildHelpPanel();
     }
+
+    // ---- small builders --------------------------------------------------------
+
+    private static Text Txt(Transform parent, string name, string value, float size, W weight, Color color,
+        float x, float y, float width, float height, TextAnchor anchor = TextAnchor.MiddleLeft, bool wrap = false)
+    {
+        Text t = UITheme.Label(name, parent, value, size, weight, color, anchor, wrap);
+        UITheme.TopLeft(t.rectTransform, x, y, width, height);
+        return t;
+    }
+
+    /// <summary>A labelled read-out tile (pale surface, small caption, large value).</summary>
+    private static UIValueText ReadoutTile(Transform parent, string name, string caption, float x, float y, float width, float height, float valueSize = 18f)
+    {
+        Image tile = UITheme.Panel(name, parent, UITheme.Sunken2, 12f);
+        UITheme.TopLeft(tile.rectTransform, x, y, width, height);
+        UITheme.Border(tile.rectTransform, UITheme.Line, 12f);
+        Txt(tile.transform, "Caption", caption, 12f, W.Bold, UITheme.Subtle, 12f, 9f, width - 20f, 16f);
+        UIValueText value = UITheme.ValueText("Value", tile.transform, valueSize, 11.5f, UITheme.Ink, UITheme.Muted);
+        UITheme.TopLeft((RectTransform)value.transform, 12f, 27f, width - 20f, valueSize * 1.35f);
+        return value;
+    }
+
+    /// <summary>Right-hand section card with an icon badge, title and subtitle.</summary>
+    private RectTransform PageCard(string name, Transform parent, float height, Icon icon, Color iconColor,
+        string title, string subtitle, Action onClose = null, string closeName = null)
+    {
+        RectTransform card = UITheme.Card(name, parent, 16f);
+        UITheme.TopRight(card, 16f, 92f, PageCardWidth, height);
+        Image badge = UITheme.Badge("Badge", card, icon, iconColor, 40f, 12f, 22f);
+        UITheme.TopLeft(badge.rectTransform, 18f, 18f, 40f, 40f);
+        Txt(card, "Card Title", title, 17f, W.ExtraBold, UITheme.Ink, 70f, 17f, 200f, 22f);
+        Txt(card, "Card Subtitle", subtitle, 12.5f, W.SemiBold, UITheme.Subtle, 70f, 39f, 220f, 18f);
+        if (onClose != null)
+        {
+            Button close = UITheme.IconButton(closeName ?? "Close", card, Icon.Close, Kind.Secondary, 36f, 16f);
+            UITheme.TopRight((RectTransform)close.transform, 14f, 20f, 36f, 36f);
+            close.onClick.AddListener(() => onClose());
+        }
+        return card;
+    }
+
+    // ---- header ------------------------------------------------------------------
 
     private void BuildHeader(Transform parent)
     {
-        RectTransform header = CreatePanel("Header", parent, HeaderColor);
-        Pin(header, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -76f), Vector2.zero);
+        // Invisible band that groups the top bar (the tour spotlights it as one element).
+        RectTransform header = UITheme.NewRect("Header", parent);
+        UITheme.TopBand(header, 0f, 0f, 0f, 88f);
 
-        Text title = CreateText("Title", header, "POWER-TO-METHANOL DIGITAL TWIN", 21, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
-        Pin(title.rectTransform, new Vector2(0f, 0f), new Vector2(0.31f, 1f), new Vector2(24f, 0f), new Vector2(-8f, 0f));
+        // Brand
+        RectTransform brand = UITheme.Card("Brand", header, 14f);
+        Image logo = UITheme.Panel("Logo", brand, UITheme.Accent, 10f);
+        UITheme.TopLeft(logo.rectTransform, 11f, 11f, 34f, 34f);
+        Image logoIcon = UITheme.IconImage("Logo Icon", logo.transform, Icon.Logo, 21f, Color.white);
+        UITheme.Center(logoIcon.rectTransform, 21f, 21f);
+        Text title = Txt(brand, "Title", "Power-to-Methanol Digital Twin", 15f, W.ExtraBold, UITheme.Ink, 57f, 9f, 300f, 20f);
+        Txt(brand, "Subtitle", "Educational simulation · simplified values", 12f, W.Medium, UITheme.Muted, 57f, 29f, 300f, 17f);
+        float brandWidth = 57f + Mathf.Max(title.preferredWidth, 250f) + 20f;
+        UITheme.TopLeft(brand, 16f, 16f, brandWidth, 56f);
 
-        Text subtitle = CreateText("Subtitle", header, "Interactive educational process visualization", 11, FontStyle.Normal, TextAnchor.LowerLeft, MutedTextColor);
-        Pin(subtitle.rectTransform, new Vector2(0f, 0f), new Vector2(0.31f, 0.48f), new Vector2(25f, 4f), new Vector2(-8f, 0f));
-
+        // Pill navigation
+        RectTransform navCard = UITheme.Card("Navigation", header, 24f);
         string[] names = { "OVERVIEW", "PROCESS MAP", "FLOW LAB", "REACTOR LAB", "ANALYTICS", "SIMULATION" };
+        string[] labels = { "Overview", "Process map", "Flow lab", "Reactor lab", "Analytics", "Simulation" };
         DashboardPage[] pages =
         {
             DashboardPage.Overview, DashboardPage.Process, DashboardPage.FlowInspection,
             DashboardPage.Equipment, DashboardPage.Analytics, DashboardPage.Simulation
         };
-        float left = 0.31f;
-        float width = 0.092f;
+        float x = 4f;
         for (int i = 0; i < names.Length; i++)
         {
             DashboardPage page = pages[i];
-            Button button = CreateButton(names[i], header, names[i], i == 0 ? AccentColor : HeaderColor, 11);
-            Pin(button.GetComponent<RectTransform>(), new Vector2(left + width * i, 0f), new Vector2(left + width * (i + 1), 1f), Vector2.zero, Vector2.zero);
+            Button button = UITheme.MakeButton(names[i], navCard, labels[i], Kind.Nav, 14f, null, 20f, false, 18f, W.Bold, 17f);
+            float w = UITheme.PreferredWidth(button);
+            UITheme.TopLeft((RectTransform)button.transform, x, 4f, w, 40f);
+            x += w + 2f;
             if (page == DashboardPage.Analytics)
             {
                 analyticsNavButton = button;
@@ -325,79 +413,127 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             else if (page == DashboardPage.FlowInspection)
             {
                 flowNavButton = button;
-                button.onClick.AddListener(ToggleFlowLab);
+                button.onClick.AddListener(() => { ModulePanels()?.CloseAllPanels(); ToggleFlowLab(); });
             }
             else
             {
-                button.onClick.AddListener(() => SelectPage(page));
+                button.onClick.AddListener(() => { ModulePanels()?.CloseAllPanels(); SelectPage(page); });
             }
-            navigationImages.Add(button.GetComponent<Image>());
+            navigationButtons.Add(button);
             navigationPages.Add(page);
         }
+        UITheme.TopCenter(navCard, 0f, 20f, x + 2f, 48f);
 
-        Button help = CreateButton("Help", header, "HELP", HeaderColor, 11);
-        Pin(help.GetComponent<RectTransform>(), new Vector2(0.87f, 0f), Vector2.one, Vector2.zero, Vector2.zero);
-        help.onClick.AddListener(() => SetPopupVisible(helpPanel, !helpPanel.activeSelf));
+        // Help (round card, right)
+        RectTransform helpCardShell = UITheme.Card("Help Card", header, 22f);
+        UITheme.TopRight(helpCardShell, 16f, 22f, 44f, 44f);
+        Button help = UITheme.IconButton("Help", helpCardShell, Icon.Help, Kind.Ghost, 44f, 21f);
+        UITheme.Fill((RectTransform)help.transform);
+        help.onClick.AddListener(() => SetPopupVisible(helpPanel, !helpPanel.activeSelf, helpCard));
+
+        // Run state capsule
+        RectTransform runCard = UITheme.Card("Run State", header, 22f);
+        runStateDot = UITheme.Dot("Dot", runCard, 8f, UITheme.Success);
+        UITheme.TopLeft(runStateDot.rectTransform, 17f, 18f, 8f, 8f);
+        runStateText = Txt(runCard, "Label", "Running", 13f, W.Bold, UITheme.SuccessInk, 33f, 12f, 80f, 20f);
+        float runWidth = 33f + runStateText.preferredWidth + 18f;
+        UITheme.TopRight(runCard, 16f + 44f + 8f, 22f, runWidth, 44f);
     }
+
+    // ---- legend ------------------------------------------------------------------
 
     private void BuildLegend(Transform parent)
     {
-        legendPanel = CreatePanel("Process Flow Legend", parent, PanelColor).gameObject;
-        RectTransform panel = legendPanel.GetComponent<RectTransform>();
-        panel.anchorMin = new Vector2(0f, 1f);
-        panel.anchorMax = new Vector2(0f, 1f);
-        panel.pivot = new Vector2(0f, 1f);
-        panel.anchoredPosition = new Vector2(14f, -90f);
-        panel.sizeDelta = new Vector2(238f, 240f);
-
-        AddPanelTitle(panel, "PROCESS FLOW");
+        RectTransform panel = UITheme.Card("Process Flow Legend", parent, 14f);
+        legendPanel = panel.gameObject;
+        Text legendTitle = Txt(panel, "Panel Title", "Process streams", 14f, W.ExtraBold, UITheme.Ink, 18f, 14f, 220f, 20f);
+        Txt(panel, "Caption", "Pipe colours in the 3D view", 12f, W.Medium, UITheme.Subtle, 18f, 34f, 220f, 17f);
 
         // Rows come from PlantStreamLegend, which is also what colours the pipes themselves —
         // so this panel and the plant can never disagree.
         PlantStreamLegend.Row[] rows = PlantStreamLegend.Rows;
+        float maxLabel = 0f;
         for (int i = 0; i < rows.Length; i++)
         {
             PlantStreamLegend.Row row = rows[i];
-            float y = -50f - i * 26f;
+            float y = 62f + i * 29f;
             if (row.Dashed)
             {
-                for (int d = 0; d < 4; d++)
+                for (int d = 0; d < 3; d++)
                 {
-                    RectTransform dash = CreatePanel("Recycle Dash " + d, panel, row.Color);
-                    AnchorTopLeft(dash, new Vector2(14f + d * 10f, y), new Vector2(6f, 4f));
+                    Image dash = UITheme.Panel("Recycle Dash " + d, panel, row.Color, 3f);
+                    UITheme.TopLeft(dash.rectTransform, 18f + d * 10f, y + 6f, 6f, 8f);
                 }
             }
             else
             {
-                RectTransform swatch = CreatePanel(row.Label + " Swatch", panel, row.Color);
-                AnchorTopLeft(swatch, new Vector2(14f, y), new Vector2(20f, 8f));
+                Image swatch = UITheme.Panel(row.Label + " Swatch", panel, row.Color, 4f);
+                UITheme.TopLeft(swatch.rectTransform, 18f, y + 6f, 26f, 8f);
             }
-            Text label = CreateText(row.Label, panel, row.Label, 11, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
-            AnchorTopLeft(label.rectTransform, new Vector2(44f, y + 6f), new Vector2(188f, 20f));
+            Text label = Txt(panel, row.Label, row.Label, 13f, W.SemiBold, UITheme.Ink2, 56f, y, 220f, 20f);
+            maxLabel = Mathf.Max(maxLabel, label.preferredWidth);
         }
+        float height = 62f + (rows.Length - 1) * 29f + 20f + 16f;
+        UITheme.TopLeft(panel, 16f, 92f, Mathf.Max(256f, 56f + maxLabel + 18f), height);
+        // Minimisable down to its title row.
+        UICollapsible.Attach(panel, height, 48f, 10f, 9f, legendTitle.transform);
     }
+
+    // ---- plant status --------------------------------------------------------------
 
     private void BuildPlantStatus(Transform parent)
     {
-        RectTransform panel = CreatePanel("Plant Status", parent, PanelColor);
+        RectTransform panel = UITheme.Card("Plant Status", parent, 16f);
         plantStatusPanel = panel.gameObject;
-        panel.anchorMin = new Vector2(1f, 1f);
-        panel.anchorMax = new Vector2(1f, 1f);
-        panel.pivot = new Vector2(1f, 1f);
-        panel.anchoredPosition = new Vector2(-16f, -94f);
-        panel.sizeDelta = new Vector2(340f, 210f);
-        AddPanelTitle(panel, "PLANT STATUS");
+        UITheme.TopRight(panel, 16f, 92f, 316f, 324f);
+        Text statusTitle = Txt(panel, "Panel Title", "Plant status", 14f, W.ExtraBold, UITheme.Ink, 18f, 17f, 150f, 20f);
+        plantStatusChip = UITheme.StatusChip("Status", panel, 26f, 12f);
+        RectTransform chipRect = (RectTransform)plantStatusChip.transform;
+        chipRect.anchorMin = chipRect.anchorMax = chipRect.pivot = new Vector2(1f, 1f);
+        // Leaves room for the minimise button in the top-right corner.
+        chipRect.anchoredPosition = new Vector2(-48f, -14f);
+        plantStatusChip.Set(UIStatusChip.Kind.Success, "Normal operation");
 
-        plantStatusText = CreateText("Status", panel, "● Normal operation", 12, FontStyle.Normal, TextAnchor.MiddleRight, HealthyColor);
-        AnchorTopRight(plantStatusText.rectTransform, new Vector2(-16f, -16f), new Vector2(180f, 28f));
-        efficiencyText = AddStatusRow(panel, "Plant efficiency", -54f);
-        productionText = AddStatusRow(panel, "Methanol production", -79f);
-        utilizationText = AddStatusRow(panel, "CO2 utilization", -104f);
-        methanolTankText = AddStatusRow(panel, "Methanol tank", -129f);
+        // Efficiency ring
+        RectTransform ring = UITheme.NewRect("Efficiency Ring", panel);
+        UITheme.TopLeft(ring, 18f, 52f, 104f, 104f);
+        Image track = UITheme.Panel("Track", ring, UITheme.Line);
+        track.sprite = UITheme.Ring();
+        UITheme.Fill(track.rectTransform);
+        efficiencyRing = UITheme.Panel("Fill", ring, UITheme.Accent);
+        efficiencyRing.sprite = UITheme.Ring();
+        efficiencyRing.type = Image.Type.Filled;
+        efficiencyRing.fillMethod = Image.FillMethod.Radial360;
+        efficiencyRing.fillOrigin = (int)Image.Origin360.Top;
+        efficiencyRing.fillClockwise = true;
+        efficiencyRing.fillAmount = 0f;
+        UITheme.Fill(efficiencyRing.rectTransform);
+        efficiencyText = Txt(ring, "Efficiency Value", "—", 20f, W.ExtraBold, UITheme.Ink, 0f, 34f, 104f, 26f, TextAnchor.MiddleCenter);
+        Txt(ring, "Efficiency Caption", "efficiency", 11f, W.SemiBold, UITheme.Subtle, 0f, 58f, 104f, 16f, TextAnchor.MiddleCenter);
 
-        Button maxEfficiency = CreateButton("Set Maximum Efficiency", panel, "SET MAXIMUM EFFICIENCY", Hex("1E7A46"), 11);
-        Pin(maxEfficiency.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(14f, 12f), new Vector2(-14f, 42f));
+        Txt(panel, "Production Label", "Methanol production", 12f, W.SemiBold, UITheme.Subtle, 138f, 62f, 170f, 16f);
+        productionValue = UITheme.ValueText("Production Value", panel, 19f, 12.5f, UITheme.Ink, UITheme.Muted);
+        UITheme.TopLeft((RectTransform)productionValue.transform, 138f, 78f, 170f, 26f);
+        Txt(panel, "Utilisation Label", "CO₂ utilisation", 12f, W.SemiBold, UITheme.Subtle, 138f, 112f, 170f, 16f);
+        utilizationValue = UITheme.ValueText("Utilisation Value", panel, 19f, 12.5f, UITheme.Ink, UITheme.Muted);
+        UITheme.TopLeft((RectTransform)utilizationValue.transform, 138f, 128f, 170f, 26f);
+
+        // Methanol tank
+        Image tank = UITheme.Panel("Methanol Tank", panel, UITheme.Sunken, 10f);
+        UITheme.TopLeft(tank.rectTransform, 18f, 172f, 280f, 76f);
+        Txt(tank.transform, "Label", "Methanol tank", 12.5f, W.Bold, UITheme.Ink2, 14f, 10f, 150f, 18f);
+        tankValueText = UITheme.Label("Value", tank.transform, "—", 14f, W.ExtraBold, UITheme.Ink, TextAnchor.MiddleRight);
+        UITheme.TopRight(tankValueText.rectTransform, 14f, 10f, 100f, 18f);
+        tankBar = UITheme.ProgressBar("Bar", tank.transform, UITheme.Accent, 6f, UITheme.Line);
+        UITheme.TopLeft((RectTransform)tankBar.transform, 14f, 36f, 252f, 6f);
+        tankCaption = Txt(tank.transform, "Caption", "", 12f, W.SemiBold, UITheme.Muted, 14f, 49f, 252f, 17f);
+
+        Button maxEfficiency = UITheme.MakeButton("Set Maximum Efficiency", panel, "Set maximum efficiency", Kind.Primary, 14f, Icon.Target, 10f);
+        UITheme.TopLeft((RectTransform)maxEfficiency.transform, 18f, 262f, 280f, 44f);
         maxEfficiency.onClick.AddListener(ApplyMaximumEfficiency);
+
+        // Minimisable down to its title row, keeping the live status badge visible.
+        UICollapsible.Attach(panel, 324f, 54f, 12f, 12f, statusTitle.transform, chipRect);
     }
 
     /// <summary>
@@ -413,220 +549,245 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Refresh();
     }
 
+    // ---- process tiles -------------------------------------------------------------
+
     private void BuildKpiStrip(Transform parent)
     {
-        RectTransform strip = CreatePanel("Process KPI Strip", parent, PanelColor);
+        RectTransform strip = UITheme.NewRect("Process KPI Strip", parent);
         kpiStrip = strip.gameObject;
-        Pin(strip, new Vector2(0.01f, 0f), new Vector2(0.99f, 0f), new Vector2(0f, 66f), new Vector2(0f, 190f));
-        string[] titles = { "ELECTROLYZER", "CO2 CAPTURE", "REACTOR", "SEPARATION" };
-        Color[] colors = { Hex("22B7E8"), Hex("20C997"), Hex("FF7043"), Hex("A855F7") };
-        Text[] targets = new Text[4];
+        UITheme.BottomBand(strip, 16f, 92f, 16f, 104f);
+
+        string[] titles = { "Electrolyzer", "CO₂ capture", "Reactor", "Separation" };
+        string[] moduleIds = { "electrolyzer", "absorber", "reactor", "separator" };
+        Color[] colors = { UITheme.Hex("0EA5E9"), UITheme.Hex("10B981"), UITheme.Hex("F97316"), UITheme.Hex("A855F7") };
+        string[][] columns =
+        {
+            new[] { "Power", "H₂", "Water", "O₂" },
+            new[] { "Capture", "CO₂", "Amine", "Regen" },
+            new[] { "Temp", "Pressure", "H₂/CO₂", "Yield" },
+            new[] { "Recycle", "Purity", "Storage", "Product" },
+        };
+
         for (int i = 0; i < 4; i++)
         {
-            RectTransform section = CreatePanel(titles[i], strip, i % 2 == 0 ? PanelColor : PanelLightColor);
-            Pin(section, new Vector2(i * 0.25f, 0f), new Vector2((i + 1) * 0.25f, 1f), new Vector2(1f, 2f), new Vector2(-1f, -2f));
-            Text title = CreateText("Title", section, titles[i], 13, FontStyle.Bold, TextAnchor.UpperLeft, colors[i]);
-            Pin(title.rectTransform, new Vector2(0f, 0.66f), Vector2.one, new Vector2(16f, 0f), new Vector2(-8f, -9f));
-            targets[i] = CreateText("Values", section, "Loading…", 12, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-            Pin(targets[i].rectTransform, Vector2.zero, new Vector2(1f, 0.7f), new Vector2(16f, 8f), new Vector2(-8f, -2f));
-        }
+            RectTransform tile = UITheme.Card(titles[i], strip, 14f);
+            tile.anchorMin = new Vector2(i * 0.25f, 0f);
+            tile.anchorMax = new Vector2((i + 1) * 0.25f, 1f);
+            tile.offsetMin = new Vector2(i == 0 ? 0f : 6f, 0f);
+            tile.offsetMax = new Vector2(i == 3 ? 0f : -6f, 0f);
 
-        electrolyzerKpis = targets[0];
-        captureKpis = targets[1];
-        reactorKpis = targets[2];
-        separationKpis = targets[3];
-        liveTexts.AddRange(targets);
+            Image badge = UITheme.Panel("Badge", tile, UITheme.Tint(colors[i], 0.18f), 8f);
+            UITheme.TopLeft(badge.rectTransform, 16f, 14f, 26f, 26f);
+            Image square = UITheme.Panel("Swatch", badge.transform, colors[i], 3f);
+            UITheme.Center(square.rectTransform, 10f, 10f);
+            Txt(tile, "Title", titles[i], 14f, W.ExtraBold, UITheme.Ink, 52f, 16f, 180f, 22f);
+
+            string moduleId = moduleIds[i];
+            Button open = UITheme.MakeButton("Open " + titles[i], tile, "Open", Kind.Link, 12.5f, Icon.ChevronRight, 8f, true, 14f, W.ExtraBold, 8f);
+            float ow = UITheme.PreferredWidth(open);
+            UITheme.TopRight((RectTransform)open.transform, 10f, 12f, ow, 30f);
+            open.onClick.AddListener(() => ModulePanels()?.OpenModule(moduleId, true));
+
+            RectTransform valuesRow = UITheme.NewRect("Values", tile);
+            valuesRow.anchorMin = new Vector2(0f, 1f);
+            valuesRow.anchorMax = new Vector2(1f, 1f);
+            valuesRow.pivot = new Vector2(0f, 1f);
+            valuesRow.offsetMin = new Vector2(16f, -92f);
+            valuesRow.offsetMax = new Vector2(-16f, -50f);
+            tileValues[i] = new UIValueText[4];
+            for (int c = 0; c < 4; c++)
+            {
+                RectTransform col = UITheme.NewRect(columns[i][c], valuesRow);
+                col.anchorMin = new Vector2(c * 0.25f, 0f);
+                col.anchorMax = new Vector2((c + 1) * 0.25f, 1f);
+                col.offsetMin = Vector2.zero;
+                col.offsetMax = new Vector2(-4f, 0f);
+                Text caption = UITheme.Label("Caption", col, columns[i][c], 12f, W.SemiBold, UITheme.Subtle, TextAnchor.UpperLeft);
+                UITheme.TopBand(caption.rectTransform, 0f, 0f, 0f, 16f);
+                UIValueText value = UITheme.ValueText("Value", col, 15.5f, 11f, UITheme.Ink, UITheme.Muted);
+                UITheme.TopBand((RectTransform)value.transform, 0f, 18f, 0f, 22f);
+                tileValues[i][c] = value;
+            }
+        }
     }
+
+    // ---- section cards ---------------------------------------------------------------
 
     private void BuildPagePanels(Transform parent)
     {
-        processPanel = BuildContextPanel("Guided Process", parent, new Vector2(0.20f, 0.20f), new Vector2(0.80f, 0.47f), "GUIDED POWER-TO-METHANOL PROCESS");
-        RectTransform process = processPanel.GetComponent<RectTransform>();
-        processStepText = CreateText("Step", process, "", 12, FontStyle.Bold, TextAnchor.MiddleRight, AccentColor);
-        // Laid out in pixels measured from the panel's own top and bottom edges rather than in
-        // fractions of its height: the panel is short, so fractional rows landed on top of the
-        // 42px panel-title band and each other.
-        Pin(processStepText.rectTransform, new Vector2(0.55f, 1f), new Vector2(1f, 1f), new Vector2(0f, -42f), new Vector2(-18f, -10f));
-        processTitleText = CreateText("Process Title", process, "", 19, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
-        Pin(processTitleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -86f), new Vector2(-18f, -50f));
-
-        RectTransform processRule = CreatePanel("Process Rule", process, AccentColor);
-        Pin(processRule, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -92f), new Vector2(-18f, -90f));
-        processRule.GetComponent<Image>().raycastTarget = false;
-
-        processBodyText = CreateText("Explanation", process, "", 13, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Pin(processBodyText.rectTransform, Vector2.zero, new Vector2(0.66f, 1f), new Vector2(20f, 62f), new Vector2(-16f, -104f));
-
-        RectTransform columnRule = CreatePanel("Process Column Rule", process, new Color32(38, 66, 82, 255));
-        Pin(columnRule, new Vector2(0.66f, 0f), new Vector2(0.66f, 1f), new Vector2(0f, 62f), new Vector2(2f, -104f));
-        columnRule.GetComponent<Image>().raycastTarget = false;
-
-        processStreamsText = CreateText("Streams", process, "", 12, FontStyle.Normal, TextAnchor.UpperLeft, MutedTextColor);
-        Pin(processStreamsText.rectTransform, new Vector2(0.66f, 0f), Vector2.one, new Vector2(16f, 62f), new Vector2(-18f, -104f));
-
-        Button previous = CreateButton("Previous Step", process, "PREVIOUS STEP", HeaderColor, 11);
-        Pin(previous.GetComponent<RectTransform>(), Vector2.zero, Vector2.zero, new Vector2(20f, 16f), new Vector2(170f, 50f));
-        previous.onClick.AddListener(() => SetProcessStep(processStepIndex - 1));
-        Button next = CreateButton("Next Step", process, "NEXT STEP", AccentColor, 11);
-        Pin(next.GetComponent<RectTransform>(), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-170f, 16f), new Vector2(-20f, 50f));
-        next.onClick.AddListener(() => SetProcessStep(processStepIndex + 1));
-
-        equipmentPanel = BuildContextPanel("Reactor Lab", parent, new Vector2(0.69f, 0.25f), new Vector2(0.985f, 0.72f), "REACTOR REACTION LAB");
-        RectTransform equipment = equipmentPanel.GetComponent<RectTransform>();
-        equipmentSummaryText = AddContextBody(equipment,
-            "Inspect the real transparent fixed-bed reactor. Conditioned H2/CO2/recycle gas enters the side feed nozzle, crosses the catalyst volume, and the methanol/water-containing effluent leaves through the top outlet.\n\n" +
-            "The catalyst colour indicates operating state; particle motion is an educational species-and-conversion visualization.");
-        Button focusReactor = AddContextButton(equipment, "FOCUS REACTOR", 0.20f);
-        focusReactor.onClick.AddListener(() => Focus(7));
-        Button reactorControls = AddContextButton(equipment, "OPEN REACTOR CONTROLS", 0.08f);
-        reactorControls.onClick.AddListener(() => ToggleModulePanels(true));
-
-        simulationPanel = BuildContextPanel("Simulation", parent, new Vector2(0.69f, 0.25f), new Vector2(0.985f, 0.72f), "SIMULATION CONTROLS");
-        RectTransform simulation = simulationPanel.GetComponent<RectTransform>();
-        simulationSummaryText = AddContextBody(simulation,
-            "The established plant controls remain the single source of truth. Slider changes update process calculations, KPIs, storage interlocks and stream animation together.");
-        Button openControls = AddContextButton(simulation, "OPEN EXISTING PROCESS CONTROLS", 0.08f);
-        openControls.onClick.AddListener(() => ToggleModulePanels(true));
-
-        flowInspectionPanel = BuildContextPanel("Flow Lab", parent, new Vector2(0.69f, 0.21f), new Vector2(0.985f, 0.76f), "ENGINEERING PIPE-FLOW LAB");
-        RectTransform flow = flowInspectionPanel.GetComponent<RectTransform>();
-        Button closeFlow = CreateButton("Flow Lab Close", flow, "X", HeaderColor, 13);
-        Pin(closeFlow.GetComponent<RectTransform>(), Vector2.one, Vector2.one, new Vector2(-40f, -38f), new Vector2(-8f, -8f));
-        closeFlow.onClick.AddListener(CloseFlowLab);
-        Text flowBody = AddContextBody(flow,
-            "While this lab is open the pipes turn see-through and show what they carry, in their legend colours. Gases stream as moving eddies, liquids fill the bore, and the recycle loop runs in dashes. Speed follows the calculated flow.");
-        flowBody.fontSize = 12;
-        Pin(flowBody.rectTransform, new Vector2(0f, 0.65f), new Vector2(1f, 0.88f), new Vector2(18f, 2f), new Vector2(-18f, 0f));
-        AddFlowModeButton(flow, "ALL STREAMS", 0, 0.54f);
-        AddFlowModeButton(flow, "FEED GASES", 1, 0.44f);
-        AddFlowModeButton(flow, "CAPTURE LOOP", 2, 0.34f);
-        AddFlowModeButton(flow, "SYNTHESIS LOOP", 3, 0.24f);
-        AddFlowModeButton(flow, "PRODUCT PATH", 4, 0.14f);
-        streamVisualsButton = AddContextButton(flow, "SHOW / HIDE STREAM VISUALS", 0.03f);
-        streamVisualsButton.onClick.AddListener(ToggleStreams);
-
+        BuildProcessCard(parent);
+        BuildReactorCard(parent);
+        BuildSimulationCard(parent);
+        BuildFlowCard(parent);
         SetProcessStep(0);
         SelectPage(DashboardPage.Overview);
     }
 
-    private GameObject BuildContextPanel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, string title)
+    private void BuildProcessCard(Transform parent)
     {
-        RectTransform panel = CreatePanel(name, parent, new Color32(9, 29, 41, 246));
-        Pin(panel, anchorMin, anchorMax, Vector2.zero, Vector2.zero);
-        AddPanelTitle(panel, title);
-        return panel.gameObject;
-    }
+        RectTransform card = PageCard("Guided Process", parent, 408f, Icon.Route, UITheme.Accent, "Process map", "Guided ten-step walkthrough");
+        processPanel = card.gameObject;
 
-    private Text AddContextBody(RectTransform panel, string value)
-    {
-        Text body = CreateText("Body", panel, value, 13, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Pin(body.rectTransform, new Vector2(0f, 0.18f), new Vector2(1f, 0.88f), new Vector2(18f, 8f), new Vector2(-18f, 0f));
-        return body;
-    }
-
-    private Button AddContextButton(RectTransform panel, string label, float bottom)
-    {
-        Button button = CreateButton(label, panel, label, AccentColor, 11);
-        Pin(button.GetComponent<RectTransform>(), new Vector2(0.08f, bottom), new Vector2(0.92f, bottom + 0.10f), Vector2.zero, Vector2.zero);
-        return button;
-    }
-
-    private void AddFlowModeButton(RectTransform panel, string label, int mode, float bottom)
-    {
-        Button button = CreateButton(label, panel, label, HeaderColor, 11);
-        Pin(button.GetComponent<RectTransform>(), new Vector2(0.08f, bottom), new Vector2(0.92f, bottom + 0.085f), Vector2.zero, Vector2.zero);
-        button.onClick.AddListener(() => SetFlowInspectionMode(mode));
-    }
-
-    private void AddAnalyticsBar(RectTransform panel, string label, Color color, float y,
-        Func<PlantProcessSimulator.ProcessSnapshot, float> valueSelector)
-    {
-        Text text = CreateText(label, panel, label, 11, FontStyle.Normal, TextAnchor.MiddleLeft, Color.white);
-        Pin(text.rectTransform, new Vector2(0.06f, y), new Vector2(0.42f, y + 0.06f), Vector2.zero, Vector2.zero);
-        RectTransform track = CreatePanel(label + " Track", panel, new Color32(48, 71, 82, 255));
-        Pin(track, new Vector2(0.43f, y + 0.015f), new Vector2(0.94f, y + 0.045f), Vector2.zero, Vector2.zero);
-        Image trackImage = track.GetComponent<Image>();
-        RectTransform fill = CreatePanel(label + " Fill", track, color);
-        Pin(fill, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-        fill.GetComponent<Image>().raycastTarget = false;
-        analyticsBars.Add(fill.GetComponent<Image>());
-
-        // Value badge — hidden until hover, floats just above the track's right edge.
-        RectTransform badge = CreatePanel(label + " Value Badge", panel, new Color(0.02f, 0.05f, 0.07f, 0.97f));
-        badge.anchorMin = badge.anchorMax = new Vector2(0.94f, y + 0.045f);
-        badge.pivot = new Vector2(1f, 0f);
-        badge.anchoredPosition = new Vector2(0f, 6f);
-        badge.sizeDelta = new Vector2(66f, 22f);
-        Outline badgeOutline = badge.gameObject.AddComponent<Outline>();
-        badgeOutline.effectColor = new Color(1f, 1f, 1f, 0.18f);
-        badgeOutline.effectDistance = new Vector2(1f, -1f);
-        Text valueLabel = CreateText(label + " Value", badge, "", 12, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
-        Pin(valueLabel.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-        badge.gameObject.SetActive(false);
-
-        AnalyticsBarHover hover = track.gameObject.AddComponent<AnalyticsBarHover>();
-        hover.Track = trackImage;
-        hover.BaseColor = trackImage.color;
-        hover.HoverColor = Color.Lerp(trackImage.color, Color.white, 0.3f);
-        hover.ValueBadge = badge.gameObject;
-        hover.ValueLabel = valueLabel;
-        hover.ValueSelector = valueSelector;
-    }
-
-    /// <summary>Brightens the bar's track and reveals a value badge (kept live-updated
-    /// while hovered, so it reflects the current running value rather than a snapshot from
-    /// the moment the cursor entered) on hover; reverts on exit.</summary>
-    private sealed class AnalyticsBarHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
-    {
-        public Image Track;
-        public Color BaseColor;
-        public Color HoverColor;
-        public GameObject ValueBadge;
-        public Text ValueLabel;
-        public Func<PlantProcessSimulator.ProcessSnapshot, float> ValueSelector;
-
-        private bool hovering;
-
-        public void OnPointerEnter(PointerEventData eventData)
+        processStepText = Txt(card, "Step", "", 12.5f, W.ExtraBold, UITheme.Accent, 18f, 74f, 200f, 18f);
+        processSegments.Clear();
+        const int steps = 10;
+        float segWidth = (304f - (steps - 1) * 4f) / steps;
+        for (int i = 0; i < steps; i++)
         {
-            hovering = true;
-            if (Track != null) Track.color = HoverColor;
-            if (ValueBadge != null) ValueBadge.SetActive(true);
+            Image seg = UITheme.Panel("Segment " + i, card, UITheme.Line, 2f);
+            UITheme.TopLeft(seg.rectTransform, 18f + i * (segWidth + 4f), 98f, segWidth, 4f);
+            processSegments.Add(seg);
         }
 
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            hovering = false;
-            if (Track != null) Track.color = BaseColor;
-            if (ValueBadge != null) ValueBadge.SetActive(false);
-        }
+        processTitleText = Txt(card, "Process Title", "", 20f, W.ExtraBold, UITheme.Ink, 18f, 114f, 304f, 28f);
+        processBodyText = Txt(card, "Explanation", "", 13.5f, W.Medium, UITheme.Ink2, 18f, 150f, 304f, 92f, TextAnchor.UpperLeft, true);
+        processBodyText.lineSpacing = 1.12f;
 
-        private void Update()
+        processStreamsLabel = Txt(card, "Streams Label", "Streams", 12f, W.ExtraBold, UITheme.Subtle, 18f, 250f, 200f, 16f);
+        processChipArea = UITheme.NewRect("Streams", card);
+        UITheme.TopLeft(processChipArea, 18f, 272f, 304f, 64f);
+
+        Button previous = UITheme.MakeButton("Previous Step", card, "Previous", Kind.Secondary, 14f, Icon.ChevronLeft, 10f);
+        UITheme.TopLeft((RectTransform)previous.transform, 18f, 346f, 147f, 44f);
+        previous.onClick.AddListener(() => SetProcessStep(processStepIndex - 1));
+        Button next = UITheme.MakeButton("Next Step", card, "Next step", Kind.Primary, 14f, Icon.ChevronRight, 10f, true);
+        UITheme.TopLeft((RectTransform)next.transform, 175f, 346f, 147f, 44f);
+        next.onClick.AddListener(() => SetProcessStep(processStepIndex + 1));
+    }
+
+    private void BuildReactorCard(Transform parent)
+    {
+        RectTransform card = PageCard("Reactor Lab", parent, 446f, Icon.Flask, UITheme.Hex("EA580C"), "Reactor lab", "R-201 · fixed-bed synthesis");
+        equipmentPanel = card.gameObject;
+
+        reactorTempValue = ReadoutTile(card, "Temperature", "Temperature", 18f, 76f, 147f, 60f);
+        reactorPressureValue = ReadoutTile(card, "Pressure", "Pressure", 175f, 76f, 147f, 60f);
+        reactorRatioValue = ReadoutTile(card, "Ratio", "H₂/CO₂ ratio", 18f, 146f, 147f, 60f);
+        reactorYieldValue = ReadoutTile(card, "Yield", "Yield", 175f, 146f, 147f, 60f);
+
+        Text body = Txt(card, "Body",
+            "Inspect the transparent fixed-bed reactor. Conditioned H₂/CO₂/recycle gas enters the side feed nozzle, crosses the catalyst volume and leaves through the top outlet. " +
+            "The catalyst colour shows the operating state; the moving particles visualise species and conversion.",
+            13f, W.Medium, UITheme.Muted, 18f, 220f, 304f, 100f, TextAnchor.UpperLeft, true);
+        body.lineSpacing = 1.12f;
+
+        Button focusReactor = UITheme.MakeButton("FOCUS REACTOR", card, "Focus reactor", Kind.Primary, 14f, Icon.Focus, 10f);
+        UITheme.TopLeft((RectTransform)focusReactor.transform, 18f, 330f, 304f, 44f);
+        focusReactor.onClick.AddListener(() => Focus(7));
+        Button reactorControls = UITheme.MakeButton("OPEN REACTOR CONTROLS", card, "Open reactor controls", Kind.Secondary, 14f, Icon.Sliders, 10f);
+        UITheme.TopLeft((RectTransform)reactorControls.transform, 18f, 384f, 304f, 44f);
+        reactorControls.onClick.AddListener(() => ModulePanels()?.OpenModule("reactor", false));
+    }
+
+    private void BuildSimulationCard(Transform parent)
+    {
+        RectTransform card = PageCard("Simulation", parent, 504f, Icon.Sliders, UITheme.Accent, "Simulation", "Plant-wide summary");
+        simulationPanel = card.gameObject;
+
+        simLoadValue = ReadoutTile(card, "Plant Load", "Plant load", 18f, 76f, 147f, 60f);
+        simSyngasValue = ReadoutTile(card, "Syngas Feed", "Syngas feed", 175f, 76f, 147f, 60f);
+        simMethanolValue = ReadoutTile(card, "Methanol Output", "Methanol output", 18f, 146f, 147f, 60f);
+        simStorageValue = ReadoutTile(card, "Storage", "Storage", 175f, 146f, 147f, 60f);
+
+        simCallout = UITheme.Panel("Interlock", card, UITheme.SuccessSoft, 10f);
+        UITheme.TopLeft(simCallout.rectTransform, 18f, 220f, 304f, 58f);
+        simCalloutIcon = UITheme.IconImage("Icon", simCallout.transform, Icon.Check, 18f, UITheme.SuccessInk);
+        UITheme.TopLeft(simCalloutIcon.rectTransform, 12f, 11f, 18f, 18f);
+        simCalloutText = Txt(simCallout.transform, "Text", "", 12.5f, W.SemiBold, UITheme.SuccessInk, 40f, 9f, 254f, 40f, TextAnchor.UpperLeft, true);
+
+        Txt(card, "Modules Label", "Open module controls", 12f, W.ExtraBold, UITheme.Subtle, 18f, 294f, 250f, 16f);
+        string[] labels = { "Electrolyzer", "CO₂ absorber", "Desorber", "Compressor", "Reactor", "Condenser", "Separator", "Distillation" };
+        string[] ids = { "electrolyzer", "absorber", "desorber", "compressor", "reactor", "condenser", "separator", "distillation" };
+        for (int i = 0; i < labels.Length; i++)
         {
-            if (!hovering || ValueLabel == null || ValueSelector == null) return;
-            PlantProcessSimulator sim = PlantProcessSimulator.Instance;
-            if (sim == null) return;
-            ValueLabel.text = $"{ValueSelector(sim.Current):F1}%";
+            string id = ids[i];
+            Button b = UITheme.MakeButton("Open " + id, card, labels[i], Kind.Secondary, 13f, null, 8f);
+            UITheme.TopLeft((RectTransform)b.transform, 18f + (i % 2) * 157f, 316f + (i / 2) * 42f, 147f, 34f);
+            b.onClick.AddListener(() => ModulePanels()?.OpenModule(id, true));
         }
     }
 
-    private const int FooterButtonCount = 8;
+    private void BuildFlowCard(Transform parent)
+    {
+        RectTransform card = PageCard("Flow Lab", parent, 470f, Icon.Waves, UITheme.Accent, "Flow lab", "Animated pipe flow is on", CloseFlowLab, "Flow Lab Close");
+        flowInspectionPanel = card.gameObject;
+
+        Text body = Txt(card, "Body",
+            "Pipes turn see-through and show what they carry in their legend colours. Gases move as eddies, liquids fill the bore and the recycle loop runs in dashes. Speed follows the calculated flow.",
+            13f, W.Medium, UITheme.Muted, 18f, 74f, 304f, 80f, TextAnchor.UpperLeft, true);
+        body.lineSpacing = 1.12f;
+
+        Txt(card, "Filter Label", "Show streams for", 12f, W.ExtraBold, UITheme.Subtle, 18f, 160f, 250f, 16f);
+        string[] modes = { "All streams", "Feed gases", "Capture loop", "Synthesis loop", "Product path" };
+        for (int i = 0; i < modes.Length; i++)
+        {
+            int mode = i;
+            Button b = UITheme.MakeButton(modes[i].ToUpperInvariant(), card, modes[i], Kind.Tab, 13.5f, Icon.Check, 10f, true, 16f, W.Bold);
+            HorizontalLayoutGroup hl = b.GetComponent<HorizontalLayoutGroup>();
+            hl.childAlignment = TextAnchor.MiddleLeft;
+            // Push the check mark to the right edge.
+            Text label = b.GetComponentInChildren<Text>();
+            label.alignment = TextAnchor.MiddleLeft;
+            LayoutElement grow = label.gameObject.AddComponent<LayoutElement>();
+            grow.flexibleWidth = 1f;
+            hl.childForceExpandWidth = false;
+            UITheme.TopLeft((RectTransform)b.transform, 18f, 182f + i * 44f, 304f, 38f);
+            b.onClick.AddListener(() => SetFlowInspectionMode(mode));
+            flowModeButtons.Add(b);
+        }
+
+        streamVisualsButton = UITheme.MakeButton("Stream Visuals", card, "Hide stream visuals", Kind.Secondary, 14f, Icon.Waves, 10f);
+        UITheme.TopLeft((RectTransform)streamVisualsButton.transform, 18f, 412f, 304f, 40f);
+        streamVisualsButton.onClick.AddListener(ToggleStreams);
+    }
+
+    // ---- dock ----------------------------------------------------------------------
+
     private Button massFlowToolButton;
 
     private void BuildFooter(Transform parent)
     {
-        RectTransform footer = CreatePanel("Footer", parent, HeaderColor);
-        Pin(footer, Vector2.zero, new Vector2(1f, 0f), Vector2.zero, new Vector2(0f, 62f));
-        Button runButton = AddFooterButton(footer, "PAUSE", 0, ToggleRunning);
-        runToggleButtons.Add(runButton);
-        Button resetButton = AddFooterButton(footer, "RESET", 1, ResetSimulation);
-        resetButton.GetComponent<Image>().color = Hex("7A2A2A");
-        AddFooterButton(footer, "VIEW INFORMATION", 2, () => SetPopupVisible(helpPanel, true));
-        showStreamsButton = AddFooterButton(footer, "SHOW STREAMS", 3, ToggleFlowLab);
-        massFlowToolButton = AddFooterButton(footer, "MASS FLOW TOOL", 4, ToggleMassFlowTool);
-        AddFooterButton(footer, "PREVIOUS MODULE", 5, () => cameraController?.FocusPrevious());
-        AddFooterButton(footer, "NEXT MODULE", 6, () => cameraController?.FocusNext());
-        AddFooterButton(footer, "RESET VIEW", 7, () => cameraController?.FocusOverview());
+        RectTransform dock = UITheme.Card("Footer", parent, 18f, UITheme.WithAlpha(Color.white, 0.97f), 36f, 14f, 0.2f);
+        float x = 8f;
+
+        dockRunButton = DockButton(dock, "Run Toggle", "Pause", Kind.Dark, Icon.Pause, ref x, ToggleRunning, false, "Resume");
+        runToggleButtons.Add(dockRunButton);
+        DockButton(dock, "Reset", "Reset", Kind.DangerGhost, Icon.Reset, ref x, ResetSimulation);
+        DockDivider(dock, ref x);
+        DockButton(dock, "View Information", "View information", Kind.Ghost, Icon.Info, ref x, () => SetPopupVisible(helpPanel, true, helpCard));
+        showStreamsButton = DockButton(dock, "Show Streams", "Show streams", Kind.Ghost, Icon.Waves, ref x, () => { ModulePanels()?.CloseAllPanels(); ToggleFlowLab(); });
+        massFlowToolButton = DockButton(dock, "Mass Flow Tool", "Mass flow tool", Kind.Ghost, Icon.Gauge, ref x, ToggleMassFlowTool);
+        DockDivider(dock, ref x);
+        DockButton(dock, "Previous Module", "Previous module", Kind.Ghost, Icon.ChevronLeft, ref x, () => cameraController?.FocusPrevious());
+        DockButton(dock, "Next Module", "Next module", Kind.Ghost, Icon.ChevronRight, ref x, () => cameraController?.FocusNext(), true);
+        DockDivider(dock, ref x);
+        DockButton(dock, "Reset View", "Reset view", Kind.Ghost, Icon.Focus, ref x, () => cameraController?.FocusOverview());
+
+        UITheme.BottomCenter(dock, 0f, 16f, x + 4f, 60f);
+    }
+
+    private Button DockButton(RectTransform dock, string name, string label, Kind kind, Icon icon, ref float x, Action action,
+        bool trailing = false, string altLabel = null)
+    {
+        Button button = UITheme.MakeButton(name, dock, label, kind, 13.5f, icon, 12f, trailing, 18f, W.Bold, 14f);
+        float w = UITheme.PreferredWidth(button);
+        if (altLabel != null)
+        {
+            UITheme.SetLabel(button, altLabel);
+            w = Mathf.Max(w, UITheme.PreferredWidth(button));
+            UITheme.SetLabel(button, label);
+        }
+        UITheme.TopLeft((RectTransform)button.transform, x, 8f, w, 44f);
+        x += w + 4f;
+        button.onClick.AddListener(() => action());
+        return button;
+    }
+
+    private static void DockDivider(RectTransform dock, ref float x)
+    {
+        Image line = UITheme.Panel("Divider", dock, UITheme.Line);
+        UITheme.TopLeft(line.rectTransform, x + 3f, 18f, 1f, 24f);
+        x += 10f;
     }
 
     /// <summary>Arms/disarms the pipe mass-flow probe; the button stays lit while it is armed
@@ -637,41 +798,94 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         Refresh();
     }
 
-    private void BuildHelpPanel(Transform parent)
-    {
-        helpPanel = CreatePanel("Help Panel", parent, new Color32(9, 26, 36, 250)).gameObject;
-        RectTransform panel = helpPanel.GetComponent<RectTransform>();
-        panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(0.5f, 0.5f);
-        panel.sizeDelta = new Vector2(620f, 420f);
-        AddPanelTitle(panel, "ABOUT THIS DIGITAL TWIN");
-        Text body = CreateText("Body", panel,
-            "Explore the Power-to-Methanol process from hydrogen production to methanol storage.\n\n" +
-            "• New here? START TUTORIAL below runs a step-by-step tour of every section.\n" +
-            "• Use the top navigation or module arrows to focus equipment.\n" +
-            "• Select equipment to open educational controls and live values.\n" +
-            "• Stream colours show qualitative material movement through the actual pipe routes.\n" +
-            "• Arrow keys orbit; A/D pan; W/S zoom; Shift + arrows cycle modules.\n\n" +
-            "Important: values and animations are simplified educational representations. " +
-            "This application is not CFD, Aspen, industrial control software, or a validated process model.",
-            16, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Pin(body.rectTransform, Vector2.zero, Vector2.one, new Vector2(28f, 62f), new Vector2(-28f, -64f));
+    // ---- about box -------------------------------------------------------------------
 
-        Button tutorial = CreateButton("Start Tutorial", panel, "START TUTORIAL", Hex("1E7A46"), 13);
-        AnchorBottomLeft(tutorial.GetComponent<RectTransform>(), new Vector2(24f, 18f), new Vector2(200f, 36f));
+    private void BuildHelpPanel()
+    {
+        GameObject canvasObject = new GameObject("Help Canvas");
+        canvasObject.transform.SetParent(transform, false);
+        helpCanvas = canvasObject.AddComponent<Canvas>();
+        helpCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        // Above the dashboard, the module drawers and the probe; below the tour (300).
+        helpCanvas.sortingOrder = 200;
+        UITheme.ConfigureScaler(canvasObject.AddComponent<CanvasScaler>());
+        canvasObject.AddComponent<GraphicRaycaster>();
+
+        RectTransform root = UITheme.NewRect("Help Panel", canvasObject.transform);
+        UITheme.Fill(root);
+        helpPanel = root.gameObject;
+        Image scrim = UITheme.ScrimLayer("Scrim", root, UITheme.WithAlpha(UITheme.ShadowInk, 0.42f));
+        Button scrimButton = scrim.gameObject.AddComponent<Button>();
+        scrimButton.transition = Selectable.Transition.None;
+        scrimButton.onClick.AddListener(() => SetPopupVisible(helpPanel, false, helpCard));
+
+        const float width = 640f, height = 470f;
+        RectTransform card = UITheme.Card("About Card", root, 18f, Color.white, 48f, 20f, 0.3f);
+        UITheme.Center(card, width, height);
+        helpCard = card;
+
+        Image logo = UITheme.Panel("Logo", card, UITheme.Accent, 12f);
+        UITheme.TopLeft(logo.rectTransform, 24f, 24f, 44f, 44f);
+        Image logoIcon = UITheme.IconImage("Icon", logo.transform, Icon.Logo, 26f, Color.white);
+        UITheme.Center(logoIcon.rectTransform, 26f, 26f);
+        Txt(card, "Title", "About this digital twin", 19f, W.ExtraBold, UITheme.Ink, 82f, 25f, 400f, 24f);
+        Txt(card, "Subtitle", "Power-to-Methanol · educational simulation", 12.5f, W.SemiBold, UITheme.Subtle, 82f, 49f, 400f, 18f);
+        Button close = UITheme.IconButton("Close X", card, Icon.Close, Kind.Secondary, 36f, 16f);
+        UITheme.TopRight((RectTransform)close.transform, 20f, 28f, 36f, 36f);
+        close.onClick.AddListener(() => SetPopupVisible(helpPanel, false, helpCard));
+
+        Txt(card, "Intro", "Explore the Power-to-Methanol process, from hydrogen production to methanol storage.",
+            14f, W.SemiBold, UITheme.Ink, 24f, 90f, width - 48f, 20f, TextAnchor.UpperLeft, true);
+
+        string[] bullets =
+        {
+            "New here? <b>Start tutorial</b> runs a step-by-step tour of every section.",
+            "Use the top navigation, or the module arrows in the dock, to focus equipment.",
+            "Hover a piece of equipment and click its label to open live values and controls.",
+            "Pipe colours show qualitative material movement through the actual pipe routes.",
+            "Mouse: drag to orbit, Shift + drag to pan, scroll to zoom. Keys: arrows orbit, A/D pan, W/S zoom, Shift + arrows cycle modules.",
+        };
+        float y = 124f;
+        for (int i = 0; i < bullets.Length; i++)
+        {
+            Image dot = UITheme.Dot("Bullet " + i, card, 6f, UITheme.Accent);
+            UITheme.TopLeft(dot.rectTransform, 26f, y + 7f, 6f, 6f);
+            Text t = Txt(card, "Point " + i, bullets[i], 13.5f, W.Medium, UITheme.Ink2, 42f, y, width - 66f, 20f, TextAnchor.UpperLeft, true);
+            float h = Mathf.Max(20f, t.preferredHeight);
+            t.rectTransform.sizeDelta = new Vector2(width - 66f, h);
+            y += h + 8f;
+        }
+
+        Image note = UITheme.Panel("Disclaimer", card, UITheme.WarningSoft, 12f);
+        UITheme.TopLeft(note.rectTransform, 24f, y + 8f, width - 48f, 60f);
+        Image alert = UITheme.IconImage("Icon", note.transform, Icon.Alert, 18f, UITheme.WarningInk);
+        UITheme.TopLeft(alert.rectTransform, 14f, 13f, 18f, 18f);
+        Txt(note.transform, "Text",
+            "Values and animations are simplified educational representations. This is not CFD, Aspen, industrial control software, or a validated process model.",
+            12.5f, W.SemiBold, UITheme.WarningInk, 42f, 10f, width - 48f - 58f, 42f, TextAnchor.UpperLeft, true);
+
+        Button tutorial = UITheme.MakeButton("Start Tutorial", card, "Start tutorial", Kind.Primary, 14f, Icon.PlayCircle, 10f);
+        float tw = UITheme.PreferredWidth(tutorial) + 8f;
+        UITheme.BottomLeft((RectTransform)tutorial.transform, 24f, 22f, tw, 44f);
         tutorial.onClick.AddListener(StartTutorial);
 
-        Button close = CreateButton("Close", panel, "CLOSE", AccentColor, 13);
-        AnchorBottomRight(close.GetComponent<RectTransform>(), new Vector2(-24f, 18f), new Vector2(120f, 36f));
-        close.onClick.AddListener(() => SetPopupVisible(helpPanel, false));
+        Button closeButton = UITheme.MakeButton("Close", card, "Close", Kind.Secondary, 14f, null, 10f);
+        UITheme.BottomRight((RectTransform)closeButton.transform, 24f, 22f, 112f, 44f);
+        closeButton.onClick.AddListener(() => SetPopupVisible(helpPanel, false, helpCard));
+
+        float contentHeight = y + 8f + 60f + 22f + 44f + 22f;
+        card.sizeDelta = new Vector2(width, contentHeight);
         helpPanel.SetActive(false);
     }
 
     /// <summary>Closes the about box and hands over to the guided tour.</summary>
     private void StartTutorial()
     {
-        SetPopupVisible(helpPanel, false);
+        SetPopupVisible(helpPanel, false, helpCard);
         TutorialRuntime.Instance?.StartTutorial();
     }
+
+    // ---- analytics window ----------------------------------------------------------------
 
     private void BuildAnalyticsWindow(Transform parent)
     {
@@ -691,30 +905,30 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         }
         bool external = externalAnalytics != null;
 
-        analyticsWindow = CreatePanel("Analytics Window", parent, new Color32(9, 29, 41, 250)).gameObject;
-        RectTransform win = analyticsWindow.GetComponent<RectTransform>();
+        RectTransform win;
         if (external)
         {
             // The OS window supplies the frame, title and close button; fill its client area.
-            Pin(win, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            win = UITheme.NewRect("Analytics Window", parent);
+            win.gameObject.AddComponent<UIRaycastTarget>();
+            Image bg = UITheme.Panel("Surface", win, Color.white);
+            UITheme.Fill(bg.rectTransform);
+            UITheme.Fill(win);
         }
         else
         {
-            win.anchorMin = win.anchorMax = new Vector2(0.5f, 0.5f);
-            win.pivot = new Vector2(0.5f, 0.5f);
-            win.sizeDelta = new Vector2(1180f, 780f);
-            win.anchoredPosition = Vector2.zero;
-
-            Outline outline = analyticsWindow.AddComponent<Outline>();
-            outline.effectColor = AccentColor;
-            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            win = UITheme.Card("Analytics Window", parent, 18f, Color.white, 48f, 20f, 0.3f);
+            // Same top edge and height as the module control drawer, so the two sit side by side.
+            UITheme.TopLeft(win, 16f, 92f, 1004f, 626f);
         }
+        analyticsWindow = win.gameObject;
 
         // Title bar doubles as the drag handle, like a normal OS window.
-        RectTransform titleBar = CreatePanel("Title Bar", win, HeaderColor);
-        Pin(titleBar, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -40f), Vector2.zero);
-        Text titleText = CreateText("Window Title", titleBar, "ANALYTICS & INSIGHTS", 14, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
-        Pin(titleText.rectTransform, Vector2.zero, Vector2.one, new Vector2(16f, 0f), new Vector2(-206f, 0f));
+        RectTransform titleBar = UITheme.NewRect("Title Bar", win);
+        UITheme.TopBand(titleBar, 0f, 0f, 0f, 64f);
+        titleBar.gameObject.AddComponent<UIRaycastTarget>();
+        Text titleText = UITheme.Label("Window Title", titleBar, "Analytics & insights", 17f, W.ExtraBold, UITheme.Ink);
+        UITheme.Fill(titleText.rectTransform, 24f, 0f, 400f, 0f);
 
         if (!external)
         {
@@ -723,91 +937,107 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             drag.canvas = canvas;
         }
 
-        // Available regardless of which tab (Stats/Visualise) is active, so the window is
-        // fully self-contained for controlling the run. As a separate OS window the close
-        // button is the system one, so the run controls move into its place.
-        float controlsShift = external ? 42f : 0f;
-        Button windowRun = CreateButton("Window Run Toggle", titleBar, "PAUSE", AccentColor, 11);
-        Pin(windowRun.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-200f + controlsShift, 6f), new Vector2(-102f + controlsShift, -6f));
-        windowRun.onClick.AddListener(ToggleRunning);
-        runToggleButtons.Add(windowRun);
-
-        Button windowReset = CreateButton("Window Reset", titleBar, "RESET", Hex("7A2A2A"), 11);
-        Pin(windowReset.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-98f + controlsShift, 6f), new Vector2(-46f + controlsShift, -6f));
-        windowReset.onClick.AddListener(ResetSimulation);
-
+        // Right-hand cluster, laid out from the right edge inwards.
+        float right = 16f;
         if (!external)
         {
-            Button close = CreateButton("Close Window", titleBar, "X", HeaderColor, 14);
-            Pin(close.GetComponent<RectTransform>(), new Vector2(1f, 0f), Vector2.one, new Vector2(-40f, 4f), new Vector2(-4f, -4f));
+            Button close = UITheme.IconButton("Close Window", titleBar, Icon.Close, Kind.Secondary, 36f, 16f);
+            UITheme.TopRight((RectTransform)close.transform, right, 14f, 36f, 36f);
             close.onClick.AddListener(CloseAnalyticsWindow);
+            right += 36f + 8f;
         }
 
-        // Tab bar
-        RectTransform tabBar = CreatePanel("Tab Bar", win, PanelColor);
-        Pin(tabBar, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -76f), new Vector2(0f, -40f));
+        Button windowReset = UITheme.MakeButton("Window Reset", titleBar, "Reset", Kind.DangerOutline, 13f, Icon.Reset, 10f, false, 15f, W.Bold, 12f);
+        float rw = UITheme.PreferredWidth(windowReset);
+        UITheme.TopRight((RectTransform)windowReset.transform, right, 14f, rw, 36f);
+        windowReset.onClick.AddListener(ResetSimulation);
+        right += rw + 8f;
 
-        analyticsStatsTabButton = CreateButton("Stats Tab", tabBar, "STATS", AccentColor, 12);
-        Pin(analyticsStatsTabButton.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f));
+        Button windowRun = UITheme.MakeButton("Window Run Toggle", titleBar, "Pause", Kind.Outline, 13f, Icon.Pause, 10f, false, 15f, W.Bold, 12f);
+        UITheme.SetLabel(windowRun, "Resume");
+        float runW = UITheme.PreferredWidth(windowRun);
+        UITheme.SetLabel(windowRun, "Pause");
+        UITheme.TopRight((RectTransform)windowRun.transform, right, 14f, runW, 36f);
+        windowRun.onClick.AddListener(ToggleRunning);
+        runToggleButtons.Add(windowRun);
+        right += runW + 12f;
+
+        Image sep = UITheme.Panel("Divider", titleBar, UITheme.Line);
+        UITheme.TopRight(sep.rectTransform, right, 20f, 1f, 24f);
+        right += 13f;
+
+        // Stats / Visualise segmented control
+        Image segment = UITheme.Panel("Tab Bar", titleBar, UITheme.Sunken, 20f, true);
+        analyticsStatsTabButton = UITheme.MakeButton("Stats Tab", segment.transform, "Stats", Kind.Segment, 13f, null, 16f, false, 16f, W.ExtraBold, 16f);
+        analyticsVisualiseTabButton = UITheme.MakeButton("Visualise Tab", segment.transform, "Visualise", Kind.Segment, 13f, null, 16f, false, 16f, W.ExtraBold, 16f);
+        float sw = UITheme.PreferredWidth(analyticsStatsTabButton);
+        float vw = UITheme.PreferredWidth(analyticsVisualiseTabButton);
+        UITheme.TopLeft((RectTransform)analyticsStatsTabButton.transform, 4f, 4f, sw, 32f);
+        UITheme.TopLeft((RectTransform)analyticsVisualiseTabButton.transform, 6f + sw, 4f, vw, 32f);
+        UITheme.TopRight(segment.rectTransform, right, 12f, sw + vw + 10f, 40f);
         analyticsStatsTabButton.onClick.AddListener(() => SetAnalyticsTab(AnalyticsTab.Stats));
-
-        analyticsVisualiseTabButton = CreateButton("Visualise Tab", tabBar, "VISUALISE", HeaderColor, 12);
-        Pin(analyticsVisualiseTabButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
         analyticsVisualiseTabButton.onClick.AddListener(() => SetAnalyticsTab(AnalyticsTab.Visualise));
 
         // Content area
-        RectTransform content = CreatePanel("Content", win, new Color32(9, 29, 41, 0));
-        Pin(content, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0f, -76f));
+        RectTransform content = UITheme.NewRect("Content", win);
+        UITheme.Fill(content, 0f, 64f, 0f, 0f);
 
-        analyticsStatsTab = new GameObject("Stats Tab Content");
-        analyticsStatsTab.transform.SetParent(content, false);
-        RectTransform statsRect = analyticsStatsTab.AddComponent<RectTransform>();
-        Pin(statsRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        BuildStatsTab(content);
 
-        analyticsSummaryText = CreateText("Analytics Summary", statsRect, "", 13, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Pin(analyticsSummaryText.rectTransform, new Vector2(0f, 0.80f), Vector2.one, new Vector2(18f, 0f), new Vector2(-18f, -10f));
-
-        string[] metricNames = { "Overall efficiency", "CO2 capture", "Reactor yield", "Methanol purity", "Storage fill" };
-        Color[] metricColors = { AccentColor, Hex("20C997"), Hex("FF7043"), Hex("A855F7"), Hex("EBFF33") };
-        Func<PlantProcessSimulator.ProcessSnapshot, float>[] metricSelectors =
-        {
-            s => s.overallEfficiencyPercent,
-            s => s.captureEfficiencyPercent,
-            s => s.reactorYieldPercent,
-            s => s.methanolPurityPercent,
-            s => s.storageFillPercent
-        };
-        for (int i = 0; i < metricNames.Length; i++) AddAnalyticsBar(statsRect, metricNames[i], metricColors[i], 0.66f - i * 0.10f, metricSelectors[i]);
-
-        analyticsInsightsText = CreateText("Insights", statsRect, "", 12, FontStyle.Normal, TextAnchor.UpperLeft, MutedTextColor);
-        Pin(analyticsInsightsText.rectTransform, new Vector2(0f, 0.02f), new Vector2(1f, 0.15f), new Vector2(18f, 0f), new Vector2(-18f, 0f));
-
-        analyticsVisualiseTab = new GameObject("Visualise Tab Content");
+        analyticsVisualiseTab = new GameObject("Visualise Tab Content", typeof(RectTransform));
         analyticsVisualiseTab.transform.SetParent(content, false);
-        RectTransform visRect = analyticsVisualiseTab.AddComponent<RectTransform>();
-        Pin(visRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        RectTransform visRect = (RectTransform)analyticsVisualiseTab.transform;
+        UITheme.Fill(visRect);
 
-        RectTransform subTabBar = CreatePanel("Visualise Sub Tabs", visRect, PanelColor);
-        Pin(subTabBar, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -30f), Vector2.zero);
-        string[] subTabNames = { "REACTOR YIELD", "EFFICIENCY", "OFAT TIMELINE", "LIVE PROGRESS" };
+        RectTransform subTabBar = UITheme.NewRect("Visualise Sub Tabs", visRect);
+        UITheme.TopBand(subTabBar, 0f, 0f, 0f, 50f);
+        Image subRule = UITheme.Panel("Rule", subTabBar, UITheme.Line);
+        UITheme.BottomBand(subRule.rectTransform, 0f, 0f, 0f, 1f);
+        string[] subTabNames = { "Reactor yield", "Efficiency", "OFAT timeline", "Live progress" };
         subTabButtons.Clear();
+        float tx = 20f;
         for (int i = 0; i < subTabNames.Length; i++)
         {
             int idx = i;
-            Button b = CreateButton("SubTab " + i, subTabBar, subTabNames[i], i == 0 ? AccentColor : HeaderColor, 11);
-            Pin(b.GetComponent<RectTransform>(), new Vector2(i * 0.25f, 0f), new Vector2((i + 1) * 0.25f, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
+            Button b = UITheme.MakeButton("SubTab " + i, subTabBar, subTabNames[i], Kind.Tab, 13.5f, null, 17f, false, 16f, W.ExtraBold, 15f);
+            float w = UITheme.PreferredWidth(b);
+            UITheme.TopLeft((RectTransform)b.transform, tx, 4f, w, 34f);
+            tx += w + 6f;
             b.onClick.AddListener(() => SelectSubTab((VisualiseSubTab)idx));
             subTabButtons.Add(b);
         }
 
-        RectTransform subContent = CreatePanel("Visualise Sub Content", visRect, PanelLightColor);
-        Pin(subContent, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0f, -30f));
+        // Live KPI strip above the graphs
+        RectTransform kpiRow = UITheme.NewRect("Visualise KPI Row", visRect);
+        UITheme.TopBand(kpiRow, 22f, 64f, 22f, 64f);
+        string[] kpiNames = { "Overall efficiency", "CO₂ capture", "Reactor yield", "Methanol purity", "Storage fill" };
+        Color[] kpiColors = { MetricEfficiency, MetricCapture, MetricYield, MetricPurity, MetricStorage };
+        kpiValues = new UIValueText[5];
+        kpiBars = new UIProgressBar[5];
+        for (int i = 0; i < 5; i++)
+        {
+            Image tile = UITheme.Panel(kpiNames[i], kpiRow, UITheme.Sunken2, 12f);
+            tile.rectTransform.anchorMin = new Vector2(i * 0.2f, 0f);
+            tile.rectTransform.anchorMax = new Vector2((i + 1) * 0.2f, 1f);
+            tile.rectTransform.offsetMin = new Vector2(i == 0 ? 0f : 5f, 0f);
+            tile.rectTransform.offsetMax = new Vector2(i == 4 ? 0f : -5f, 0f);
+            UITheme.Border(tile.rectTransform, UITheme.Line, 12f);
+            Text caption = UITheme.Label("Caption", tile.transform, kpiNames[i], 11.5f, W.Bold, UITheme.Subtle);
+            UITheme.TopBand(caption.rectTransform, 12f, 8f, 8f, 16f);
+            kpiValues[i] = UITheme.ValueText("Value", tile.transform, 17f, 11.5f, UITheme.Ink, UITheme.Muted);
+            UITheme.TopBand((RectTransform)kpiValues[i].transform, 12f, 25f, 8f, 22f);
+            kpiBars[i] = UITheme.ProgressBar("Bar", tile.transform, kpiColors[i], 4f);
+            UITheme.TopBand((RectTransform)kpiBars[i].transform, 12f, 51f, 12f, 4f);
+        }
+
+        RectTransform subContent = UITheme.NewRect("Visualise Sub Content", visRect);
+        UITheme.Fill(subContent, 22f, 142f, 22f, 16f);
 
         float designMethanol = PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance.DesignMethanolKgH : 1250f;
 
-        subTabGroups[0] = BuildCorrelationSubTab(subContent, "Reactor Yield", "Reactor Yield (%)",
+        subTabGroups[0] = BuildCorrelationSubTab(subContent, "Reactor Yield", "Reactor yield", "Reactor yield (%)",
             s => s.reactorYieldPercent, yieldParamButtons, yieldGraphGroups, true);
-        subTabGroups[1] = BuildCorrelationSubTab(subContent, "Efficiency", "Overall Efficiency (%)",
+        subTabGroups[1] = BuildCorrelationSubTab(subContent, "Efficiency", "Overall efficiency", "Overall efficiency (%)",
             s => s.overallEfficiencyPercent, efficiencyParamButtons, efficiencyGraphGroups, false);
         subTabGroups[2] = BuildOfatTimelineSubTab(subContent);
         subTabGroups[3] = BuildLiveSubTab(subContent, designMethanol);
@@ -820,36 +1050,110 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         if (external) externalAnalytics.AssignLayerRecursively();
     }
 
-    private CanvasGroup BuildCorrelationSubTab(RectTransform parent, string kind, string yLabel,
+    private void BuildStatsTab(RectTransform content)
+    {
+        analyticsStatsTab = new GameObject("Stats Tab Content", typeof(RectTransform));
+        analyticsStatsTab.transform.SetParent(content, false);
+        RectTransform statsRect = (RectTransform)analyticsStatsTab.transform;
+        UITheme.Fill(statsRect, 22f, 4f, 22f, 18f);
+
+        Image rule = UITheme.Panel("Rule", content, UITheme.Line);
+        UITheme.TopBand(rule.rectTransform, 0f, 0f, 0f, 1f);
+
+        // Throughput tiles
+        RectTransform throughput = UITheme.NewRect("Throughput", statsRect);
+        UITheme.TopBand(throughput, 0f, 14f, 0f, 84f);
+        string[] names = { "Methanol production", "Captured CO₂", "Syngas feed", "Recycle gas" };
+        Icon[] icons = { Icon.Flask, Icon.Tank, Icon.Waves, Icon.Reset };
+        Color[] colors = { MetricYield, MetricCapture, UITheme.Accent, MetricPurity };
+        throughputValues = new UIValueText[4];
+        for (int i = 0; i < 4; i++)
+        {
+            Image tile = UITheme.Panel(names[i], throughput, UITheme.Sunken2, 14f);
+            tile.rectTransform.anchorMin = new Vector2(i * 0.25f, 0f);
+            tile.rectTransform.anchorMax = new Vector2((i + 1) * 0.25f, 1f);
+            tile.rectTransform.offsetMin = new Vector2(i == 0 ? 0f : 6f, 0f);
+            tile.rectTransform.offsetMax = new Vector2(i == 3 ? 0f : -6f, 0f);
+            UITheme.Border(tile.rectTransform, UITheme.Line, 14f);
+            Image badge = UITheme.Badge("Badge", tile.transform, icons[i], colors[i], 30f, 9f, 17f);
+            UITheme.TopLeft(badge.rectTransform, 14f, 14f, 30f, 30f);
+            Text caption = UITheme.Label("Caption", tile.transform, names[i], 12.5f, W.Bold, UITheme.Subtle);
+            UITheme.TopBand(caption.rectTransform, 54f, 20f, 8f, 18f);
+            throughputValues[i] = UITheme.ValueText("Value", tile.transform, 24f, 13f, UITheme.Ink, UITheme.Muted);
+            UITheme.TopBand((RectTransform)throughputValues[i].transform, 16f, 48f, 8f, 30f);
+        }
+
+        // Key figures
+        RectTransform figures = UITheme.NewRect("Key Figures", statsRect);
+        UITheme.TopBand(figures, 0f, 114f, 0f, 300f);
+        Image figuresBg = UITheme.Panel("Surface", figures, Color.white, 14f);
+        UITheme.Fill(figuresBg.rectTransform);
+        UITheme.Border(figures, UITheme.Line, 14f);
+        Text figTitle = UITheme.Label("Title", figures, "Key figures", 14f, W.ExtraBold, UITheme.Ink);
+        UITheme.TopBand(figTitle.rectTransform, 20f, 16f, 20f, 20f);
+        Text figCaption = UITheme.Label("Caption", figures, "Live from the running plant", 12f, W.SemiBold, UITheme.Subtle, TextAnchor.MiddleRight);
+        UITheme.TopBand(figCaption.rectTransform, 20f, 16f, 20f, 20f);
+
+        string[] metricNames = { "Overall efficiency", "CO₂ capture", "Reactor yield", "Methanol purity", "Storage fill" };
+        Color[] metricColors = { MetricEfficiency, MetricCapture, MetricYield, MetricPurity, MetricStorage };
+        metricValues = new UIValueText[5];
+        metricBars = new UIProgressBar[5];
+        for (int i = 0; i < metricNames.Length; i++)
+        {
+            float y = 52f + i * 48f;
+            Image swatch = UITheme.Dot("Swatch", figures, 10f, metricColors[i]);
+            UITheme.TopLeft(swatch.rectTransform, 20f, y + 5f, 10f, 10f);
+            Text label = UITheme.Label(metricNames[i], figures, metricNames[i], 13.5f, W.SemiBold, UITheme.Ink2);
+            UITheme.TopBand(label.rectTransform, 38f, y, 20f, 20f);
+            metricValues[i] = UITheme.ValueText(metricNames[i] + " Value", figures, 15f, 11.5f, UITheme.Ink, UITheme.Muted, TextAnchor.LowerRight);
+            RectTransform vr = (RectTransform)metricValues[i].transform;
+            UITheme.TopBand(vr, 38f, y - 2f, 20f, 22f);
+            metricBars[i] = UITheme.ProgressBar(metricNames[i] + " Bar", figures, metricColors[i], 8f);
+            UITheme.TopBand((RectTransform)metricBars[i].transform, 20f, y + 25f, 20f, 8f);
+        }
+
+        // Insights
+        Image insights = UITheme.Panel("Insights", statsRect, UITheme.AccentSoft, 14f);
+        UITheme.TopBand(insights.rectTransform, 0f, 430f, 0f, 70f);
+        Image bulb = UITheme.IconImage("Icon", insights.transform, Icon.Bulb, 20f, UITheme.Accent);
+        UITheme.TopLeft(bulb.rectTransform, 18f, 16f, 20f, 20f);
+        Text insightsTitle = UITheme.Label("Title", insights.transform, "Insights", 13f, W.ExtraBold, UITheme.AccentInk);
+        UITheme.TopBand(insightsTitle.rectTransform, 48f, 12f, 18f, 18f);
+        analyticsInsightsText = UITheme.Label("Insights Text", insights.transform, "", 13f, W.SemiBold, UITheme.AccentInk, TextAnchor.UpperLeft, true);
+        UITheme.TopBand(analyticsInsightsText.rectTransform, 48f, 32f, 18f, 34f);
+    }
+
+    private CanvasGroup BuildCorrelationSubTab(RectTransform parent, string kind, string display, string yLabel,
         Func<PlantProcessSimulator.ProcessSnapshot, float> ySelector,
         List<Button> paramButtons, List<CanvasGroup> graphGroups, bool isYield)
     {
         GameObject panel = new GameObject(kind + " Sub Panel", typeof(RectTransform));
         RectTransform panelRect = panel.GetComponent<RectTransform>();
         panelRect.SetParent(parent, false);
-        Pin(panelRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        UITheme.Fill(panelRect);
         CanvasGroup group = AddHiddenCanvasGroup(panel);
 
-        RectTransform paramRow = CreatePanel(kind + " Param Row", panelRect, PanelColor);
-        Pin(paramRow, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -26f), Vector2.zero);
-        Text lbl = CreateText(kind + " Param Label", paramRow, "PARAMETER:", 9, FontStyle.Bold, TextAnchor.MiddleLeft, MutedTextColor);
-        Pin(lbl.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(8f, 0f), new Vector2(78f, 0f));
+        RectTransform paramRow = UITheme.NewRect(kind + " Param Row", panelRect);
+        UITheme.TopBand(paramRow, 0f, 0f, 0f, 32f);
+        Text lbl = UITheme.Label(kind + " Param Label", paramRow, "Plot against", 12.5f, W.ExtraBold, UITheme.Subtle);
+        UITheme.TopLeft(lbl.rectTransform, 0f, 0f, 90f, 32f);
 
-        RectTransform graphHost = new GameObject("Graph Host", typeof(RectTransform)).GetComponent<RectTransform>();
-        graphHost.SetParent(panelRect, false);
-        Pin(graphHost, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0f, -26f));
+        RectTransform graphHost = UITheme.NewRect("Graph Host", panelRect);
+        UITheme.Fill(graphHost, 0f, 44f, 0f, 0f);
 
-        float bw = (1f - 0.09f) / ReactorParamNames.Length;
+        float x = 92f;
         for (int p = 0; p < ReactorParamNames.Length; p++)
         {
             int pi = p;
-            Button b = CreateButton(kind + " Param " + p, paramRow, ReactorParamNames[p], p == 0 ? AccentColor : HeaderColor, 9);
-            Pin(b.GetComponent<RectTransform>(), new Vector2(0.09f + p * bw, 0f), new Vector2(0.09f + (p + 1) * bw, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
+            Button b = UITheme.MakeButton(kind + " Param " + p, paramRow, ReactorParamNames[p], Kind.Chip, 12.5f, null, 8f, false, 16f, W.Bold, 12f);
+            float w = UITheme.PreferredWidth(b);
+            UITheme.TopLeft((RectTransform)b.transform, x, 0f, w, 32f);
+            x += w + 6f;
             if (isYield) b.onClick.AddListener(() => SelectYieldParam(pi));
             else b.onClick.AddListener(() => SelectEfficiencyParam(pi));
             paramButtons.Add(b);
 
-            CanvasGroup cg = BuildCorrelationGraph(graphHost, $"{kind} vs {ReactorParamNames[p]}",
+            CanvasGroup cg = BuildCorrelationGraph(graphHost, $"{display} vs {ReactorParamTitles[p]}",
                 ReactorParamAxisLabels[p], yLabel, ReactorParamSelectors[p], ySelector,
                 ReactorParamMin[p], ReactorParamMax[p], 0f, 100f);
             graphGroups.Add(cg);
@@ -863,7 +1167,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         GameObject panel = new GameObject("OFAT Timeline Sub Panel", typeof(RectTransform));
         RectTransform panelRect = panel.GetComponent<RectTransform>();
         panelRect.SetParent(parent, false);
-        Pin(panelRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        UITheme.Fill(panelRect);
         CanvasGroup group = AddHiddenCanvasGroup(panel);
 
         GameObject go = new GameObject("OFAT Timeline Graph", typeof(RectTransform));
@@ -877,7 +1181,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         GameObject panel = new GameObject("Live Sub Panel", typeof(RectTransform));
         RectTransform panelRect = panel.GetComponent<RectTransform>();
         panelRect.SetParent(parent, false);
-        Pin(panelRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        UITheme.Fill(panelRect);
         CanvasGroup group = AddHiddenCanvasGroup(panel);
 
         BuildLiveProgressContent(panelRect, designMethanol);
@@ -896,7 +1200,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
             subTabGroups[i].blocksRaycasts = visible;
         }
         for (int i = 0; i < subTabButtons.Count; i++)
-            if (subTabButtons[i] != null) subTabButtons[i].GetComponent<Image>().color = (int)tab == i ? AccentColor : HeaderColor;
+            subTabButtons[i].Skin()?.SetActive((int)tab == i);
         ApplyReactorLock();
     }
 
@@ -918,7 +1222,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         if (index < 0 || index >= groups.Count) return false;
         for (int i = 0; i < buttons.Count; i++)
-            if (buttons[i] != null) buttons[i].GetComponent<Image>().color = i == index ? AccentColor : HeaderColor;
+            buttons[i].Skin()?.SetActive(i == index);
         for (int i = 0; i < groups.Count; i++)
         {
             bool visible = i == index;
@@ -1038,26 +1342,28 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private readonly Dictionary<GameObject, Coroutine> popupAnimations = new Dictionary<GameObject, Coroutine>();
 
-    /// <summary>Opens/closes a popup (analytics window, help panel) with a quick scale +
-    /// fade tween instead of an instant SetActive toggle.</summary>
-    private void SetPopupVisible(GameObject popup, bool visible)
+    /// <summary>Opens/closes a popup (analytics window, about box) with a quick scale + fade
+    /// tween. <paramref name="scaleTarget"/> is what scales (the card inside a full-screen
+    /// modal); the popup root itself fades.</summary>
+    private void SetPopupVisible(GameObject popup, bool visible, RectTransform scaleTarget = null)
     {
         if (popup == null) return;
+        if (!visible && !popup.activeSelf) return;
         if (popupAnimations.TryGetValue(popup, out Coroutine running) && running != null) StopCoroutine(running);
         if (visible) popup.SetActive(true);
-        popupAnimations[popup] = StartCoroutine(AnimatePopup(popup, visible));
+        popupAnimations[popup] = StartCoroutine(AnimatePopup(popup, visible, scaleTarget));
     }
 
-    private IEnumerator AnimatePopup(GameObject popup, bool opening)
+    private IEnumerator AnimatePopup(GameObject popup, bool opening, RectTransform scaleTarget)
     {
-        RectTransform rect = popup.GetComponent<RectTransform>();
+        RectTransform rect = scaleTarget != null ? scaleTarget : popup.GetComponent<RectTransform>();
         CanvasGroup group = popup.GetComponent<CanvasGroup>();
         if (group == null) group = popup.AddComponent<CanvasGroup>();
 
-        const float duration = 0.16f;
-        Vector3 fromScale = opening ? Vector3.one * 0.92f : rect.localScale;
-        Vector3 toScale = opening ? Vector3.one : Vector3.one * 0.92f;
-        float fromAlpha = group.alpha;
+        const float duration = 0.18f;
+        Vector3 fromScale = opening ? Vector3.one * 0.96f : rect.localScale;
+        Vector3 toScale = opening ? Vector3.one : Vector3.one * 0.96f;
+        float fromAlpha = opening ? 0f : group.alpha;
         float toAlpha = opening ? 1f : 0f;
 
         float t = 0f;
@@ -1072,7 +1378,11 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
         rect.localScale = toScale;
         group.alpha = toAlpha;
-        if (!opening) popup.SetActive(false);
+        if (!opening)
+        {
+            popup.SetActive(false);
+            rect.localScale = Vector3.one;
+        }
         popupAnimations.Remove(popup);
     }
 
@@ -1081,8 +1391,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         currentAnalyticsTab = tab;
         if (analyticsStatsTab != null) analyticsStatsTab.SetActive(tab == AnalyticsTab.Stats);
         if (analyticsVisualiseTab != null) analyticsVisualiseTab.SetActive(tab == AnalyticsTab.Visualise);
-        if (analyticsStatsTabButton != null) analyticsStatsTabButton.GetComponent<Image>().color = tab == AnalyticsTab.Stats ? AccentColor : HeaderColor;
-        if (analyticsVisualiseTabButton != null) analyticsVisualiseTabButton.GetComponent<Image>().color = tab == AnalyticsTab.Visualise ? AccentColor : HeaderColor;
+        analyticsStatsTabButton.Skin()?.SetActive(tab == AnalyticsTab.Stats);
+        analyticsVisualiseTabButton.Skin()?.SetActive(tab == AnalyticsTab.Visualise);
         // The reactor-slider lock only applies while a locking sub-tab is actually on screen.
         ApplyReactorLock();
     }
@@ -1109,32 +1419,31 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     }
 
     /// <summary>
-    /// The "Live Progress" sub-tab: a small EFFICIENCY / METHANOL OUTPUT toggle row above two
+    /// The "Live Progress" sub-tab: an Efficiency / Methanol output segmented control above two
     /// stacked LiveGraphRuntime instances (both keep sampling continuously in the background
     /// via their own CanvasGroup so switching never loses history). The output graph gets its
     /// area shaded and shows the tank's cumulative stored amount on hover.
     /// </summary>
     private void BuildLiveProgressContent(RectTransform container, float designMethanol)
     {
-        RectTransform toggleRow = CreatePanel("Sub Toggle Row", container, PanelColor);
-        Pin(toggleRow, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -28f), Vector2.zero);
-
-        liveProgressEfficiencyButton = CreateButton("Efficiency Toggle", toggleRow, "EFFICIENCY", AccentColor, 11);
-        Pin(liveProgressEfficiencyButton.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f));
+        Image toggleRow = UITheme.Panel("Sub Toggle Row", container, UITheme.Sunken, 18f, true);
+        liveProgressEfficiencyButton = UITheme.MakeButton("Efficiency Toggle", toggleRow.transform, "Efficiency", Kind.Segment, 13f, null, 14f, false, 16f, W.ExtraBold, 16f);
+        liveProgressOutputButton = UITheme.MakeButton("Output Toggle", toggleRow.transform, "Methanol output", Kind.Segment, 13f, null, 14f, false, 16f, W.ExtraBold, 16f);
+        float ew = UITheme.PreferredWidth(liveProgressEfficiencyButton);
+        float ow = UITheme.PreferredWidth(liveProgressOutputButton);
+        UITheme.TopLeft((RectTransform)liveProgressEfficiencyButton.transform, 4f, 3f, ew, 28f);
+        UITheme.TopLeft((RectTransform)liveProgressOutputButton.transform, 6f + ew, 3f, ow, 28f);
+        UITheme.TopLeft(toggleRow.rectTransform, 0f, 0f, ew + ow + 10f, 34f);
         liveProgressEfficiencyButton.onClick.AddListener(() => SelectLiveProgressMode(true));
-
-        liveProgressOutputButton = CreateButton("Output Toggle", toggleRow, "METHANOL OUTPUT", HeaderColor, 11);
-        Pin(liveProgressOutputButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
         liveProgressOutputButton.onClick.AddListener(() => SelectLiveProgressMode(false));
 
-        RectTransform graphHost = new GameObject("Graph Host", typeof(RectTransform)).GetComponent<RectTransform>();
-        graphHost.SetParent(container, false);
-        Pin(graphHost, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0f, -28f));
+        RectTransform graphHost = UITheme.NewRect("Graph Host", container);
+        UITheme.Fill(graphHost, 0f, 46f, 0f, 0f);
 
-        liveProgressEfficiencyGraph = BuildLiveGraphInstance(graphHost, "Overall Efficiency", "Reactor Temp", "°C", "Overall Efficiency (%)",
+        liveProgressEfficiencyGraph = BuildLiveGraphInstance(graphHost, "Overall efficiency", "Reactor temp", "°C", "Overall efficiency (%)",
             s => s.reactorTemperatureC, s => s.overallEfficiencyPercent, 0f, 100f, false, null, "", null);
 
-        liveProgressOutputGraph = BuildLiveGraphInstance(graphHost, "Methanol Output", "Reactor Temp", "°C", "Methanol Output (kg/h)",
+        liveProgressOutputGraph = BuildLiveGraphInstance(graphHost, "Methanol output", "Reactor temp", "°C", "Methanol output (kg/h)",
             s => s.reactorTemperatureC, s => s.methanolProductionKgH, 0f, designMethanol, true, "Tank stored", "kg", s => s.storedMethanolKg);
 
         SelectLiveProgressMode(true);
@@ -1189,8 +1498,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     {
         SetCanvasGroupVisible(liveProgressEfficiencyGraph, efficiency);
         SetCanvasGroupVisible(liveProgressOutputGraph, !efficiency);
-        if (liveProgressEfficiencyButton != null) liveProgressEfficiencyButton.GetComponent<Image>().color = efficiency ? AccentColor : HeaderColor;
-        if (liveProgressOutputButton != null) liveProgressOutputButton.GetComponent<Image>().color = !efficiency ? AccentColor : HeaderColor;
+        liveProgressEfficiencyButton.Skin()?.SetActive(efficiency);
+        liveProgressOutputButton.Skin()?.SetActive(!efficiency);
     }
 
     /// <summary>Drag-to-move behaviour for the analytics window's title bar, like a normal OS window.</summary>
@@ -1212,125 +1521,163 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         }
     }
 
-    private void BuildEducationalBadge(Transform parent)
-    {
-        Text badge = CreateText("Educational Badge", parent, "EDUCATIONAL VISUALIZATION • SIMPLIFIED PROCESS VALUES", 10, FontStyle.Bold, TextAnchor.MiddleCenter, MutedTextColor);
-        Pin(badge.rectTransform, new Vector2(0.33f, 1f), new Vector2(0.67f, 1f), new Vector2(0f, -98f), new Vector2(0f, -76f));
-    }
+    // ---- live values ---------------------------------------------------------------------
 
     private void Refresh()
     {
         PlantProcessSimulator simulator = PlantProcessSimulator.Instance;
-        if (simulator == null) return;
+        if (simulator == null || canvas == null) return;
         PlantProcessSimulator.ProcessSnapshot s = simulator.Current;
+        bool running = simulator.IsRunning;
 
+        // Run controls
         for (int i = 0; i < runToggleButtons.Count; i++)
         {
             Button button = runToggleButtons[i];
             if (button == null) continue;
-            Image img = button.GetComponent<Image>();
-            if (img != null) img.color = simulator.IsRunning ? Hex("1E7A46") : Hex("B37A18");
-            Text label = button.GetComponentInChildren<Text>();
-            if (label != null) label.text = simulator.IsRunning ? "PAUSE" : "RESUME";
+            UITheme.SetLabel(button, running ? "Pause" : "Resume");
+            UITheme.SetIcon(button, running ? Icon.Pause : Icon.Play);
         }
+        dockRunButton.Skin()?.SetKind(running ? Kind.Dark : Kind.Primary);
+        runStateText.text = running ? "Running" : "Paused";
+        runStateText.color = running ? UITheme.SuccessInk : UITheme.WarningInk;
+        runStateDot.color = running ? UITheme.Success : UITheme.Warning;
 
         if (analyticsNavButton != null)
             analyticsNavButton.interactable = !(AnalyticsIsExternal && analyticsWindowOpen);
-        if (showStreamsButton != null)
-            showStreamsButton.GetComponent<Image>().color = flowLabOn ? AccentColor : HeaderColor;
+        showStreamsButton.Skin()?.SetActive(flowLabOn);
         if (streamVisualsButton != null)
         {
             FinalPlantFlowRuntime flowRuntime = FinalPlantFlowRuntime.Instance;
-            Text label = streamVisualsButton.GetComponentInChildren<Text>();
-            if (label != null)
-                label.text = flowRuntime != null && !flowRuntime.VisualsEnabled ? "SHOW STREAM VISUALS" : "HIDE STREAM VISUALS";
+            UITheme.SetLabel(streamVisualsButton, flowRuntime != null && !flowRuntime.VisualsEnabled ? "Show stream visuals" : "Hide stream visuals");
         }
-
-        if (massFlowToolButton != null)
+        for (int i = 0; i < flowModeButtons.Count; i++)
         {
-            bool armed = MassFlowProbeRuntime.Instance != null && MassFlowProbeRuntime.Instance.IsActive;
-            massFlowToolButton.GetComponent<Image>().color = armed ? AccentColor : HeaderColor;
+            bool on = i == flowInspectionMode;
+            flowModeButtons[i].Skin()?.SetActive(on);
+            Transform check = flowModeButtons[i].transform.Find("Icon");
+            if (check != null && check.gameObject.activeSelf != on) check.gameObject.SetActive(on);
         }
 
+        bool armed = MassFlowProbeRuntime.Instance != null && MassFlowProbeRuntime.Instance.IsActive;
+        massFlowToolButton.Skin()?.SetActive(armed);
+
+        // Plant status
         bool alarm = s.reactorTemperatureC >= 285f || s.reactorPressureBar >= 98f || s.storageFillPercent >= 95f;
         bool caution = !alarm && (s.reactorTemperatureC > 270f || s.captureEfficiencyPercent < 65f || s.methanolPurityPercent < 95f);
-        if (!simulator.IsRunning)
-        {
-            plantStatusText.text = "● Paused";
-            plantStatusText.color = Hex("B37A18");
-        }
-        else
-        {
-            plantStatusText.text = alarm ? "● Attention required" : caution ? "● Operating caution" : "● Normal operation";
-            plantStatusText.color = alarm ? Hex("FF3B30") : caution ? Hex("FFB020") : HealthyColor;
-        }
+        if (!running) plantStatusChip.Set(UIStatusChip.Kind.Neutral, "Paused");
+        else if (alarm) plantStatusChip.Set(UIStatusChip.Kind.Danger, "Attention required");
+        else if (caution) plantStatusChip.Set(UIStatusChip.Kind.Warning, "Operating caution");
+        else plantStatusChip.Set(UIStatusChip.Kind.Success, "Normal operation");
+
         efficiencyText.text = $"{s.overallEfficiencyPercent:F1}%";
-        productionText.text = $"{s.methanolProductionKgH:F0} kg/h";
+        efficiencyRing.fillAmount = Mathf.Clamp01(s.overallEfficiencyPercent / 100f);
+        productionValue.Set($"{s.methanolProductionKgH:F0}", "kg/h");
         // CO2 + 3H2 -> CH3OH + H2O. Each 32 kg of methanol represents
         // 44 kg of CO2 converted on the simplified stoichiometric basis.
         float co2ConvertedKgH = s.methanolProductionKgH * (44f / 32f);
         float co2UtilizationPercent = s.co2CapturedKgH > 0.01f
             ? Mathf.Clamp01(co2ConvertedKgH / s.co2CapturedKgH) * 100f
             : 0f;
-        utilizationText.text = $"{co2UtilizationPercent:F1}%";
+        utilizationValue.Set($"{co2UtilizationPercent:F1}", "%");
 
         float tankSecs = simulator.SecondsUntilStorageFull;
-        string tankEta = s.storageFillPercent >= 99.9f ? "full"
-            : float.IsInfinity(tankSecs) ? "—"
-            : tankSecs >= 5940f ? "99:00+"
-            : $"{(int)(tankSecs / 60f):00}:{(int)(tankSecs % 60f):00} left";
-        methanolTankText.text = $"{s.storageFillPercent:F1}%  ({tankEta})";
+        tankValueText.text = $"{s.storageFillPercent:F1} %";
+        tankBar.Set(s.storageFillPercent / 100f);
+        tankBar.SetColor(s.storageFillPercent >= 85f ? UITheme.Danger : UITheme.Accent);
+        tankCaption.text = s.storageFillPercent >= 99.9f ? "Tank full — production is interlocked"
+            : float.IsInfinity(tankSecs) ? "Not filling at the current rate"
+            : tankSecs >= 5940f ? "Full in more than 99 min at the current rate"
+            : $"Full in {(int)(tankSecs / 60f):00}:{(int)(tankSecs % 60f):00} min at the current rate";
 
-        electrolyzerKpis.text = $"Power {s.electrolyzerPowerPercent:F0}%     H2 {s.h2InputKgH:F0} kg/h\nWater {s.waterFeedKgH:F0} kg/h     O2 {s.oxygenByproductKgH:F0} kg/h";
-        captureKpis.text = $"Capture {s.captureEfficiencyPercent:F1}%     CO2 {s.co2CapturedKgH:F0} kg/h\nAmine {s.amineFlowPercent:F0}%     Regen {s.regeneratorTemperatureC:F0} °C";
-        reactorKpis.text = $"Temp {s.reactorTemperatureC:F0} °C     Pressure {s.reactorPressureBar:F0} bar\nH2/CO2 {s.h2Co2Ratio:F1}     Yield {s.reactorYieldPercent:F1}%";
-        separationKpis.text = $"Recycle {s.recycleRatioPercent:F0}%     Purity {s.methanolPurityPercent:F2}%\nStorage {s.storageFillPercent:F0}%     Product {s.methanolProductionKgH:F0} kg/h";
+        // Process tiles
+        SetTile(0, $"{s.electrolyzerPowerPercent:F0}", "%", $"{s.h2InputKgH:F0}", "kg/h", $"{s.waterFeedKgH:F0}", "kg/h", $"{s.oxygenByproductKgH:F0}", "kg/h");
+        SetTile(1, $"{s.captureEfficiencyPercent:F1}", "%", $"{s.co2CapturedKgH:F0}", "kg/h", $"{s.amineFlowPercent:F0}", "%", $"{s.regeneratorTemperatureC:F0}", "°C");
+        SetTile(2, $"{s.reactorTemperatureC:F0}", "°C", $"{s.reactorPressureBar:F0}", "bar", $"{s.h2Co2Ratio:F1}", "", $"{s.reactorYieldPercent:F1}", "%");
+        SetTile(3, $"{s.recycleRatioPercent:F0}", "%", $"{s.methanolPurityPercent:F1}", "%", $"{s.storageFillPercent:F0}", "%", $"{s.methanolProductionKgH:F0}", "kg/h");
 
-        for (int i = 0; i < navigationImages.Count; i++)
+        // Navigation
+        for (int i = 0; i < navigationButtons.Count; i++)
         {
-            if (navigationImages[i] == null) continue;
-            bool active = navigationPages[i] == DashboardPage.Analytics ? analyticsWindowOpen
-                : navigationPages[i] == DashboardPage.FlowInspection ? flowLabOn
-                : navigationPages[i] == currentPage;
-            navigationImages[i].color = active ? AccentColor : HeaderColor;
+            UIButtonSkin skin = navigationButtons[i].Skin();
+            if (skin == null) continue;
+            DashboardPage page = navigationPages[i];
+            if (page == DashboardPage.Analytics)
+            {
+                skin.SetKind(analyticsWindowOpen ? Kind.Tab : Kind.Nav);
+                skin.SetActive(analyticsWindowOpen);
+            }
+            else if (page == DashboardPage.FlowInspection)
+            {
+                bool current = currentPage == DashboardPage.FlowInspection;
+                skin.SetKind(current || !flowLabOn ? Kind.Nav : Kind.Tab);
+                skin.SetActive(flowLabOn);
+            }
+            else
+            {
+                skin.SetKind(Kind.Nav);
+                skin.SetActive(page == currentPage);
+            }
         }
 
-        if (equipmentSummaryText != null)
-            equipmentSummaryText.text =
-                $"Selected process focus: Reactor R-201\n\nTemperature  {s.reactorTemperatureC:F0} °C\n" +
-                $"Pressure  {s.reactorPressureBar:F0} bar\nH2/CO2 ratio  {s.h2Co2Ratio:F2}\n" +
-                $"Yield  {s.reactorYieldPercent:F1}%\n\n" +
-                "The fixed-bed synthesis reactor converts conditioned H2/CO2 syngas to methanol and water. " +
-                "Use the selector to inspect every available module and its live controls.";
-
-        if (simulationSummaryText != null)
-            simulationSummaryText.text =
-                $"Plant load  {s.plantLoadPercent:F0}%\nSyngas feed  {s.syngasFeedKgH:F0} kg/h\n" +
-                $"Methanol output  {s.methanolProductionKgH:F0} kg/h\nStorage  {s.storageFillPercent:F1}%\n\n" +
-                (s.storageInterlockActive
-                    ? "Storage interlock is active: upstream production is constrained until capacity is restored."
-                    : "Storage has available capacity. Existing module sliders remain active and calculation-linked.");
-
-        if (analyticsSummaryText != null)
-            analyticsSummaryText.text =
-                $"Production {s.methanolProductionKgH:F0} kg/h   |   Captured CO2 {s.co2CapturedKgH:F0} kg/h\n" +
-                $"Syngas {s.syngasFeedKgH:F0} kg/h   |   Recycle {s.recycleGasKgH:F0} kg/h";
-        float[] metrics =
+        // Section cards
+        if (equipmentPanel != null && equipmentPanel.activeSelf)
         {
-            s.overallEfficiencyPercent, s.captureEfficiencyPercent, s.reactorYieldPercent,
-            s.methanolPurityPercent, s.storageFillPercent
-        };
-        for (int i = 0; i < analyticsBars.Count && i < metrics.Length; i++)
-        {
-            RectTransform bar = analyticsBars[i].rectTransform;
-            bar.anchorMax = new Vector2(Mathf.Clamp01(metrics[i] / 100f), 1f);
-            bar.offsetMax = Vector2.zero;
+            reactorTempValue.Set($"{s.reactorTemperatureC:F0}", "°C");
+            reactorPressureValue.Set($"{s.reactorPressureBar:F0}", "bar");
+            reactorRatioValue.Set($"{s.h2Co2Ratio:F2}", "");
+            reactorYieldValue.Set($"{s.reactorYieldPercent:F1}", "%");
         }
-        if (analyticsInsightsText != null)
-            analyticsInsightsText.text =
-                (s.captureEfficiencyPercent < 80f ? "Insight: CO2 capture is limiting carbon utilization. " : "CO2 capture is operating in the preferred educational range. ") +
-                (s.h2Co2Ratio < 2.8f || s.h2Co2Ratio > 3.2f ? "Adjust the synthesis feed ratio toward 3.0. " : "Synthesis feed ratio is near its target. ") +
-                (s.storageFillPercent > 85f ? "Storage headroom is low; monitor the interlock." : "Storage headroom is adequate.");
+        if (simulationPanel != null && simulationPanel.activeSelf)
+        {
+            simLoadValue.Set($"{s.plantLoadPercent:F0}", "%");
+            simSyngasValue.Set($"{s.syngasFeedKgH:F0}", "kg/h");
+            simMethanolValue.Set($"{s.methanolProductionKgH:F0}", "kg/h");
+            simStorageValue.Set($"{s.storageFillPercent:F1}", "%");
+            bool interlock = s.storageInterlockActive;
+            simCallout.color = interlock ? UITheme.WarningSoft : UITheme.SuccessSoft;
+            simCalloutIcon.sprite = UITheme.IconSprite(interlock ? Icon.Alert : Icon.Check);
+            simCalloutIcon.color = interlock ? UITheme.WarningInk : UITheme.SuccessInk;
+            simCalloutText.color = interlock ? UITheme.WarningInk : UITheme.SuccessInk;
+            simCalloutText.text = interlock
+                ? "Storage interlock is active: upstream production is held back until capacity is restored."
+                : "Storage has capacity. Module sliders stay active and drive every calculation.";
+        }
+
+        // Analytics
+        if (analyticsWindowOpen && analyticsWindow != null)
+        {
+            throughputValues[0].Set($"{s.methanolProductionKgH:F0}", "kg/h");
+            throughputValues[1].Set($"{s.co2CapturedKgH:F0}", "kg/h");
+            throughputValues[2].Set($"{s.syngasFeedKgH:F0}", "kg/h");
+            throughputValues[3].Set($"{s.recycleGasKgH:F0}", "kg/h");
+            float[] metrics =
+            {
+                s.overallEfficiencyPercent, s.captureEfficiencyPercent, s.reactorYieldPercent,
+                s.methanolPurityPercent, s.storageFillPercent
+            };
+            for (int i = 0; i < metrics.Length; i++)
+            {
+                metricValues[i].Set($"{metrics[i]:F1}", "%");
+                metricBars[i].Set(metrics[i] / 100f);
+                kpiValues[i].Set($"{metrics[i]:F1}", "%");
+                kpiBars[i].Set(metrics[i] / 100f);
+            }
+            analyticsInsightsText.text = UITheme.Pretty(
+                (s.captureEfficiencyPercent < 80f ? "CO2 capture is limiting carbon utilisation. " : "CO2 capture is in the preferred range. ") +
+                (s.h2Co2Ratio < 2.8f || s.h2Co2Ratio > 3.2f ? "Move the synthesis feed ratio toward 3.0. " : "Synthesis feed ratio is near its target. ") +
+                (s.storageFillPercent > 85f ? "Storage headroom is low; watch the interlock." : "Storage headroom is adequate."));
+        }
+    }
+
+    private void SetTile(int tile, string v0, string u0, string v1, string u1, string v2, string u2, string v3, string u3)
+    {
+        UIValueText[] values = tileValues[tile];
+        if (values == null) return;
+        values[0].Set(v0, u0);
+        values[1].Set(v1, u1);
+        values[2].Set(v2, u2);
+        values[3].Set(v3, u3);
     }
 
     private void SelectPage(DashboardPage page, bool moveCamera = true)
@@ -1378,42 +1725,86 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     /// explored with it on.</summary>
     private void CloseFlowLab() => SelectPage(DashboardPage.Overview, false);
 
+    private static readonly string[] ProcessTitles =
+    {
+        "Renewable power & water", "Electrolyzer", "Hydrogen storage", "CO₂ capture",
+        "Gas mixing", "Feed heating", "Methanol reactor", "Cooling & flash separation",
+        "Distillation", "Methanol storage"
+    };
+
+    private static readonly string[] ProcessDescriptions =
+    {
+        "Renewable electricity and treated water provide the material and energy basis for green hydrogen production.",
+        "Water electrolysis produces hydrogen for synthesis and oxygen as a useful by-product.",
+        "A hydrogen buffer decouples variable electrolyzer output from the steady synthesis-loop demand.",
+        "Regenerable amine absorption separates and conditions carbon dioxide before compression.",
+        "Fresh hydrogen, captured CO₂ and recycled synthesis gas combine at the mixing junction.",
+        "The mixed synthesis gas is brought toward reactor inlet temperature before entering the fixed bed.",
+        "The conditioned H₂/CO₂ mixture passes through the catalyst bed and forms methanol and water.",
+        "Reactor effluent is cooled so crude methanol and water condense while unreacted gas remains available for recycle.",
+        "Distillation raises methanol purity by separating water and remaining light components.",
+        "The product tank accumulates methanol and activates the capacity interlock near its safe operating limit."
+    };
+
+    private static readonly string[][] ProcessStreams =
+    {
+        new[] { "Renewable power", "Treated water" },
+        new[] { "Water", "Hydrogen", "Oxygen" },
+        new[] { "Hydrogen" },
+        new[] { "Flue gas", "Rich amine", "Lean amine", "Captured CO₂" },
+        new[] { "Hydrogen", "CO₂", "Recycle gas", "Mixed syngas" },
+        new[] { "Mixed syngas", "Heated syngas" },
+        new[] { "Hot syngas", "Reactor effluent" },
+        new[] { "Reactor effluent", "Crude methanol", "Recycle gas" },
+        new[] { "Crude methanol", "Water-rich bottoms", "Methanol product" },
+        new[] { "Methanol product" },
+    };
+
+    // Camera focus index per step (see OrbitCameraController.focusPoints): -1 = whole plant.
+    private static readonly int[] ProcessFocus = { -1, 0, 3, 2, 6, 6, 7, 9, 10, 11 };
+
     private void SetProcessStep(int index)
     {
-        string[] titles =
+        processStepIndex = Mathf.Clamp(index, 0, ProcessTitles.Length - 1);
+        if (processStepText != null) processStepText.text = $"Step {processStepIndex + 1} of {ProcessTitles.Length}";
+        for (int i = 0; i < processSegments.Count; i++)
+            processSegments[i].color = i <= processStepIndex ? UITheme.Accent : UITheme.Line;
+        if (processTitleText != null) processTitleText.text = ProcessTitles[processStepIndex];
+        if (processBodyText != null) processBodyText.text = ProcessDescriptions[processStepIndex];
+        if (processStreamsLabel != null) processStreamsLabel.text = processStepIndex == 0 ? "Inputs" : "Streams";
+        LayoutStreamChips(ProcessStreams[processStepIndex]);
+        Focus(ProcessFocus[processStepIndex]);
+    }
+
+    /// <summary>Stream names as wrapped chips under the step description.</summary>
+    private void LayoutStreamChips(string[] items)
+    {
+        if (processChipArea == null) return;
+        while (processChips.Count < items.Length)
         {
-            "Renewable power & water", "Electrolyzer", "Hydrogen storage", "CO2 capture",
-            "Gas mixing", "Feed heating", "Methanol reactor", "Cooling & flash separation",
-            "Distillation", "Methanol storage"
-        };
-        string[] descriptions =
+            Image chip = UITheme.Panel("Chip " + processChips.Count, processChipArea, UITheme.Sunken, 13f);
+            Text t = UITheme.Label("Label", chip.transform, "", 12.5f, W.Bold, UITheme.Ink2, TextAnchor.MiddleCenter);
+            UITheme.Fill(t.rectTransform);
+            processChips.Add(chip);
+            processChipTexts.Add(t);
+        }
+        float x = 0f, y = 0f;
+        const float gap = 6f, height = 28f, maxWidth = 304f;
+        for (int i = 0; i < processChips.Count; i++)
         {
-            "Renewable electricity and treated water provide the material and energy basis for green hydrogen production.",
-            "Water electrolysis produces hydrogen for synthesis and oxygen as a useful by-product.",
-            "A hydrogen buffer decouples variable electrolyzer output from the steady synthesis-loop demand.",
-            "Regenerable amine absorption separates and conditions carbon dioxide before compression.",
-            "Fresh hydrogen, captured CO2 and recycled synthesis gas combine at the mixing junction.",
-            "The mixed synthesis gas is brought toward reactor inlet temperature before entering the fixed bed.",
-            "The conditioned H2/CO2 mixture passes through the catalyst bed and forms methanol and water.",
-            "Reactor effluent is cooled so crude methanol and water condense while unreacted gas remains available for recycle.",
-            "Distillation raises methanol purity by separating water and remaining light components.",
-            "The product tank accumulates methanol and activates the capacity interlock near its safe operating limit."
-        };
-        string[] streams =
-        {
-            "Inputs\n- Renewable power\n- Treated water", "Streams\n- Water\n- Hydrogen\n- Oxygen",
-            "Streams\n- Hydrogen", "Streams\n- Flue gas\n- Rich amine\n- Lean amine\n- Captured CO2",
-            "Streams\n- Hydrogen\n- CO2\n- Recycle gas\n- Mixed syngas", "Streams\n- Mixed syngas\n- Heated syngas",
-            "Streams\n- Hot syngas\n- Reactor effluent", "Streams\n- Reactor effluent\n- Crude methanol\n- Recycle gas",
-            "Streams\n- Crude methanol\n- Water-rich bottoms\n- Methanol product", "Streams\n- Methanol product"
-        };
-        int[] focus = { -1, 0, 1, 2, 6, 6, 7, 9, 10, 11 };
-        processStepIndex = Mathf.Clamp(index, 0, titles.Length - 1);
-        if (processStepText != null) processStepText.text = $"STEP {processStepIndex + 1} OF {titles.Length}";
-        if (processTitleText != null) processTitleText.text = titles[processStepIndex].ToUpperInvariant();
-        if (processBodyText != null) processBodyText.text = descriptions[processStepIndex];
-        if (processStreamsText != null) processStreamsText.text = streams[processStepIndex];
-        Focus(focus[processStepIndex]);
+            bool used = i < items.Length;
+            processChips[i].gameObject.SetActive(used);
+            if (!used) continue;
+            processChipTexts[i].text = items[i];
+            float w = processChipTexts[i].preferredWidth + 24f;
+            if (x > 0f && x + w > maxWidth)
+            {
+                x = 0f;
+                y += height + gap;
+            }
+            UITheme.TopLeft(processChips[i].rectTransform, x, y, w, height);
+            x += w + gap;
+        }
     }
 
     private void Focus(int index)
@@ -1433,151 +1824,9 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
     private void SetFlowInspectionMode(int mode)
     {
+        flowInspectionMode = mode;
         FinalPlantFlowRuntime flow = FindFirstObjectByType<FinalPlantFlowRuntime>(FindObjectsInactive.Include);
         if (flow != null) flow.SetInspectionMode(mode);
-    }
-
-    private void ToggleModulePanels(bool visible)
-    {
-        InteractiveModulePanelRuntime panels = FindFirstObjectByType<InteractiveModulePanelRuntime>(FindObjectsInactive.Include);
-        if (panels != null) panels.SetSelectionVisible(visible);
-    }
-
-    private Text AddStatusRow(RectTransform panel, string label, float y)
-    {
-        Text labelText = CreateText(label + " Label", panel, label, 12, FontStyle.Normal, TextAnchor.MiddleLeft, MutedTextColor);
-        AnchorTopLeft(labelText.rectTransform, new Vector2(16f, y), new Vector2(150f, 24f));
-        Text value = CreateText(label + " Value", panel, "—", 12, FontStyle.Bold, TextAnchor.MiddleRight, Color.white);
-        AnchorTopRight(value.rectTransform, new Vector2(-16f, y), new Vector2(180f, 24f));
-        return value;
-    }
-
-    private Button AddFooterButton(RectTransform footer, string label, int index, Action action)
-    {
-        Button button = CreateButton(label, footer, label, HeaderColor, 11);
-        float width = 1f / FooterButtonCount;
-        Pin(button.GetComponent<RectTransform>(), new Vector2(index * width, 0f), new Vector2((index + 1) * width, 1f), new Vector2(1f, 2f), new Vector2(-1f, -2f));
-        button.onClick.AddListener(() => action());
-        return button;
-    }
-
-    private void AddPanelTitle(RectTransform panel, string title)
-    {
-        Text text = CreateText("Panel Title", panel, title, 13, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white);
-        Pin(text.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(14f, -42f), new Vector2(-12f, -8f));
-    }
-
-    private RectTransform CreatePanel(string name, Transform parent, Color color)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        RectTransform rect = go.AddComponent<RectTransform>();
-        Image image = go.AddComponent<Image>();
-        image.color = color;
-        return rect;
-    }
-
-    private Text CreateText(string name, Transform parent, string value, int size, FontStyle style, TextAnchor alignment, Color color)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        Text text = go.AddComponent<Text>();
-        text.font = font;
-        text.text = value;
-        text.fontSize = size;
-        text.fontStyle = style;
-        text.alignment = alignment;
-        text.color = color;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Truncate;
-        text.raycastTarget = false;
-        return text;
-    }
-
-    private Button CreateButton(string name, Transform parent, string label, Color color, int fontSize)
-    {
-        RectTransform rect = CreatePanel(name, parent, color);
-        Button button = rect.gameObject.AddComponent<Button>();
-        ColorBlock colors = button.colors;
-        colors.highlightedColor = Color.Lerp(color, Color.white, 0.16f);
-        colors.pressedColor = Color.Lerp(color, Color.black, 0.18f);
-        colors.selectedColor = AccentColor;
-        button.colors = colors;
-        Text text = CreateText("Label", rect, label, fontSize, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
-        Pin(text.rectTransform, Vector2.zero, Vector2.one, new Vector2(5f, 4f), new Vector2(-5f, -4f));
-        // Every button built through this one shared helper — nav, footer, tabs, window
-        // controls, graph picker — automatically gets a smooth hover/press scale response
-        // on top of Unity's built-in color tint, without touching each call site.
-        rect.gameObject.AddComponent<UIHoverScale>();
-        return button;
-    }
-
-    /// <summary>Smooth hover-grow / press-shrink feedback, framerate-independent via an
-    /// exponential lerp toward the target scale so it never feels sudden or stuttery.</summary>
-    private sealed class UIHoverScale : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
-    {
-        private const float LerpSpeed = 14f;
-        private RectTransform rect;
-        private Vector3 baseScale;
-        private float targetMultiplier = 1f;
-
-        private void Awake()
-        {
-            rect = (RectTransform)transform;
-            baseScale = rect.localScale;
-        }
-
-        private void Update()
-        {
-            if (rect == null) return;
-            Vector3 target = baseScale * targetMultiplier;
-            rect.localScale = Vector3.Lerp(rect.localScale, target, 1f - Mathf.Exp(-LerpSpeed * Time.unscaledDeltaTime));
-        }
-
-        public void OnPointerEnter(PointerEventData eventData) => targetMultiplier = 1.045f;
-        public void OnPointerExit(PointerEventData eventData) => targetMultiplier = 1f;
-        public void OnPointerDown(PointerEventData eventData) => targetMultiplier = 0.94f;
-        public void OnPointerUp(PointerEventData eventData) => targetMultiplier = 1.045f;
-    }
-
-    private static Color Hex(string rgb)
-    {
-        return ColorUtility.TryParseHtmlString("#" + rgb, out Color color) ? color : Color.white;
-    }
-
-    private static void Pin(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
-    {
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.offsetMin = offsetMin;
-        rect.offsetMax = offsetMax;
-    }
-
-    private static void AnchorTopLeft(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-    }
-
-    private static void AnchorTopRight(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 1f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-    }
-
-    private static void AnchorBottomRight(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-    }
-
-    private static void AnchorBottomLeft(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 0f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
+        Refresh();
     }
 }

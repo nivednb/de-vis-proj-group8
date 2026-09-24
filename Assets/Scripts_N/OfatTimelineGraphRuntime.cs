@@ -4,6 +4,9 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Icon = UITheme.Icon;
+using Kind = UITheme.ButtonKind;
+using W = UITheme.Weight;
 
 /// <summary>
 /// Guided OFAT experiment recorder.
@@ -29,6 +32,8 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     private const float RebuildInterval = 0.2f;
     private const int MaxRecords = 20000;
     private const float HoverRadiusPixels = 16f;
+    private const float LegendWidth = 172f;
+    private const int TickCount = 5;
 
     private struct VarMeta
     {
@@ -44,13 +49,15 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
 
     private static readonly Dictionary<Variable, VarMeta> Vars = new Dictionary<Variable, VarMeta>
     {
-        [Variable.Free]        = new VarMeta { Label = "Free",        SliderParam = null,        Color = new Color(0.55f, 0.60f, 0.66f), ReadValue = null },
-        [Variable.Temperature] = new VarMeta { Label = "Temperature", SliderParam = "Temp",      Color = new Color(1.00f, 0.42f, 0.30f), ReadValue = s => s.reactorTemperatureC },
-        [Variable.Pressure]    = new VarMeta { Label = "Pressure",    SliderParam = "Pressure",  Color = new Color(0.30f, 0.62f, 1.00f), ReadValue = s => s.reactorPressureBar },
-        [Variable.H2CO2]       = new VarMeta { Label = "H2 / CO2",    SliderParam = "H2/CO2",    Color = new Color(0.20f, 0.82f, 0.52f), ReadValue = s => s.h2Co2Ratio },
-        [Variable.GHSV]        = new VarMeta { Label = "GHSV",        SliderParam = "GHSV",      Color = new Color(0.72f, 0.46f, 1.00f), ReadValue = s => s.ghsv },
-        [Variable.FeedFlow]    = new VarMeta { Label = "Feed Flow",   SliderParam = "Feed flow", Color = new Color(0.96f, 0.78f, 0.20f), ReadValue = s => s.reactorFeedFlowPercent },
+        [Variable.Free]        = new VarMeta { Label = "Free",          SliderParam = null,        Color = UITheme.Hex("64748B"), ReadValue = null },
+        [Variable.Temperature] = new VarMeta { Label = "Temperature",   SliderParam = "Temp",      Color = UITheme.Hex("EA580C"), ReadValue = s => s.reactorTemperatureC },
+        [Variable.Pressure]    = new VarMeta { Label = "Pressure",      SliderParam = "Pressure",  Color = UITheme.Hex("2563EB"), ReadValue = s => s.reactorPressureBar },
+        [Variable.H2CO2]       = new VarMeta { Label = "H₂/CO₂", SliderParam = "H2/CO2", Color = UITheme.Hex("059669"), ReadValue = s => s.h2Co2Ratio },
+        [Variable.GHSV]        = new VarMeta { Label = "GHSV",          SliderParam = "GHSV",      Color = UITheme.Hex("7C3AED"), ReadValue = s => s.ghsv },
+        [Variable.FeedFlow]    = new VarMeta { Label = "Feed flow",     SliderParam = "Feed flow", Color = UITheme.Hex("CA8A04"), ReadValue = s => s.reactorFeedFlowPercent },
     };
+
+    private static readonly Variable[] VariableOrder = { Variable.Free, Variable.Temperature, Variable.Pressure, Variable.H2CO2, Variable.GHSV, Variable.FeedFlow };
 
     private static float ReadVarValue(Variable v, PlantProcessSimulator sim)
     {
@@ -59,11 +66,6 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     }
 
     private static string VarUnit(Variable v) => v == Variable.Free ? "" : GraphVisualUtils.GetParameterUnit(Vars[v].SliderParam);
-
-    private static readonly Color BtnIdle = new Color(0.10f, 0.24f, 0.32f, 1f);
-    private static readonly Color BtnActive = new Color(0.10f, 0.55f, 0.75f, 1f);
-    private static readonly Color AxisColor = new Color(0.7f, 0.75f, 0.8f, 1f);
-    private static readonly Color AxisNameColor = new Color(0.86f, 0.92f, 0.98f, 1f);
 
     private RespMeta[] responses;
 
@@ -100,11 +102,10 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     private Text contextText;
     private Text pageLabel;
     private Text yAxisNameLabel;
-    private Text yMinLabel;
-    private Text yMaxLabel;
-    private Text xMinLabel;
-    private Text xMaxLabel;
+    private Text[] yTicks;
+    private Text[] xTicks;
     private Button[] varButtons;
+    private Image[] varDots;
     private Button[] respButtons;
     private Button[] modeButtons;
     private Button prevPageButton;
@@ -113,9 +114,7 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     private Button exportButton;
     private GameObject moduleLegend;
     private RectTransform hoverDot;
-    private GameObject tooltip;
-    private Text tooltipText;
-    private RectTransform tooltipRect;
+    private UIGraphTooltip tooltip;
 
     private float viewYMax = 100f;
     private float cachedPageStart;
@@ -132,76 +131,51 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         float designMethanol = PlantProcessSimulator.Instance != null ? PlantProcessSimulator.Instance.DesignMethanolKgH : 1250f;
         responses = new[]
         {
-            new RespMeta { Label = "Reactor Yield",   Unit = "%",    Max = 100f,           Select = s => s.reactorYieldPercent },
-            new RespMeta { Label = "Overall Efficiency", Unit = "%",  Max = 100f,           Select = s => s.overallEfficiencyPercent },
-            new RespMeta { Label = "Methanol Output", Unit = "kg/h", Max = designMethanol,  Select = s => s.methanolProductionKgH },
+            new RespMeta { Label = "Reactor yield",      Unit = "%",    Max = 100f,           Select = s => s.reactorYieldPercent },
+            new RespMeta { Label = "Overall efficiency", Unit = "%",    Max = 100f,           Select = s => s.overallEfficiencyPercent },
+            new RespMeta { Label = "Methanol output",    Unit = "kg/h", Max = designMethanol, Select = s => s.methanolProductionKgH },
         };
-
-        Image bg = gameObject.GetComponent<Image>();
-        if (bg == null) bg = gameObject.AddComponent<Image>();
-        bg.color = new Color(0.035f, 0.055f, 0.07f, 0.001f);
-        bg.raycastTarget = true;
 
         RectTransform root = GetComponent<RectTransform>();
         if (root == null) root = gameObject.AddComponent<RectTransform>();
         root.SetParent(container, false);
-        Stretch(root);
+        UITheme.Fill(root);
         selfRect = root;
-
-        titleText = MakeText("Title", root, "", 14, FontStyle.Bold, TextAnchor.UpperLeft, Color.white);
-        StretchWithOffset(titleText.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(14f, -24f), new Vector2(-190f, -4f));
-
-        contextText = MakeText("Context", root, "", 10, FontStyle.Normal, TextAnchor.UpperLeft, AxisColor);
-        contextText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        StretchWithOffset(contextText.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(14f, -42f), new Vector2(-14f, -26f));
+        gameObject.AddComponent<UIRaycastTarget>();
 
         BuildVariableRow(root);
         BuildResponseRow(root);
 
+        titleText = UITheme.Label("Title", root, "", 15f, W.ExtraBold, UITheme.Ink);
+        UITheme.TopBand(titleText.rectTransform, 0f, 84f, LegendWidth + 20f, 20f);
+        contextText = UITheme.Label("Context", root, "", 12.5f, W.Medium, UITheme.Subtle);
+        UITheme.TopBand(contextText.rectTransform, 0f, 106f, LegendWidth + 20f, 18f);
+
         GameObject plotObject = new GameObject("Plot Area", typeof(RectTransform));
         plotArea = plotObject.GetComponent<RectTransform>();
         plotArea.SetParent(root, false);
-        StretchWithOffset(plotArea, Vector2.zero, Vector2.one, new Vector2(62f, 34f), new Vector2(-16f, -104f));
+        UITheme.Fill(plotArea, 70f, 138f, LegendWidth + 28f, 64f);
 
-        RectTransform yAxisLine = MakePanel("Y Axis Line", plotArea, AxisColor);
-        StretchWithOffset(yAxisLine, Vector2.zero, new Vector2(0f, 1f), new Vector2(-1f, 0f), new Vector2(1f, 0f));
-        RectTransform xAxisLine = MakePanel("X Axis Line", plotArea, AxisColor);
-        StretchWithOffset(xAxisLine, Vector2.zero, new Vector2(1f, 0f), new Vector2(0f, -1f), new Vector2(0f, 1f));
+        UIGraphKit.PlotBackground(plotArea);
+        UIGraphKit.HorizontalGrid(plotArea, TickCount - 1);
+        yTicks = UIGraphKit.YTicks(root, plotArea, TickCount, 12f);
+        xTicks = UIGraphKit.XTicks(plotArea, 3, 8f);
+        yAxisNameLabel = UIGraphKit.RotatedYTitle(root, plotArea, "");
 
         linesLayer = new GameObject("Lines", typeof(RectTransform)).GetComponent<RectTransform>();
         linesLayer.SetParent(plotArea, false);
-        Stretch(linesLayer);
+        UITheme.Fill(linesLayer);
         epochLayer = new GameObject("Epochs", typeof(RectTransform)).GetComponent<RectTransform>();
         epochLayer.SetParent(plotArea, false);
-        Stretch(epochLayer);
+        UITheme.Fill(epochLayer);
         pointsLayer = new GameObject("Points", typeof(RectTransform)).GetComponent<RectTransform>();
         pointsLayer.SetParent(plotArea, false);
-        Stretch(pointsLayer);
-
-        Text xAxisName = MakeText("X Axis Name", root, "X:  Time (mm:ss, one page = 1 min)", 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
-        StretchWithOffset(xAxisName.rectTransform, Vector2.zero, Vector2.one, new Vector2(62f, 16f), new Vector2(-16f, 32f));
-
-        yAxisNameLabel = MakeText("Y Axis Name", root, "", 11, FontStyle.Bold, TextAnchor.MiddleCenter, AxisNameColor);
-        yAxisNameLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
-        yAxisNameLabel.rectTransform.anchorMin = yAxisNameLabel.rectTransform.anchorMax = new Vector2(0f, 0.5f);
-        yAxisNameLabel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-        yAxisNameLabel.rectTransform.anchoredPosition = new Vector2(12f, -20f);
-        yAxisNameLabel.rectTransform.sizeDelta = new Vector2(260f, 16f);
-        yAxisNameLabel.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f);
-
-        yMaxLabel = MakeText("Y Max", root, "", 10, FontStyle.Normal, TextAnchor.UpperRight, AxisColor);
-        AnchorTopLeft(yMaxLabel.rectTransform, new Vector2(0f, -104f), new Vector2(56f, 16f));
-        yMinLabel = MakeText("Y Min", root, "0", 10, FontStyle.Normal, TextAnchor.LowerRight, AxisColor);
-        AnchorBottomLeft(yMinLabel.rectTransform, new Vector2(0f, 34f), new Vector2(56f, 16f));
-        xMinLabel = MakeText("X Min", root, "00:00", 10, FontStyle.Normal, TextAnchor.LowerLeft, AxisColor);
-        AnchorBottomLeft(xMinLabel.rectTransform, new Vector2(62f, 18f), new Vector2(90f, 16f));
-        xMaxLabel = MakeText("X Max", root, "01:00", 10, FontStyle.Normal, TextAnchor.LowerRight, AxisColor);
-        AnchorBottomRight(xMaxLabel.rectTransform, new Vector2(-16f, 18f), new Vector2(90f, 16f));
+        UITheme.Fill(pointsLayer);
 
         BuildPaginationRow(root);
         BuildLegends(root);
         BuildHoverDot();
-        BuildTooltip(root);
+        tooltip = UIGraphTooltip.Create(root);
 
         epochs.Add(new Epoch { T = 0f, Var = currentVar, VarValue = 0f });
         RecolorVarButtons();
@@ -215,143 +189,113 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
 
     private void BuildVariableRow(RectTransform root)
     {
-        RectTransform row = MakePanel("Variable Row", root, new Color(0.06f, 0.15f, 0.20f, 1f));
-        Pin(row, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -70f), new Vector2(0f, -44f));
-        Text lbl = MakeText("Vary Label", row, "VARY ONE:", 9, FontStyle.Bold, TextAnchor.MiddleLeft, AxisColor);
-        Pin(lbl.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(8f, 0f), new Vector2(74f, 0f));
+        RectTransform row = UITheme.NewRect("Variable Row", root);
+        UITheme.TopBand(row, 0f, 0f, 0f, 32f);
+        Text lbl = UITheme.Label("Vary Label", row, "Vary one", 12.5f, W.ExtraBold, UITheme.Subtle);
+        UITheme.TopLeft(lbl.rectTransform, 0f, 0f, 70f, 32f);
 
-        Variable[] order = { Variable.Free, Variable.Temperature, Variable.Pressure, Variable.H2CO2, Variable.GHSV, Variable.FeedFlow };
-        varButtons = new Button[order.Length];
-        float w = (1f - 0.065f) / order.Length;
-        for (int i = 0; i < order.Length; i++)
+        varButtons = new Button[VariableOrder.Length];
+        varDots = new Image[VariableOrder.Length];
+        float x = 76f;
+        for (int i = 0; i < VariableOrder.Length; i++)
         {
-            Variable v = order[i];
-            Button b = MakeButton("Var " + v, row, Vars[v].Label.ToUpperInvariant(), BtnIdle, 9);
-            Pin(b.GetComponent<RectTransform>(), new Vector2(0.065f + i * w, 0f), new Vector2(0.065f + (i + 1) * w, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
+            Variable v = VariableOrder[i];
+            Button b = UITheme.MakeButton("Var " + v, row, Vars[v].Label, Kind.Chip, 12.5f, null, 8f, false, 16f, W.Bold, 11f);
+            // The chips double as the line-colour legend: each carries its variable's colour.
+            Image dot = UITheme.Dot("Swatch", b.transform, 8f, Vars[v].Color);
+            dot.transform.SetAsFirstSibling();
+            LayoutElement le = dot.gameObject.AddComponent<LayoutElement>();
+            le.preferredWidth = 8f;
+            b.GetComponent<HorizontalLayoutGroup>().spacing = 7f;
+            b.Skin().OverrideActive(Vars[v].Color, Color.white);
+            float w = UITheme.PreferredWidth(b);
+            UITheme.TopLeft((RectTransform)b.transform, x, 0f, w, 32f);
+            x += w + 6f;
             b.onClick.AddListener(() => SetVariable(v));
             varButtons[i] = b;
+            varDots[i] = dot;
         }
+
+        exportButton = UITheme.MakeButton("Export", row, "Export", Kind.Outline, 13f, Icon.Download, 8f, false, 15f, W.Bold, 12f);
+        float ew = UITheme.PreferredWidth(exportButton);
+        UITheme.TopRight((RectTransform)exportButton.transform, 0f, 0f, ew, 32f);
+        exportButton.onClick.AddListener(ExportNow);
     }
 
     private void BuildResponseRow(RectTransform root)
     {
-        RectTransform row = MakePanel("Response Row", root, new Color(0.06f, 0.15f, 0.20f, 1f));
-        Pin(row, new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -98f), new Vector2(0f, -72f));
-        Text lbl = MakeText("Show Label", row, "SHOW:", 9, FontStyle.Bold, TextAnchor.MiddleLeft, AxisColor);
-        Pin(lbl.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(8f, 0f), new Vector2(50f, 0f));
+        RectTransform row = UITheme.NewRect("Response Row", root);
+        UITheme.TopBand(row, 0f, 40f, 0f, 32f);
+        Text lbl = UITheme.Label("Show Label", row, "Show", 12.5f, W.ExtraBold, UITheme.Subtle);
+        UITheme.TopLeft(lbl.rectTransform, 0f, 0f, 70f, 32f);
 
-        string[] respNames = { "YIELD", "EFFICIENCY", "METHANOL" };
+        string[] respNames = { "Yield", "Efficiency", "Methanol" };
         respButtons = new Button[respNames.Length];
+        float x = 76f;
         for (int i = 0; i < respNames.Length; i++)
         {
             int idx = i;
-            Button b = MakeButton("Resp " + i, row, respNames[i], BtnIdle, 9);
-            float x0 = 0.06f + i * 0.15f;
-            Pin(b.GetComponent<RectTransform>(), new Vector2(x0, 0f), new Vector2(x0 + 0.145f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f));
+            Button b = UITheme.MakeButton("Resp " + i, row, respNames[i], Kind.Chip, 12.5f, null, 8f, false, 16f, W.Bold, 12f);
+            float w = UITheme.PreferredWidth(b);
+            UITheme.TopLeft((RectTransform)b.transform, x, 0f, w, 32f);
+            x += w + 6f;
             b.onClick.AddListener(() => SetResponse((Response)idx));
             respButtons[i] = b;
         }
 
-        string[] modeNames = { "LINE ONLY", "WITH POINTS" };
+        // Line only / With points segmented control
+        Image segment = UITheme.Panel("Mode", row, UITheme.Sunken, 16f, true);
+        string[] modeNames = { "Line only", "With points" };
         modeButtons = new Button[modeNames.Length];
+        float sx = 3f;
         for (int i = 0; i < modeNames.Length; i++)
         {
             int idx = i;
-            Button b = MakeButton("Mode " + i, row, modeNames[i], BtnIdle, 9);
-            float x0 = 0.54f + i * 0.15f;
-            Pin(b.GetComponent<RectTransform>(), new Vector2(x0, 0f), new Vector2(x0 + 0.145f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f));
+            Button b = UITheme.MakeButton("Mode " + i, segment.transform, modeNames[i], Kind.Segment, 12.5f, null, 13f, false, 16f, W.ExtraBold, 12f);
+            float w = UITheme.PreferredWidth(b);
+            UITheme.TopLeft((RectTransform)b.transform, sx, 3f, w, 26f);
+            sx += w + 2f;
             b.onClick.AddListener(() => SetMode((ViewMode)idx));
             modeButtons[i] = b;
         }
-
-        exportButton = MakeButton("Export", row, "EXPORT", new Color(0.10f, 0.34f, 0.48f, 1f), 9);
-        Pin(exportButton.GetComponent<RectTransform>(), new Vector2(0.87f, 0f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-2f, -1f));
-        exportButton.onClick.AddListener(ExportNow);
+        UITheme.TopLeft(segment.rectTransform, x + 14f, 0f, sx + 1f, 32f);
     }
 
     private void BuildPaginationRow(RectTransform root)
     {
-        RectTransform row = MakePanel("Pagination Row", root, new Color(0.06f, 0.15f, 0.20f, 1f));
-        Pin(row, Vector2.zero, new Vector2(1f, 0f), new Vector2(62f, 3f), new Vector2(-16f, 29f));
+        RectTransform row = UITheme.NewRect("Pagination Row", root);
+        row.anchorMin = Vector2.zero;
+        row.anchorMax = new Vector2(1f, 0f);
+        row.pivot = new Vector2(0.5f, 0f);
+        row.offsetMin = new Vector2(70f, 0f);
+        row.offsetMax = new Vector2(-(LegendWidth + 28f), 30f);
 
-        prevPageButton = MakeButton("Prev Page", row, "◀  PREV", BtnIdle, 9);
-        Pin(prevPageButton.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0.16f, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
+        prevPageButton = UITheme.MakeButton("Prev Page", row, "Previous", Kind.Secondary, 12.5f, Icon.ChevronLeft, 8f, false, 14f, W.Bold, 10f);
+        float pw = UITheme.PreferredWidth(prevPageButton);
+        UITheme.TopLeft((RectTransform)prevPageButton.transform, 0f, 0f, pw, 30f);
         prevPageButton.onClick.AddListener(PrevPage);
 
-        pageLabel = MakeText("Page Label", row, "", 10, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
-        Pin(pageLabel.rectTransform, new Vector2(0.16f, 0f), new Vector2(0.72f, 1f), Vector2.zero, Vector2.zero);
+        liveButton = UITheme.MakeButton("Live", row, "Live", Kind.Chip, 12.5f, Icon.Dot, 8f, false, 12f, W.ExtraBold, 11f);
+        liveButton.Skin().OverrideActive(UITheme.Accent, Color.white);
+        float lw = UITheme.PreferredWidth(liveButton);
+        UITheme.TopRight((RectTransform)liveButton.transform, 0f, 0f, lw, 30f);
+        liveButton.onClick.AddListener(GoLive);
 
-        nextPageButton = MakeButton("Next Page", row, "NEXT  ▶", BtnIdle, 9);
-        Pin(nextPageButton.GetComponent<RectTransform>(), new Vector2(0.72f, 0f), new Vector2(0.86f, 1f), new Vector2(1f, 1f), new Vector2(-1f, -1f));
+        nextPageButton = UITheme.MakeButton("Next Page", row, "Next", Kind.Secondary, 12.5f, Icon.ChevronRight, 8f, true, 14f, W.Bold, 10f);
+        float nw = UITheme.PreferredWidth(nextPageButton);
+        UITheme.TopRight((RectTransform)nextPageButton.transform, lw + 8f, 0f, nw, 30f);
         nextPageButton.onClick.AddListener(NextPage);
 
-        liveButton = MakeButton("Live", row, "● LIVE", BtnActive, 9);
-        Pin(liveButton.GetComponent<RectTransform>(), new Vector2(0.86f, 0f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f));
-        liveButton.onClick.AddListener(GoLive);
+        pageLabel = UITheme.Label("Page Label", row, "", 12.5f, W.Bold, UITheme.Muted, TextAnchor.MiddleCenter);
+        UITheme.Fill(pageLabel.rectTransform, pw + 8f, 0f, lw + nw + 16f, 0f);
     }
 
     private void BuildLegends(RectTransform root)
     {
-        // Variable / line legend — always shown.
-        RectTransform varLegend = MakePanel("Variable Legend", root, new Color(0.02f, 0.05f, 0.07f, 0.9f));
-        varLegend.anchorMin = varLegend.anchorMax = new Vector2(1f, 1f);
-        varLegend.pivot = new Vector2(1f, 1f);
-        varLegend.anchoredPosition = new Vector2(-18f, -106f);
-        varLegend.sizeDelta = new Vector2(150f, 98f);
-        Outline vo = varLegend.gameObject.AddComponent<Outline>();
-        vo.effectColor = new Color(1f, 1f, 1f, 0.1f);
-        Text vt = MakeText("Var Legend Title", varLegend, "LINE = varying", 8, FontStyle.Bold, TextAnchor.UpperLeft, AxisColor);
-        Pin(vt.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(6f, -14f), new Vector2(-4f, -2f));
-        Variable[] order = { Variable.Free, Variable.Temperature, Variable.Pressure, Variable.H2CO2, Variable.GHSV, Variable.FeedFlow };
-        for (int i = 0; i < order.Length; i++)
-        {
-            float y = -16f - i * 13f;
-            RectTransform sw = MakePanel("sw", varLegend, Vars[order[i]].Color);
-            sw.anchorMin = sw.anchorMax = new Vector2(0f, 1f);
-            sw.pivot = new Vector2(0f, 1f);
-            sw.anchoredPosition = new Vector2(7f, y);
-            sw.sizeDelta = new Vector2(14f, 4f);
-            Text t = MakeText("t", varLegend, Vars[order[i]].Label, 8, FontStyle.Normal, TextAnchor.MiddleLeft, AxisColor);
-            t.horizontalOverflow = HorizontalWrapMode.Overflow;
-            t.rectTransform.anchorMin = t.rectTransform.anchorMax = new Vector2(0f, 1f);
-            t.rectTransform.pivot = new Vector2(0f, 1f);
-            t.rectTransform.anchoredPosition = new Vector2(26f, y + 6f);
-            t.rectTransform.sizeDelta = new Vector2(118f, 12f);
-        }
-
-        // Module / point legend — only shown in "with points" mode.
-        moduleLegend = MakePanel("Module Legend", root, new Color(0.02f, 0.05f, 0.07f, 0.9f)).gameObject;
-        RectTransform ml = moduleLegend.GetComponent<RectTransform>();
-        ml.anchorMin = ml.anchorMax = new Vector2(1f, 1f);
-        ml.pivot = new Vector2(1f, 1f);
-        ml.anchoredPosition = new Vector2(-18f, -210f);
-        int rows = Mathf.CeilToInt(GraphVisualUtils.ModulePalette.Length / 2f);
-        ml.sizeDelta = new Vector2(190f, rows * 13f + 16f);
-        Outline mo = moduleLegend.AddComponent<Outline>();
-        mo.effectColor = new Color(1f, 1f, 1f, 0.1f);
-        Text mt = MakeText("Mod Legend Title", ml, "POINTS = module change", 8, FontStyle.Bold, TextAnchor.UpperLeft, AxisColor);
-        Pin(mt.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(6f, -14f), new Vector2(-4f, -2f));
-        for (int i = 0; i < GraphVisualUtils.ModulePalette.Length; i++)
-        {
-            int col = i % 2;
-            int row = i / 2;
-            float x = 7f + col * 92f;
-            float y = -16f - row * 13f;
-            RectTransform sw = MakePanel("sw", ml, GraphVisualUtils.ModulePalette[i].Color);
-            Image si = sw.GetComponent<Image>();
-            si.sprite = GraphVisualUtils.GetCircleSprite();
-            si.type = Image.Type.Simple;
-            sw.anchorMin = sw.anchorMax = new Vector2(0f, 1f);
-            sw.pivot = new Vector2(0f, 1f);
-            sw.anchoredPosition = new Vector2(x, y);
-            sw.sizeDelta = new Vector2(7f, 7f);
-            Text t = MakeText("t", ml, GraphVisualUtils.ModulePalette[i].Module, 7, FontStyle.Normal, TextAnchor.MiddleLeft, AxisColor);
-            t.horizontalOverflow = HorizontalWrapMode.Overflow;
-            t.rectTransform.anchorMin = t.rectTransform.anchorMax = new Vector2(0f, 1f);
-            t.rectTransform.pivot = new Vector2(0f, 1f);
-            t.rectTransform.anchoredPosition = new Vector2(x + 10f, y + 6f);
-            t.rectTransform.sizeDelta = new Vector2(80f, 12f);
-        }
+        // The variable chips carry the line colours; the right column explains the points.
+        RectTransform legend = UIGraphKit.ModuleLegend(root, "Colour = module changed", false, LegendWidth);
+        UITheme.TopRight(legend, 0f, 138f, LegendWidth, legend.sizeDelta.y);
+        moduleLegend = legend.gameObject;
     }
 
     // ---- state changes ----------------------------------------------------
@@ -588,22 +532,22 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         {
             if (e.T < pageStart || e.T > pageEnd) continue;
             float x = MapX(e.T, r, pageStart, pageEnd);
-            RectTransform v = MakePanel("Epoch Line", epochLayer, new Color(1f, 1f, 1f, 0.22f));
-            v.GetComponent<Image>().raycastTarget = false;
-            v.anchorMin = v.anchorMax = new Vector2(0.5f, 0.5f);
-            v.pivot = new Vector2(0.5f, 0f);
-            v.sizeDelta = new Vector2(1.5f, r.height);
-            v.anchoredPosition = new Vector2(x, r.yMin);
+            Image v = UITheme.Panel("Epoch Line", epochLayer, UITheme.WithAlpha(Vars[e.Var].Color, 0.45f));
+            RectTransform vr = v.rectTransform;
+            vr.anchorMin = vr.anchorMax = new Vector2(0.5f, 0.5f);
+            vr.pivot = new Vector2(0.5f, 0f);
+            vr.sizeDelta = new Vector2(1.5f, r.height);
+            vr.anchoredPosition = new Vector2(x, r.yMin);
 
             string epochText = e.Var == Variable.Free
                 ? $"Free · {FormatClock(e.T)}"
                 : $"{Vars[e.Var].Label} = {GraphVisualUtils.FormatValue(e.VarValue, VarUnit(e.Var))} · {FormatClock(e.T)}";
-            Text lab = MakeText("Epoch Label", epochLayer, epochText, 8, FontStyle.Bold, TextAnchor.LowerLeft, Vars[e.Var].Color);
-            lab.horizontalOverflow = HorizontalWrapMode.Overflow;
-            lab.rectTransform.anchorMin = lab.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            lab.rectTransform.pivot = new Vector2(0f, 0f);
-            lab.rectTransform.anchoredPosition = new Vector2(x + 3f, r.yMin + r.height - 11f);
-            lab.rectTransform.sizeDelta = new Vector2(140f, 12f);
+            Text lab = UITheme.Label("Epoch Label", epochLayer, epochText, 11f, W.ExtraBold, Vars[e.Var].Color, TextAnchor.LowerLeft);
+            RectTransform lr = lab.rectTransform;
+            lr.anchorMin = lr.anchorMax = new Vector2(0.5f, 0.5f);
+            lr.pivot = new Vector2(0f, 0f);
+            lr.anchoredPosition = new Vector2(x + 4f, r.yMin + r.height - 15f);
+            lr.sizeDelta = new Vector2(180f, 14f);
         }
 
         // module change points
@@ -614,30 +558,28 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
                 ChangePoint cp = changePoints[i];
                 if (cp.T < pageStart || cp.T > pageEnd) continue;
                 Vector2 p = new Vector2(MapX(cp.T, r, pageStart, pageEnd), MapY(cp.Y, r));
-                RectTransform dot = MakePanel("Point", pointsLayer, GraphVisualUtils.GetModuleColor(cp.Module));
-                Image di = dot.GetComponent<Image>();
-                di.sprite = GraphVisualUtils.GetCircleSprite();
-                di.type = Image.Type.Simple;
-                di.raycastTarget = false;
+                RectTransform dot = UITheme.NewRect("Point", pointsLayer);
                 dot.anchorMin = dot.anchorMax = new Vector2(0.5f, 0.5f);
                 dot.pivot = new Vector2(0.5f, 0.5f);
-                dot.sizeDelta = new Vector2(6f, 6f);
+                dot.sizeDelta = new Vector2(10f, 10f);
                 dot.anchoredPosition = p;
-                Outline ol = dot.gameObject.AddComponent<Outline>();
-                ol.effectColor = new Color(1f, 1f, 1f, 0.5f);
-                ol.effectDistance = new Vector2(0.5f, -0.5f);
+                Image ring = UITheme.Dot("Ring", dot, 14f, Color.white);
+                UITheme.Center(ring.rectTransform, 14f, 14f);
+                Image fill = UITheme.Dot("Fill", dot, 10f, GraphVisualUtils.GetModuleColor(cp.Module));
+                UITheme.Center(fill.rectTransform, 10f, 10f);
             }
         }
 
-        titleText.text = $"OFAT Timeline — {rm.Label} over time";
-        pageLabel.text = $"Page {pageIndex + 1} / {latest + 1}    {FormatClock(pageStart)} – {FormatClock(pageEnd)}" + (pageIndex >= latest ? "   (live)" : "");
-        xMinLabel.text = FormatClock(pageStart);
-        xMaxLabel.text = FormatClock(pageEnd);
-        yMaxLabel.text = FormatNum(viewYMax);
-        yMinLabel.text = "0";
-        yAxisNameLabel.text = $"Y:  {rm.Label} ({rm.Unit})";
+        titleText.text = $"OFAT timeline — {rm.Label.ToLowerInvariant()} over time";
+        pageLabel.text = $"Page {pageIndex + 1} of {latest + 1}  ·  {FormatClock(pageStart)} – {FormatClock(pageEnd)}";
+        xTicks[0].text = FormatClock(pageStart);
+        xTicks[1].text = FormatClock(pageStart + PageSeconds * 0.5f);
+        xTicks[2].text = FormatClock(pageEnd);
+        for (int i = 0; i < TickCount; i++)
+            yTicks[i].text = FormatNum(viewYMax * i / (TickCount - 1));
+        yAxisNameLabel.text = $"{rm.Label} ({rm.Unit})";
         if (moduleLegend != null) moduleLegend.SetActive(currentMode == ViewMode.Points);
-        if (liveButton != null) liveButton.GetComponent<Image>().color = followLive ? BtnActive : BtnIdle;
+        liveButton.Skin()?.SetActive(followLive);
     }
 
     private void FlushRun(ref int poolUsed, Variable v)
@@ -655,9 +597,9 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         {
             GameObject go = new GameObject("Seg " + linePool.Count, typeof(RectTransform));
             go.transform.SetParent(linesLayer, false);
-            Stretch(go.GetComponent<RectTransform>());
+            UITheme.Fill((RectTransform)go.transform);
             UIGraphLine line = go.AddComponent<UIGraphLine>();
-            line.Thickness = 2.4f;
+            line.Thickness = 2.6f;
             line.raycastTarget = false;
             linePool.Add(line);
         }
@@ -687,6 +629,11 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         }
 
         Rect r = plotArea.rect;
+        if (local.x < r.xMin || local.x > r.xMax || local.y < r.yMin - 8f || local.y > r.yMax + 8f)
+        {
+            HideTooltip();
+            return;
+        }
         float frac = Mathf.InverseLerp(r.xMin, r.xMax, local.x);
         float t = Mathf.Lerp(cachedPageStart, cachedPageEnd, frac);
 
@@ -707,9 +654,9 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         RespMeta rm = responses[(int)currentResp];
         Sample s = samples[nearest];
         string varyingLine = s.Var == Variable.Free
-            ? "varying: none (all reactor sliders free)"
-            : $"varying: {Vars[s.Var].Label} = {GraphVisualUtils.FormatValue(s.VarValue, VarUnit(s.Var))}";
-        string text = $"t = {FormatClock(s.T)}\n{rm.Label}: {GraphVisualUtils.FormatValue(s.Y, rm.Unit)}\n{varyingLine}";
+            ? "Varying: none (all reactor sliders free)"
+            : $"Varying: {Vars[s.Var].Label} = {GraphVisualUtils.FormatValue(s.VarValue, VarUnit(s.Var))}";
+        string text = $"<b>{rm.Label}: {GraphVisualUtils.FormatValue(s.Y, rm.Unit)}</b>\n<color=#94A3B8>t = {FormatClock(s.T)}</color>\n{varyingLine}";
 
         if (currentMode == ViewMode.Points)
         {
@@ -727,27 +674,25 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
             {
                 ChangePoint cp = changePoints[cpNearest];
                 string cu = GraphVisualUtils.GetParameterUnit(cp.Parameter);
-                text += $"\n—\n{cp.Parameter} {GraphVisualUtils.FormatValue(cp.From, cu)} → {GraphVisualUtils.FormatValue(cp.To, cu)} in {cp.Module}";
+                text += $"\n<color=#94A3B8>{UITheme.Pretty(cp.Parameter)} {GraphVisualUtils.FormatValue(cp.From, cu)} → {GraphVisualUtils.FormatValue(cp.To, cu)} · {UIGraphKit.ModuleDisplayName(cp.Module)}</color>";
             }
         }
 
-        tooltipText.text = text;
-        tooltip.SetActive(true);
         if (hoverDot != null)
         {
             hoverDot.anchoredPosition = new Vector2(MapX(s.T, r, cachedPageStart, cachedPageEnd), MapY(s.Y, r));
             hoverDot.gameObject.SetActive(true);
+            hoverDot.SetAsLastSibling();
         }
         RectTransformUtility.ScreenPointToLocalPointInRectangle(selfRect, eventData.position, cam, out Vector2 tl);
-        tooltipRect.anchoredPosition = tl + new Vector2(14f, 14f);
-        tooltip.transform.SetAsLastSibling();
+        tooltip.Show(text, tl);
     }
 
     public void OnPointerExit(PointerEventData eventData) => HideTooltip();
 
     private void HideTooltip()
     {
-        if (tooltip != null) tooltip.SetActive(false);
+        if (tooltip != null) tooltip.Hide();
         if (hoverDot != null) hoverDot.gameObject.SetActive(false);
     }
 
@@ -787,9 +732,9 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
         StartCoroutine(GraphExportUtil.CaptureRegionPng(ownerCanvas, selfRect, baseName, pngPath =>
         {
             string msg = pngPath != null
-                ? $"Exported  {baseName}.csv + .png   →   {GraphExportUtil.ExportDirectory}"
+                ? $"Exported {baseName}.csv + .png to {GraphExportUtil.ExportDirectory}"
                 : (csvPath != null
-                    ? $"Exported  {baseName}.csv  (PNG failed)   →   {GraphExportUtil.ExportDirectory}"
+                    ? $"Exported {baseName}.csv (PNG failed) to {GraphExportUtil.ExportDirectory}"
                     : "Export failed — see console.");
             GraphExportUtil.ShowToast(ownerCanvas, labelFont, msg);
         }, exportButton != null ? exportButton.gameObject : null));
@@ -801,34 +746,32 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
     {
         RespMeta rm = responses != null ? responses[(int)currentResp] : default;
         string varLine = currentVar == Variable.Free
-            ? "No variable selected — all reactor sliders free. Pick one to start a controlled OFAT run."
-            : $"Varying {Vars[currentVar].Label} only — the other 4 reactor sliders are locked constant.";
-        contextText.text = $"{varLine}   |   Y = {rm.Label} ({rm.Unit})   |   1 page = {PageSeconds:0} s";
+            ? "No variable selected — all reactor sliders are free. Pick one to start a controlled run."
+            : $"Varying {Vars[currentVar].Label} only — the other four reactor sliders are locked.";
+        contextText.text = $"{varLine}  ·  One page = {PageSeconds:0} s";
     }
 
     private void RecolorVarButtons()
     {
-        Variable[] order = { Variable.Free, Variable.Temperature, Variable.Pressure, Variable.H2CO2, Variable.GHSV, Variable.FeedFlow };
         for (int i = 0; i < varButtons.Length; i++)
         {
             if (varButtons[i] == null) continue;
-            bool active = order[i] == currentVar;
-            varButtons[i].GetComponent<Image>().color = active
-                ? (order[i] == Variable.Free ? BtnActive : Color.Lerp(Vars[order[i]].Color, Color.black, 0.15f))
-                : BtnIdle;
+            bool active = VariableOrder[i] == currentVar;
+            varButtons[i].Skin()?.SetActive(active);
+            if (varDots[i] != null) varDots[i].color = active ? Color.white : Vars[VariableOrder[i]].Color;
         }
     }
 
     private void RecolorRespButtons()
     {
         for (int i = 0; i < respButtons.Length; i++)
-            if (respButtons[i] != null) respButtons[i].GetComponent<Image>().color = (int)currentResp == i ? BtnActive : BtnIdle;
+            respButtons[i].Skin()?.SetActive((int)currentResp == i);
     }
 
     private void RecolorModeButtons()
     {
         for (int i = 0; i < modeButtons.Length; i++)
-            if (modeButtons[i] != null) modeButtons[i].GetComponent<Image>().color = (int)currentMode == i ? BtnActive : BtnIdle;
+            modeButtons[i].Skin()?.SetActive((int)currentMode == i);
     }
 
     private static string FormatClock(float seconds)
@@ -847,115 +790,17 @@ public sealed class OfatTimelineGraphRuntime : MonoBehaviour, IPointerMoveHandle
 
     private void BuildHoverDot()
     {
-        hoverDot = MakePanel("Hover Dot", plotArea, new Color(1f, 1f, 1f, 0.95f));
-        Image img = hoverDot.GetComponent<Image>();
-        img.sprite = GraphVisualUtils.GetCircleSprite();
-        img.type = Image.Type.Simple;
-        img.raycastTarget = false;
-        hoverDot.anchorMin = hoverDot.anchorMax = new Vector2(0.5f, 0.5f);
-        hoverDot.pivot = new Vector2(0.5f, 0.5f);
-        hoverDot.sizeDelta = new Vector2(13f, 13f);
-        Outline outline = hoverDot.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(0.42f, 0.86f, 1f, 0.95f);
-        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        RectTransform dot = UITheme.NewRect("Hover Dot", plotArea);
+        dot.anchorMin = dot.anchorMax = new Vector2(0.5f, 0.5f);
+        dot.pivot = new Vector2(0.5f, 0.5f);
+        dot.sizeDelta = new Vector2(16f, 16f);
+        Image halo = UITheme.Dot("Halo", dot, 28f, UITheme.WithAlpha(UITheme.Accent, 0.2f));
+        UITheme.Center(halo.rectTransform, 28f, 28f);
+        Image ring = UITheme.Dot("Ring", dot, 14f, Color.white);
+        UITheme.Center(ring.rectTransform, 14f, 14f);
+        Image core = UITheme.Dot("Core", dot, 9f, UITheme.Ink);
+        UITheme.Center(core.rectTransform, 9f, 9f);
+        hoverDot = dot;
         hoverDot.gameObject.SetActive(false);
-    }
-
-    private void BuildTooltip(RectTransform root)
-    {
-        tooltip = new GameObject("Tooltip", typeof(RectTransform)).gameObject;
-        tooltipRect = tooltip.GetComponent<RectTransform>();
-        tooltipRect.SetParent(root, false);
-        tooltipRect.anchorMin = tooltipRect.anchorMax = new Vector2(0.5f, 0.5f);
-        tooltipRect.pivot = Vector2.zero;
-        tooltipRect.sizeDelta = new Vector2(230f, 72f);
-        Image bg = tooltip.AddComponent<Image>();
-        bg.color = new Color(0.02f, 0.05f, 0.07f, 0.96f);
-        bg.raycastTarget = false;
-        Outline outline = tooltip.AddComponent<Outline>();
-        outline.effectColor = new Color(0.42f, 0.86f, 1f, 0.6f);
-        outline.effectDistance = new Vector2(1f, -1f);
-        tooltipText = MakeText("Tooltip Text", tooltipRect, "", 11, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        Stretch(tooltipText.rectTransform);
-        tooltipText.rectTransform.offsetMin = new Vector2(8f, 4f);
-        tooltipText.rectTransform.offsetMax = new Vector2(-8f, -4f);
-        tooltip.SetActive(false);
-    }
-
-    private Text MakeText(string name, Transform parent, string value, int size, FontStyle style, TextAnchor anchor, Color color)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        Text text = go.AddComponent<Text>();
-        text.font = labelFont;
-        text.text = value;
-        text.fontSize = size;
-        text.fontStyle = style;
-        text.alignment = anchor;
-        text.color = color;
-        text.raycastTarget = false;
-        return text;
-    }
-
-    private Button MakeButton(string name, Transform parent, string label, Color color, int fontSize)
-    {
-        GameObject go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        go.AddComponent<Image>().color = color;
-        Button button = go.AddComponent<Button>();
-        Text text = MakeText("Label", go.transform, label, fontSize, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
-        Stretch(text.rectTransform);
-        return button;
-    }
-
-    private RectTransform MakePanel(string name, Transform parent, Color color)
-    {
-        GameObject go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        go.AddComponent<Image>().color = color;
-        return go.GetComponent<RectTransform>();
-    }
-
-    private static void Stretch(RectTransform rect)
-    {
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
-    }
-
-    private static void StretchWithOffset(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
-    {
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.offsetMin = offsetMin;
-        rect.offsetMax = offsetMax;
-    }
-
-    private static void Pin(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
-        => StretchWithOffset(rect, anchorMin, anchorMax, offsetMin, offsetMax);
-
-    private static void AnchorTopLeft(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-    }
-
-    private static void AnchorBottomLeft(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = new Vector2(0f, 0f);
-        rect.pivot = new Vector2(0f, 0f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-    }
-
-    private static void AnchorBottomRight(RectTransform rect, Vector2 position, Vector2 size)
-    {
-        rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
-        rect.pivot = new Vector2(1f, 0f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
     }
 }

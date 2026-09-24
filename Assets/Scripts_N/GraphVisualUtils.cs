@@ -14,14 +14,16 @@ public static class GraphVisualUtils
     // title InteractiveModulePanelRuntime passes into PlantProcessSimulator.CommitManualChange.
     public static readonly (string Module, Color Color)[] ModulePalette =
     {
-        ("Electrolyzer", new Color(0.13f, 0.72f, 0.91f)),
-        ("CO2 Absorber", new Color(0.13f, 0.79f, 0.59f)),
-        ("Desorber / Regenerator", new Color(1f, 0.69f, 0.13f)),
-        ("Compressor", new Color(0.66f, 0.33f, 0.97f)),
-        ("Methanol Reactor", new Color(1f, 0.44f, 0.26f)),
-        ("Condenser", new Color(0.31f, 0.76f, 0.97f)),
-        ("Separator + Recycle", new Color(0.93f, 0.25f, 0.48f)),
-        ("Distillation Column", new Color(0.61f, 0.80f, 0.40f)),
+        // Daylight palette — deep enough to read on the white analytics surfaces, and the same
+        // colours as each module's badge in its control drawer.
+        ("Electrolyzer", UITheme.Hex("0EA5E9")),
+        ("CO2 Absorber", UITheme.Hex("10B981")),
+        ("Desorber / Regenerator", UITheme.Hex("F59E0B")),
+        ("Compressor", UITheme.Hex("8B5CF6")),
+        ("Methanol Reactor", UITheme.Hex("EA580C")),
+        ("Condenser", UITheme.Hex("38BDF8")),
+        ("Separator + Recycle", UITheme.Hex("E11D48")),
+        ("Distillation Column", UITheme.Hex("65A30D")),
     };
 
     public static Color GetModuleColor(string module)
@@ -30,7 +32,7 @@ public static class GraphVisualUtils
         {
             if (entry.Module == module) return entry.Color;
         }
-        return new Color(0.86f, 0.82f, 0.95f, 1f);
+        return UITheme.Muted;
     }
 
     /// <summary>
@@ -79,6 +81,8 @@ public static class GraphVisualUtils
 
     public static Sprite GetCircleSprite()
     {
+        // The theme's circle is anti-aliased and mip-mapped, so small dots stay round.
+        cachedCircleSprite = UITheme.Circle();
         if (cachedCircleSprite != null) return cachedCircleSprite;
 
         const int size = 32;

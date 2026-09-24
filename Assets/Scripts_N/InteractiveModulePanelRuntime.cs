@@ -4,27 +4,28 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using Icon = UITheme.Icon;
+using Kind = UITheme.ButtonKind;
+using W = UITheme.Weight;
 
 /// <summary>
 /// Interactive module UI layer for the complete plant.
-/// It adds compact eye buttons near process modules. Each opened panel contains
-/// module-specific controls, and those controls feed PlantProcessSimulator so
-/// flow visuals and production/storage values respond in real time.
 ///
-/// Info buttons appear on hover over modules and disappear when the mouse leaves.
+/// Hovering a piece of equipment shows a small labelled pill on it; clicking that pill opens
+/// the module's control drawer on the right-hand side of the screen (live read-outs plus the
+/// module's operating sliders). Those controls feed PlantProcessSimulator so flow visuals and
+/// production/storage values respond in real time. Only one drawer is open at a time, and it
+/// stays put while the camera moves.
 /// </summary>
 [DisallowMultipleComponent]
 public class InteractiveModulePanelRuntime : MonoBehaviour
 {
     private const string RuntimeRootName = "Generated Interactive Module Panels";
-
-    [SerializeField] private Vector2 buttonSize = new Vector2(28f, 28f);
-    [SerializeField] private Vector2 panelSize = new Vector2(390f, 300f);
-    [SerializeField] private Vector2 panelOffset = new Vector2(230f, -150f);
+    private const float DrawerWidth = 388f;
+    private const float DrawerInner = DrawerWidth - 40f;
 
     private Canvas canvas;
     private Camera mainCamera;
-    private Font font;
     private List<ModuleAnchor> allAnchors = new List<ModuleAnchor>();
     private readonly List<RegisteredSlider> registeredSliders = new List<RegisteredSlider>();
 
@@ -33,10 +34,34 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         public Slider Slider;
         public float DefaultValue;
         public Text ValueText;
+        public Image ValueChip;
         public Text LabelText;
         public int Decimals;
         public string Unit;
         public SliderCommitTracker Tracker;
+    }
+
+    private struct Readout
+    {
+        public string Label;
+        public string Unit;
+        public Func<PlantProcessSimulator.ProcessSnapshot, string> Value;
+        public Readout(string label, string unit, Func<PlantProcessSimulator.ProcessSnapshot, string> value)
+        {
+            Label = label;
+            Unit = unit;
+            Value = value;
+        }
+    }
+
+    private sealed class ModuleInfo
+    {
+        public string Subtitle;
+        public Icon Icon;
+        public Color Color;
+        public string Description;
+        public Readout[] Readouts;
+        public int FocusIndex;
     }
 
     // Exact module title + slider labels the OFAT timeline uses to lock the reactor to a
@@ -65,7 +90,6 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             LastCommittedValue = current;
         }
     }
-    private GraphicRaycaster graphicRaycaster;
     // The plant meshes ship without colliders, so hover cannot rely on Physics.Raycast out of
     // the box. We add MeshColliders to each module's renderers at runtime purely for hover
     // picking (not physics simulation) and map them back to their owning anchor here.
@@ -87,8 +111,6 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     {
         RemoveOldStaticEyeUi();
         mainCamera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         Build();
         canvas.gameObject.SetActive(true);
     }
@@ -96,6 +118,11 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     private void LateUpdate()
     {
         if (mainCamera == null || canvas == null) return;
+
+        foreach (ModuleAnchor anchor in allAnchors)
+        {
+            if (anchor != null && anchor.PanelRoot != null && anchor.PanelRoot.activeSelf) UpdateReadouts(anchor);
+        }
 
         var mouse = Mouse.current;
         if (mouse == null) return;
@@ -121,7 +148,8 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         Ray ray = mainCamera.ScreenPointToRay(mousePos);
         // Pipe probe colliders (added by MassFlowProbeRuntime on their own layer) are excluded:
         // a pipe crossing in front of a module must not swallow that module's hover.
-        if (Physics.Raycast(ray, out RaycastHit hit, 5000f, ~MassFlowProbeRuntime.PipeLayerMask))
+        bool overUi = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+        if (!overUi && Physics.Raycast(ray, out RaycastHit hit, 5000f, ~MassFlowProbeRuntime.PipeLayerMask))
         {
             colliderToAnchor.TryGetValue(hit.collider, out closestAnchor);
         }
@@ -132,58 +160,31 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             Vector3 screenPos = mainCamera.WorldToScreenPoint(anchor.Target.position + anchor.WorldOffset);
             anchor.CachedScreen = screenPos;
             anchor.IsInFrustum = screenPos.z > 0f;
-        }
-
-        foreach (ModuleAnchor anchor in allAnchors)
-        {
-            if (anchor == null || anchor.Target == null) continue;
 
             // The 3D raycast alone loses hover the instant the cursor crosses in front of
             // something else (e.g. a pipe passing between the camera and the H2 tank / heat
             // exchanger), hiding the button right as the user moves toward it to click. Also
             // treat the cursor being over the button's own screen rect as hovered so it stays
             // up long enough to be clicked.
-            bool isHovered = anchor == closestAnchor || IsNearButton(anchor.ButtonRect, mousePos);
+            bool isHovered = anchor == closestAnchor || (anchor.ButtonRoot.activeSelf && IsNearButton(anchor.ButtonRect, mousePos));
             anchor.ButtonRoot.SetActive(anchor.IsInFrustum && isHovered);
-
-            if (!anchor.IsInFrustum)
-            {
-                anchor.PanelRoot.SetActive(false);
-                continue;
-            }
-
-            Vector3 screen = anchor.CachedScreen;
-            anchor.ButtonRect.position = screen;
-            Vector3 unclampedPanelPosition = screen + new Vector3(panelOffset.x, panelOffset.y, 0f);
-            float halfWidth = panelSize.x * 0.5f;
-            float halfHeight = panelSize.y * 0.5f;
-            anchor.PanelRect.position = new Vector3(
-                Mathf.Clamp(unclampedPanelPosition.x, halfWidth + 8f, Screen.width - halfWidth - 8f),
-                Mathf.Clamp(unclampedPanelPosition.y, halfHeight + 8f, Screen.height - halfHeight - 8f),
-                0f);
-
-            if (anchor.PanelRoot.activeSelf && anchor.LiveText != null)
-            {
-                anchor.LiveText.text = BuildLiveText(anchor.ModuleId);
-            }
+            if (anchor.IsInFrustum) anchor.ButtonRect.position = new Vector3(screenPos.x, screenPos.y, 0f);
         }
     }
 
-    // Padded hit test around a button's screen rect. The plain RectangleContainsScreenPoint
-    // check has zero margin, so a cursor moving fast toward a small (28px) button can land
-    // a pixel outside it on the frame the mesh raycast has already lost the module (e.g. a
-    // pipe occluding the H2 tank / heat exchanger from that exact angle), hiding the button
-    // just before the click registers. A few pixels of padding gives that transition slack.
+    // Padded hit test around a button's screen rect, so a cursor moving toward the pill does
+    // not lose it on the frame the mesh raycast has already lost the module (e.g. a pipe
+    // occluding the H2 tank / heat exchanger from that exact angle).
     private const float ButtonHoverPadding = 10f;
+
+    private static readonly Vector3[] corners = new Vector3[4];
 
     private static bool IsNearButton(RectTransform buttonRect, Vector2 screenPoint)
     {
         if (buttonRect == null) return false;
-        Vector3 center = buttonRect.position;
-        Vector2 size = buttonRect.rect.size;
-        float halfW = size.x * 0.5f + ButtonHoverPadding;
-        float halfH = size.y * 0.5f + ButtonHoverPadding;
-        return Mathf.Abs(screenPoint.x - center.x) <= halfW && Mathf.Abs(screenPoint.y - center.y) <= halfH;
+        buttonRect.GetWorldCorners(corners);
+        return screenPoint.x >= corners[0].x - ButtonHoverPadding && screenPoint.x <= corners[2].x + ButtonHoverPadding &&
+               screenPoint.y >= corners[0].y - ButtonHoverPadding && screenPoint.y <= corners[2].y + ButtonHoverPadding;
     }
 
     [ContextMenu("Build Interactive Module Panels")]
@@ -223,8 +224,46 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 
     public void SetSelectionVisible(bool visible)
     {
-        // Buttons now appear on hover, so this method is kept for compatibility but has no effect
-        // The canvas remains active to allow hover detection
+        // Buttons appear on hover, so this method is kept for compatibility but has no effect.
+    }
+
+    /// <summary>True while any module's control drawer is open.</summary>
+    public bool AnyPanelOpen
+    {
+        get
+        {
+            foreach (ModuleAnchor a in allAnchors) if (a != null && a.PanelRoot != null && a.PanelRoot.activeSelf) return true;
+            return false;
+        }
+    }
+
+    /// <summary>Opens one module's control drawer (closing any other), optionally flying the
+    /// camera to that module.</summary>
+    public void OpenModule(string id, bool focusCamera)
+    {
+        foreach (ModuleAnchor a in allAnchors)
+        {
+            if (a == null || a.PanelRoot == null) continue;
+            bool open = a.ModuleId == id;
+            a.PanelRoot.SetActive(open);
+            if (open)
+            {
+                UpdateReadouts(a);
+                if (focusCamera) FocusCamera(a.ModuleId);
+            }
+        }
+    }
+
+    public void CloseAllPanels()
+    {
+        foreach (ModuleAnchor a in allAnchors)
+            if (a != null && a.PanelRoot != null) a.PanelRoot.SetActive(false);
+    }
+
+    private void TogglePanel(ModuleAnchor anchor)
+    {
+        if (anchor.PanelRoot.activeSelf) anchor.PanelRoot.SetActive(false);
+        else OpenModule(anchor.ModuleId, false);
     }
 
     private void CreateCanvas()
@@ -233,12 +272,11 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         canvasObject.transform.SetParent(transform, false);
         canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 75;
-        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1536f, 1024f);
-        scaler.matchWidthOrHeight = 0.5f;
-        graphicRaycaster = canvasObject.AddComponent<GraphicRaycaster>();
+        // Above the dashboard (90) so an open drawer covers the right-hand cards; below the
+        // about box (200) and the tour (300).
+        canvas.sortingOrder = 95;
+        UITheme.ConfigureScaler(canvasObject.AddComponent<CanvasScaler>());
+        canvasObject.AddComponent<GraphicRaycaster>();
     }
 
     private void RemoveOldStaticEyeUi()
@@ -269,157 +307,244 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             return;
         }
 
-        GameObject anchorObject = new GameObject(title + " Interactive Anchor");
+        GameObject anchorObject = new GameObject(title + " Interactive Anchor", typeof(RectTransform));
         anchorObject.transform.SetParent(canvas.transform, false);
+        UITheme.Fill((RectTransform)anchorObject.transform);
         ModuleAnchor anchor = anchorObject.AddComponent<ModuleAnchor>();
         anchor.ModuleId = id;
+        anchor.Title = title;
         anchor.Target = target;
         anchor.WorldOffset = offset;
         RegisterColliders(target, anchor);
 
-        anchor.ButtonRoot = CreateEyeButton(anchorObject.transform, title, out anchor.ButtonRect, out Button eyeButton);
-        anchor.PanelRoot = CreatePanel(anchorObject.transform, title, id, out anchor.PanelRect, out anchor.LiveText);
+        ModuleInfo info = Info(id);
+        anchor.Info = info;
+        anchor.ButtonRoot = CreateHoverPill(anchorObject.transform, title, info, out anchor.ButtonRect, out Button pillButton);
+        anchor.PanelRoot = CreateDrawer(anchorObject.transform, title, id, info, anchor);
         anchor.PanelRoot.SetActive(false);
+        anchor.ButtonRoot.SetActive(false);
 
-        eyeButton.onClick.AddListener(() => anchor.PanelRoot.SetActive(!anchor.PanelRoot.activeSelf));
+        pillButton.onClick.AddListener(() => TogglePanel(anchor));
 
         // Register anchor for hover detection
         allAnchors.Add(anchor);
     }
 
-    private GameObject CreateEyeButton(Transform parent, string title, out RectTransform rect, out Button button)
+    // ---- hover pill ------------------------------------------------------------
+
+    private GameObject CreateHoverPill(Transform parent, string title, ModuleInfo info, out RectTransform rect, out Button button)
     {
-        GameObject root = new GameObject(title + " Eye Button");
-        root.transform.SetParent(parent, false);
-        rect = root.AddComponent<RectTransform>();
-        rect.sizeDelta = buttonSize;
+        RectTransform card = UITheme.Card(title + " Eye Button", parent, 17f, UITheme.Glass, 18f, 6f, 0.22f);
+        card.anchorMin = card.anchorMax = Vector2.zero;
+        card.pivot = new Vector2(0.5f, 0.5f);
 
-        Image image = root.AddComponent<Image>();
-        image.color = new Color(0.04f, 0.1f, 0.14f, 0.92f);
-        button = root.AddComponent<Button>();
+        button = UITheme.MakeButton("Button", card, null, Kind.Ghost, 13f, null, 17f, false, 16f, W.Bold, 0f);
+        UITheme.Fill((RectTransform)button.transform);
+        HorizontalLayoutGroup layout = button.GetComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(6, 12, 0, 0);
+        layout.spacing = 8f;
 
-        Text eye = CreateText("Eye Icon", root.transform, "i", 16, TextAnchor.MiddleCenter, Color.white);
-        eye.fontStyle = FontStyle.Bold;
-        Stretch(eye.rectTransform);
-        return root;
+        Image iconBg = UITheme.Panel("Info", button.transform, UITheme.Accent, 12f);
+        iconBg.rectTransform.sizeDelta = new Vector2(24f, 24f);
+        LayoutElement le = iconBg.gameObject.AddComponent<LayoutElement>();
+        le.preferredWidth = 24f;
+        Image i = UITheme.IconImage("Icon", iconBg.transform, Icon.Info, 16f, Color.white);
+        UITheme.Center(i.rectTransform, 16f, 16f);
+
+        Text label = UITheme.Label("Label", button.transform, UITheme.Pretty(title), 13f, W.ExtraBold, UITheme.Ink, TextAnchor.MiddleLeft);
+        label.rectTransform.sizeDelta = new Vector2(0f, 20f);
+        Image chevron = UITheme.IconImage("Chevron", button.transform, Icon.ChevronRight, 14f, UITheme.Subtle);
+        LayoutElement ce = chevron.gameObject.AddComponent<LayoutElement>();
+        ce.preferredWidth = 14f;
+
+        float width = UITheme.PreferredWidth(button);
+        card.sizeDelta = new Vector2(width, 34f);
+        rect = card;
+        return card.gameObject;
     }
 
-    private GameObject CreatePanel(Transform parent, string title, string id, out RectTransform rect, out Text liveText)
+    // ---- drawer ------------------------------------------------------------------
+
+    private GameObject CreateDrawer(Transform parent, string title, string id, ModuleInfo info, ModuleAnchor anchor)
     {
-        GameObject root = new GameObject(title + " Interactive Panel");
-        root.transform.SetParent(parent, false);
-        rect = root.AddComponent<RectTransform>();
-        rect.sizeDelta = panelSize;
+        RectTransform drawer = UITheme.Card(title + " Interactive Panel", parent, 18f, Color.white, 48f, 20f, 0.28f);
 
-        Image image = root.AddComponent<Image>();
-        image.color = new Color(0.035f, 0.055f, 0.07f, 0.95f);
+        Image badge = UITheme.Badge("Badge", drawer, info.Icon, info.Color, 42f, 12f, 22f);
+        UITheme.TopLeft(badge.rectTransform, 20f, 18f, 42f, 42f);
+        Text titleText = UITheme.Label("Title", drawer, UITheme.Pretty(title), 17f, W.ExtraBold, UITheme.Ink);
+        UITheme.TopLeft(titleText.rectTransform, 74f, 18f, 250f, 22f);
+        Text subtitle = UITheme.Label("Subtitle", drawer, info.Subtitle, 12.5f, W.SemiBold, UITheme.Subtle);
+        UITheme.TopLeft(subtitle.rectTransform, 74f, 40f, 250f, 18f);
+        if (id == "reactor")
+        {
+            anchor.StatusChip = UITheme.StatusChip("Status", drawer, 22f, 11.5f);
+            RectTransform chipRect = (RectTransform)anchor.StatusChip.transform;
+            chipRect.anchorMin = chipRect.anchorMax = chipRect.pivot = new Vector2(0f, 1f);
+            chipRect.anchoredPosition = new Vector2(74f + subtitle.preferredWidth + 8f, -38f);
+            anchor.StatusChip.Set(UIStatusChip.Kind.Success, "Normal");
+        }
 
-        Text titleText = CreateText("Title", root.transform, title, 17, TextAnchor.UpperLeft, new Color(0.42f, 0.86f, 1f, 1f));
-        titleText.fontStyle = FontStyle.Bold;
-        titleText.rectTransform.anchorMin = new Vector2(0f, 1f);
-        titleText.rectTransform.anchorMax = new Vector2(1f, 1f);
-        titleText.rectTransform.offsetMin = new Vector2(14f, -42f);
-        titleText.rectTransform.offsetMax = new Vector2(-44f, -10f);
-
-        Button close = CreateSmallButton(root.transform, "X", new Vector2(-18f, -18f), new Vector2(30f, 30f));
+        Button close = UITheme.IconButton("Close", drawer, Icon.Close, Kind.Secondary, 36f, 16f);
+        UITheme.TopRight((RectTransform)close.transform, 18f, 21f, 36f, 36f);
+        GameObject root = drawer.gameObject;
         close.onClick.AddListener(() => root.SetActive(false));
 
-        liveText = CreateText("Live Values", root.transform, "", 12, TextAnchor.UpperLeft, Color.white);
-        liveText.rectTransform.anchorMin = new Vector2(0f, 1f);
-        liveText.rectTransform.anchorMax = new Vector2(1f, 1f);
-        liveText.rectTransform.offsetMin = new Vector2(14f, -118f);
-        liveText.rectTransform.offsetMax = new Vector2(-14f, -46f);
+        float y = 76f;
+        // Read-out tiles
+        int n = info.Readouts.Length;
+        anchor.ReadoutValues = new UIValueText[n];
+        if (n > 0)
+        {
+            float tileW = (DrawerInner - (n - 1) * 8f) / n;
+            for (int r = 0; r < n; r++)
+            {
+                Image tile = UITheme.Panel(info.Readouts[r].Label, drawer, UITheme.Sunken2, 12f);
+                UITheme.TopLeft(tile.rectTransform, 20f + r * (tileW + 8f), y, tileW, 58f);
+                UITheme.Border(tile.rectTransform, UITheme.Line, 12f);
+                Text cap = UITheme.Label("Caption", tile.transform, info.Readouts[r].Label, 11.5f, W.Bold, UITheme.Subtle);
+                UITheme.TopBand(cap.rectTransform, 11f, 8f, 6f, 16f);
+                UIValueText v = UITheme.ValueText("Value", tile.transform, n >= 4 ? 16f : 18f, 11f, UITheme.Ink, UITheme.Muted);
+                UITheme.TopBand((RectTransform)v.transform, 11f, 26f, 6f, 24f);
+                anchor.ReadoutValues[r] = v;
+            }
+            y += 58f + 14f;
+        }
 
-        CreateControls(root.transform, id, title);
+        // Description
+        Text desc = UITheme.Label("Description", drawer, info.Description, 12.5f, W.Medium, UITheme.Muted, TextAnchor.UpperLeft, true);
+        desc.lineSpacing = 1.1f;
+        UITheme.TopLeft(desc.rectTransform, 20f, y, DrawerInner, 40f);
+        float descH = Mathf.Ceil(desc.preferredHeight) + 2f;
+        desc.rectTransform.sizeDelta = new Vector2(DrawerInner, descH);
+        y += descH + 16f;
+
+        // Sliders
+        int before = registeredSliders.Count;
+        float slidersTop = y + 34f;
+        float afterSliders = CreateControls(drawer, id, title, slidersTop);
+        bool hasSliders = registeredSliders.Count > before;
+        if (hasSliders)
+        {
+            Text section = UITheme.Label("Section", drawer, "Operating conditions", 14f, W.ExtraBold, UITheme.Ink);
+            UITheme.TopLeft(section.rectTransform, 20f, y, 200f, 20f);
+            Text hint = UITheme.Label("Hint", drawer, "Each release adds a graph point", 12f, W.SemiBold, UITheme.Subtle, TextAnchor.MiddleRight);
+            UITheme.TopRight(hint.rectTransform, 20f, y, 200f, 20f);
+            y = afterSliders + 18f;
+        }
+        else if (id == "storage")
+        {
+            Button reset = UITheme.MakeButton("Reset stored methanol", drawer, "Reset stored methanol", Kind.Secondary, 14f, Icon.Reset, 10f);
+            UITheme.TopLeft((RectTransform)reset.transform, 20f, y, DrawerInner, 42f);
+            reset.onClick.AddListener(() => Simulator()?.ResetStoredMethanol());
+            y += 42f + 14f;
+        }
+
+        // Footer actions, pinned to the bottom of the sheet.
+        string moduleId = id;
+        Image rule = UITheme.Panel("Footer Rule", drawer, UITheme.Line);
+        UITheme.BottomBand(rule.rectTransform, 0f, 84f, 0f, 1f);
+        if (hasSliders)
+        {
+            float bw = (DrawerInner - 10f) / 2f;
+            Button focus = UITheme.MakeButton("Focus Camera", drawer, "Focus camera", Kind.Primary, 14f, Icon.Focus, 10f);
+            UITheme.BottomLeft((RectTransform)focus.transform, 20f, 20f, bw, 44f);
+            focus.onClick.AddListener(() => FocusCamera(moduleId));
+            Button resetModule = UITheme.MakeButton("Reset Module", drawer, "Reset module", Kind.DangerSoft, 14f, Icon.Reset, 10f);
+            UITheme.BottomLeft((RectTransform)resetModule.transform, 30f + bw, 20f, bw, 44f);
+            resetModule.onClick.AddListener(() => ResetModule(title));
+        }
+        else
+        {
+            Button focus = UITheme.MakeButton("Focus Camera", drawer, "Focus camera", Kind.Primary, 14f, Icon.Focus, 10f);
+            UITheme.BottomLeft((RectTransform)focus.transform, 20f, 20f, DrawerInner, 44f);
+            focus.onClick.AddListener(() => FocusCamera(moduleId));
+        }
+        y += 84f + 4f;
+
+        // Full-height side sheet: the same frame as the analytics window, whatever the module.
+        UITheme.TopRight(drawer, 16f, 92f, DrawerWidth, Mathf.Max(626f, y));
         return root;
     }
 
-    private void CreateControls(Transform parent, string id, string moduleTitle)
+    /// <summary>Builds the module's sliders from <paramref name="top"/> down; returns the y
+    /// below the last one.</summary>
+    private float CreateControls(Transform parent, string id, string moduleTitle, float top)
     {
+        float y = top;
+        void S(string label, float min, float max, float value, int decimals, string unit, Action<float> onChanged)
+        {
+            CreateSlider(parent, label, min, max, value, decimals, unit, onChanged, y, moduleTitle);
+            y += 56f;
+        }
+
         switch (id)
         {
             case "electrolyzer":
-                CreateSlider(parent, "Plant load", 0f, 100f, 100f, 0, "%", v => Simulator()?.SetTimelinePercent(v), -136f, moduleTitle);
-                CreateSlider(parent, "Power", 0f, 100f, 75f, 0, "%", v => Simulator()?.SetElectrolyzerPower(v), -168f, moduleTitle);
-                CreateSlider(parent, "Water feed", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetWaterFeed(v), -200f, moduleTitle);
+                S("Plant load", 0f, 100f, 100f, 0, "%", v => Simulator()?.SetTimelinePercent(v));
+                S("Power", 0f, 100f, 75f, 0, "%", v => Simulator()?.SetElectrolyzerPower(v));
+                S("Water feed", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetWaterFeed(v));
                 break;
             case "absorber":
-                CreateSlider(parent, "Amine flow", 10f, 100f, 65f, 0, "%", v => Simulator()?.SetAmineFlow(v), -136f, moduleTitle);
-                CreateSlider(parent, "Flue gas", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetFlueGasFlow(v), -168f, moduleTitle);
+                S("Amine flow", 10f, 100f, 65f, 0, "%", v => Simulator()?.SetAmineFlow(v));
+                S("Flue gas", 0f, 130f, 100f, 0, "%", v => Simulator()?.SetFlueGasFlow(v));
                 break;
             case "desorber":
-                CreateSlider(parent, "Steam flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetRegeneratorSteam(v), -136f, moduleTitle);
-                CreateSlider(parent, "Regen temp", 80f, 130f, 105f, 0, " C", v => Simulator()?.SetRegeneratorTemperature(v), -168f, moduleTitle);
+                S("Steam flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetRegeneratorSteam(v));
+                S("Regen temp", 80f, 130f, 105f, 0, "°C", v => Simulator()?.SetRegeneratorTemperature(v));
                 break;
             case "compressor":
-                CreateSlider(parent, "Comp. ratio", 1f, 6f, 3f, 1, "", v => Simulator()?.SetCompressionRatio(v), -136f, moduleTitle);
-                CreateSlider(parent, "Outlet press.", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -168f, moduleTitle);
+                S("Comp. ratio", 1f, 6f, 3f, 1, "", v => Simulator()?.SetCompressionRatio(v));
+                S("Outlet press.", 40f, 100f, 70f, 0, "bar", v => Simulator()?.SetReactorPressure(v));
                 break;
             case "reactor":
-                CreateSlider(parent, "Temp", 180f, 300f, 250f, 0, " C", v => Simulator()?.SetReactorTemperature(v), -126f, moduleTitle);
-                CreateSlider(parent, "Pressure", 40f, 100f, 70f, 0, " bar", v => Simulator()?.SetReactorPressure(v), -158f, moduleTitle);
-                CreateSlider(parent, "H2/CO2", 1f, 6f, 3f, 1, "", v => Simulator()?.SetH2Co2Ratio(v), -190f, moduleTitle);
-                CreateSlider(parent, "GHSV", 1000f, 20000f, 8000f, 0, " h-1", v => Simulator()?.SetGHSV(v), -222f, moduleTitle);
-                CreateSlider(parent, "Feed flow", 20f, 130f, 100f, 0, "%", v => Simulator()?.SetReactorFeedFlow(v), -254f, moduleTitle);
+                S("Temp", 180f, 300f, 250f, 0, "°C", v => Simulator()?.SetReactorTemperature(v));
+                S("Pressure", 40f, 100f, 70f, 0, "bar", v => Simulator()?.SetReactorPressure(v));
+                S("H2/CO2", 1f, 6f, 3f, 1, "", v => Simulator()?.SetH2Co2Ratio(v));
+                S("GHSV", 1000f, 20000f, 8000f, 0, "1/h", v => Simulator()?.SetGHSV(v));
+                S("Feed flow", 20f, 130f, 100f, 0, "%", v => Simulator()?.SetReactorFeedFlow(v));
                 break;
             case "condenser":
-                CreateSlider(parent, "Cooling flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetCoolingWaterFlow(v), -136f, moduleTitle);
-                CreateSlider(parent, "Cooling temp", 5f, 45f, 24f, 0, " C", v => Simulator()?.SetCoolingWaterTemperature(v), -168f, moduleTitle);
+                S("Cooling flow", 0f, 100f, 70f, 0, "%", v => Simulator()?.SetCoolingWaterFlow(v));
+                S("Cooling temp", 5f, 45f, 24f, 0, "°C", v => Simulator()?.SetCoolingWaterTemperature(v));
                 break;
             case "separator":
-                CreateSlider(parent, "Recycle ratio", 0f, 100f, 65f, 0, "%", v => Simulator()?.SetRecycleRatio(v), -136f, moduleTitle);
-                CreateSlider(parent, "Sep. temp", 20f, 65f, 34f, 0, " C", v => Simulator()?.SetSeparatorTemperature(v), -168f, moduleTitle);
+                S("Recycle ratio", 0f, 100f, 65f, 0, "%", v => Simulator()?.SetRecycleRatio(v));
+                S("Sep. temp", 20f, 65f, 34f, 0, "°C", v => Simulator()?.SetSeparatorTemperature(v));
                 break;
             case "distillation":
-                CreateSlider(parent, "Reflux ratio", 0.5f, 5f, 3.2f, 1, "", v => Simulator()?.SetRefluxRatio(v), -136f, moduleTitle);
-                CreateSlider(parent, "Reboiler temp", 70f, 115f, 98f, 0, " C", v => Simulator()?.SetDistillationReboilerTemperature(v), -168f, moduleTitle);
-                break;
-            case "storage":
-                Button reset = CreateWideButton(parent, "Reset stored methanol", new Vector2(0f, 50f), new Vector2(235f, 30f));
-                reset.onClick.AddListener(() => Simulator()?.ResetStoredMethanol());
+                S("Reflux ratio", 0.5f, 5f, 3.2f, 1, "", v => Simulator()?.SetRefluxRatio(v));
+                S("Reboiler temp", 70f, 115f, 98f, 0, "°C", v => Simulator()?.SetDistillationReboilerTemperature(v));
                 break;
         }
+        return y - 12f;
     }
+
+    private static readonly Dictionary<string, string> SliderDisplayNames = new Dictionary<string, string>
+    {
+        { "Temp", "Temperature" }, { "H2/CO2", "H₂/CO₂ ratio" }, { "Comp. ratio", "Compression ratio" },
+        { "Outlet press.", "Outlet pressure" }, { "Regen temp", "Regeneration temp" }, { "Sep. temp", "Separator temp" },
+    };
 
     private void CreateSlider(Transform parent, string label, float min, float max, float value, int decimals, string unit, Action<float> onChanged, float y, string moduleTitle)
     {
-        Text labelText = CreateText(label + " Label", parent, label, 12, TextAnchor.MiddleLeft, new Color(0.75f, 0.88f, 0.95f, 1f));
-        labelText.rectTransform.anchorMin = new Vector2(0f, 1f);
-        labelText.rectTransform.anchorMax = new Vector2(0f, 1f);
-        labelText.rectTransform.pivot = new Vector2(0f, 0.5f);
-        labelText.rectTransform.anchoredPosition = new Vector2(16f, y);
-        labelText.rectTransform.sizeDelta = new Vector2(100f, 22f);
+        string display = SliderDisplayNames.TryGetValue(label, out string pretty) ? pretty : label;
+        Text labelText = UITheme.Label(label + " Label", parent, display, 13.5f, W.Bold, UITheme.Ink2);
+        UITheme.TopLeft(labelText.rectTransform, 20f, y, 200f, 22f);
 
-        GameObject sliderObject = new GameObject(label + " Slider");
-        sliderObject.transform.SetParent(parent, false);
-        RectTransform sliderRect = sliderObject.AddComponent<RectTransform>();
-        sliderRect.anchorMin = new Vector2(0f, 1f);
-        sliderRect.anchorMax = new Vector2(0f, 1f);
-        sliderRect.pivot = new Vector2(0f, 0.5f);
-        sliderRect.anchoredPosition = new Vector2(118f, y);
-        sliderRect.sizeDelta = new Vector2(172f, 18f);
+        Image chip = UITheme.Panel(label + " Value Chip", parent, UITheme.AccentSoft, 6f);
+        Text valueText = UITheme.Label(label + " Value", chip.transform, Format(value, decimals, unit), 13f, W.ExtraBold, UITheme.Accent, TextAnchor.MiddleCenter);
+        UITheme.Fill(valueText.rectTransform);
+        float chipW = Mathf.Max(ChipWidth(valueText, Format(max, decimals, unit)), ChipWidth(valueText, Format(min, decimals, unit)));
+        UITheme.TopRight(chip.rectTransform, 20f, y, chipW, 22f);
+        valueText.text = Format(value, decimals, unit);
 
-        Slider slider = sliderObject.AddComponent<Slider>();
-        slider.minValue = min;
-        slider.maxValue = max;
-        slider.value = value;
+        Text minText = UITheme.Label(label + " Min", parent, Format(min, decimals == 0 ? 0 : 1, ""), 11.5f, W.SemiBold, UITheme.Subtle);
+        UITheme.TopLeft(minText.rectTransform, 20f, y + 26f, 40f, 20f);
+        Text maxText = UITheme.Label(label + " Max", parent, Format(max, decimals == 0 ? 0 : 1, ""), 11.5f, W.SemiBold, UITheme.Subtle, TextAnchor.MiddleRight);
+        UITheme.TopRight(maxText.rectTransform, 20f, y + 26f, 44f, 20f);
 
-        Image background = SliderImage("Background", sliderObject.transform, new Color(0.12f, 0.18f, 0.23f, 1f), Vector2.zero, Vector2.one);
-        Image fill = SliderImage("Fill", sliderObject.transform, new Color(0.08f, 0.62f, 0.9f, 1f), new Vector2(0f, 0.22f), new Vector2(1f, 0.78f));
-        Image handle = SliderImage("Handle", sliderObject.transform, Color.white, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
-        handle.rectTransform.sizeDelta = new Vector2(14f, 22f);
-
-        slider.targetGraphic = handle;
-        slider.fillRect = fill.rectTransform;
-        slider.handleRect = handle.rectTransform;
-        _ = background;
-
-        Text valueText = CreateText(label + " Value", parent, Format(value, decimals, unit), 12, TextAnchor.MiddleRight, Color.white);
-        valueText.rectTransform.anchorMin = new Vector2(0f, 1f);
-        valueText.rectTransform.anchorMax = new Vector2(0f, 1f);
-        valueText.rectTransform.pivot = new Vector2(0f, 0.5f);
-        valueText.rectTransform.anchoredPosition = new Vector2(296f, y);
-        valueText.rectTransform.sizeDelta = new Vector2(78f, 22f);
+        Slider slider = UITheme.MakeSlider(label + " Slider", parent, min, max, value);
+        UITheme.TopLeft((RectTransform)slider.transform, 60f, y + 25f, DrawerInner - 40f - 44f - 8f, 22f);
 
         slider.onValueChanged.AddListener(v =>
         {
@@ -429,13 +554,22 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 
         onChanged?.Invoke(value);
 
-        SliderCommitTracker tracker = sliderObject.AddComponent<SliderCommitTracker>();
+        SliderCommitTracker tracker = slider.gameObject.AddComponent<SliderCommitTracker>();
         tracker.Slider = slider;
         tracker.Module = moduleTitle;
         tracker.Parameter = label;
         tracker.LastCommittedValue = value;
 
-        registeredSliders.Add(new RegisteredSlider { Slider = slider, DefaultValue = value, ValueText = valueText, LabelText = labelText, Decimals = decimals, Unit = unit, Tracker = tracker });
+        registeredSliders.Add(new RegisteredSlider { Slider = slider, DefaultValue = value, ValueText = valueText, ValueChip = chip, LabelText = labelText, Decimals = decimals, Unit = unit, Tracker = tracker });
+    }
+
+    private static float ChipWidth(Text sample, string text)
+    {
+        string old = sample.text;
+        sample.text = text;
+        float w = sample.preferredWidth + 18f;
+        sample.text = old;
+        return Mathf.Max(52f, w);
     }
 
     /// <summary>
@@ -462,9 +596,11 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     private static void SetSliderDimmed(RegisteredSlider entry, bool dim)
     {
         SetGraphicAlpha(entry.Slider.fillRect, dim ? 0.3f : 1f);
-        SetGraphicAlpha(entry.Slider.handleRect, dim ? 0.35f : 1f);
-        if (entry.ValueText != null) SetTextAlpha(entry.ValueText, dim ? 0.4f : 1f);
-        if (entry.LabelText != null) SetTextAlpha(entry.LabelText, dim ? 0.4f : 0.95f);
+        SetGraphicAlpha(entry.Slider.handleRect, dim ? 0.4f : 1f);
+        if (entry.ValueText != null) SetTextAlpha(entry.ValueText, dim ? 0.45f : 1f);
+        if (entry.ValueChip != null) entry.ValueChip.color = dim ? UITheme.Sunken : UITheme.AccentSoft;
+        if (entry.ValueText != null) entry.ValueText.color = UITheme.WithAlpha(dim ? UITheme.Subtle : UITheme.Accent, 1f);
+        if (entry.LabelText != null) SetTextAlpha(entry.LabelText, dim ? 0.45f : 1f);
     }
 
     private static void SetGraphicAlpha(RectTransform target, float alpha)
@@ -531,6 +667,22 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         }
     }
 
+    /// <summary>Puts one module's sliders back to their start-of-run values (each change is
+    /// recorded like a manual one, so the graphs show it).</summary>
+    private void ResetModule(string moduleTitle)
+    {
+        foreach (RegisteredSlider entry in registeredSliders)
+        {
+            if (entry.Slider == null || entry.Tracker == null || !entry.Slider.interactable) continue;
+            if (!string.Equals(entry.Tracker.Module, moduleTitle, StringComparison.OrdinalIgnoreCase)) continue;
+            float before = entry.Slider.value;
+            if (Mathf.Approximately(before, entry.DefaultValue)) continue;
+            entry.Slider.value = entry.DefaultValue;
+            PlantProcessSimulator.Instance?.CommitManualChange(entry.Tracker.Module, entry.Tracker.Parameter, before, entry.DefaultValue);
+            entry.Tracker.LastCommittedValue = entry.DefaultValue;
+        }
+    }
+
     /// <summary>
     /// Repositions every control back to its start-of-run default without re-triggering the
     /// onValueChanged -> Simulator().SetXxx cascade — PlantProcessSimulator.ResetSimulation()
@@ -549,43 +701,202 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             if (entry.Tracker != null) entry.Tracker.LastCommittedValue = entry.DefaultValue;
         }
 
-        foreach (ModuleAnchor anchor in allAnchors)
-        {
-            if (anchor != null && anchor.PanelRoot != null) anchor.PanelRoot.SetActive(false);
-        }
+        CloseAllPanels();
     }
 
-    private string BuildLiveText(string id)
+    private void FocusCamera(string id)
     {
-        PlantProcessSimulator.ProcessSnapshot s = Simulator() != null ? Simulator().Current : default;
+        ModuleInfo info = Info(id);
+        if (info.FocusIndex < 0) return;
+        OrbitCameraController cam = FindFirstObjectByType<OrbitCameraController>();
+        if (cam != null) cam.FocusModule(info.FocusIndex);
+    }
+
+    // ---- module content ------------------------------------------------------------
+
+    private static string F0(float v) => v.ToString("F0");
+    private static string F1(float v) => v.ToString("F1");
+
+    private static ModuleInfo Info(string id)
+    {
         switch (id)
         {
             case "electrolyzer":
-                return $"Water feed: {s.waterFeedKgH:F0} kg/h\nH2 production: {s.h2InputKgH:F0} kg/h\nO2 byproduct: {s.oxygenByproductKgH:F0} kg/h\nHigher power/water increases bubble and H2 pipe flow.";
+                return new ModuleInfo
+                {
+                    Subtitle = "Hydrogen production", Icon = Icon.Bolt, Color = UITheme.Hex("0EA5E9"), FocusIndex = 0,
+                    Description = "Water electrolysis. Higher power and water feed increase hydrogen output and the H₂ pipe flow.",
+                    Readouts = new[]
+                    {
+                        new Readout("Water", "kg/h", s => F0(s.waterFeedKgH)),
+                        new Readout("H₂", "kg/h", s => F0(s.h2InputKgH)),
+                        new Readout("O₂", "kg/h", s => F0(s.oxygenByproductKgH)),
+                        new Readout("Power", "%", s => F0(s.electrolyzerPowerPercent)),
+                    }
+                };
             case "absorber":
-                return $"Flue gas CO2: {s.co2InputKgH:F0} kg/h\nCaptured CO2: {s.co2CapturedKgH:F0} kg/h\nCapture efficiency: {s.captureEfficiencyPercent:F0}%\nAmine flow controls how much CO2 enters the process.";
+                return new ModuleInfo
+                {
+                    Subtitle = "Amine CO₂ capture", Icon = Icon.Column, Color = UITheme.Hex("10B981"), FocusIndex = 2,
+                    Description = "Amine flow controls how much of the flue-gas CO₂ is captured and enters the process.",
+                    Readouts = new[]
+                    {
+                        new Readout("Flue-gas CO₂", "kg/h", s => F0(s.co2InputKgH)),
+                        new Readout("Captured", "kg/h", s => F0(s.co2CapturedKgH)),
+                        new Readout("Efficiency", "%", s => F0(s.captureEfficiencyPercent)),
+                    }
+                };
             case "desorber":
-                return $"Steam flow: {s.regeneratorSteamPercent:F0}%\nRegeneration temp: {s.regeneratorTemperatureC:F0} C\nCO2 released to compressor: {s.co2CapturedKgH:F0} kg/h\nLow heat leaves solvent partially loaded.";
+                return new ModuleInfo
+                {
+                    Subtitle = "Solvent regeneration", Icon = Icon.Column, Color = UITheme.Hex("F59E0B"), FocusIndex = 4,
+                    Description = "Steam heat strips CO₂ from the rich amine. Low heat leaves the solvent partially loaded.",
+                    Readouts = new[]
+                    {
+                        new Readout("Steam flow", "%", s => F0(s.regeneratorSteamPercent)),
+                        new Readout("Regen temp", "°C", s => F0(s.regeneratorTemperatureC)),
+                        new Readout("CO₂ released", "kg/h", s => F0(s.co2CapturedKgH)),
+                    }
+                };
             case "compressor":
-                return $"Compression ratio: {s.compressionRatio:F1}\nOutlet pressure: {s.reactorPressureBar:F0} bar\nSyngas to reactor: {s.syngasFeedKgH:F0} kg/h\nHigh pressure improves conversion but implies higher power.";
+                return new ModuleInfo
+                {
+                    Subtitle = "Syngas compression", Icon = Icon.Gauge, Color = UITheme.Hex("8B5CF6"), FocusIndex = 5,
+                    Description = "Higher pressure improves conversion in the reactor but needs more compressor power.",
+                    Readouts = new[]
+                    {
+                        new Readout("Ratio", "", s => F1(s.compressionRatio)),
+                        new Readout("Outlet", "bar", s => F0(s.reactorPressureBar)),
+                        new Readout("Syngas", "kg/h", s => F0(s.syngasFeedKgH)),
+                    }
+                };
             case "reactor":
-                return $"Status: {BuildReactorStatus(s)}\nYield: {s.reactorYieldPercent:F1}%  Methanol: {s.methanolProductionKgH:F0} kg/h\nTemp: {s.reactorTemperatureC:F0} C  Pressure: {s.reactorPressureBar:F0} bar\nRatio: {s.h2Co2Ratio:F1}  GHSV: {s.ghsv:F0} h-1";
-            case "condenser":
-                return $"Cooling water: {s.coolingWaterFlowPercent:F0}% at {s.coolingWaterTemperatureC:F0} C\nCondensation recovery: {s.condenserRecoveryPercent:F0}%\nRecovered liquid methanol: {s.methanolProductionKgH:F0} kg/h";
+                return new ModuleInfo
+                {
+                    // Short, so the live status chip fits beside it.
+                    Subtitle = "R-201", Icon = Icon.Flask, Color = UITheme.Hex("EA580C"), FocusIndex = 7,
+                    Description = "Fixed-bed synthesis: conditioned H₂/CO₂ syngas is converted to methanol and water over the catalyst bed. In this model, yield peaks near 255 °C.",
+                    Readouts = new[]
+                    {
+                        new Readout("Yield", "%", s => F1(s.reactorYieldPercent)),
+                        new Readout("Methanol", "kg/h", s => F0(s.methanolProductionKgH)),
+                        new Readout("Temp", "°C", s => F0(s.reactorTemperatureC)),
+                        new Readout("Pressure", "bar", s => F0(s.reactorPressureBar)),
+                    }
+                };
             case "heatexchanger":
-                return $"Syngas feed: {s.syngasFeedKgH:F0} kg/h\nReactor effluent temp: {s.reactorTemperatureC:F0} C\nPreheats cold reactor feed against hot reactor effluent before the fixed bed, reducing external heating duty.";
+                return new ModuleInfo
+                {
+                    Subtitle = "Feed/effluent heat recovery", Icon = Icon.Swap, Color = UITheme.Hex("F97316"), FocusIndex = 6,
+                    Description = "Preheats the cold reactor feed against the hot reactor effluent before the fixed bed, reducing external heating duty.",
+                    Readouts = new[]
+                    {
+                        new Readout("Syngas feed", "kg/h", s => F0(s.syngasFeedKgH)),
+                        new Readout("Effluent temp", "°C", s => F0(s.reactorTemperatureC)),
+                    }
+                };
+            case "condenser":
+                return new ModuleInfo
+                {
+                    Subtitle = "Effluent cooling", Icon = Icon.Snow, Color = UITheme.Hex("38BDF8"), FocusIndex = 8,
+                    Description = "Cooling water condenses crude methanol and water out of the reactor effluent.",
+                    Readouts = new[]
+                    {
+                        new Readout("Cooling", "%", s => F0(s.coolingWaterFlowPercent)),
+                        new Readout("Water temp", "°C", s => F0(s.coolingWaterTemperatureC)),
+                        new Readout("Recovery", "%", s => F0(s.condenserRecoveryPercent)),
+                        new Readout("Liquid", "kg/h", s => F0(s.methanolProductionKgH)),
+                    }
+                };
             case "separator":
-                return $"Recycle ratio: {s.recycleRatioPercent:F0}%\nRecycle gas: {s.recycleGasKgH:F0} kg/h\nSeparator temp: {s.separatorTemperatureC:F0} C\nMore recycle raises overall conversion and compressor load.";
+                return new ModuleInfo
+                {
+                    Subtitle = "Flash separation + recycle", Icon = Icon.Split, Color = UITheme.Hex("E11D48"), FocusIndex = 9,
+                    Description = "More recycle raises overall conversion, and also the compressor load.",
+                    Readouts = new[]
+                    {
+                        new Readout("Recycle", "%", s => F0(s.recycleRatioPercent)),
+                        new Readout("Recycle gas", "kg/h", s => F0(s.recycleGasKgH)),
+                        new Readout("Temp", "°C", s => F0(s.separatorTemperatureC)),
+                    }
+                };
             case "distillation":
-                return $"Reflux ratio: {s.refluxRatio:F1}\nReboiler temp: {s.distillationReboilerTemperatureC:F0} C\nMethanol purity: {s.methanolPurityPercent:F2}%\nEnergy demand: {s.distillationEnergyPercent:F0}%";
+                return new ModuleInfo
+                {
+                    Subtitle = "Methanol purification", Icon = Icon.Column, Color = UITheme.Hex("65A30D"), FocusIndex = 10,
+                    Description = "Reflux and reboiler heat set the product purity and the separation energy demand.",
+                    Readouts = new[]
+                    {
+                        new Readout("Reflux", "", s => F1(s.refluxRatio)),
+                        new Readout("Reboiler", "°C", s => F0(s.distillationReboilerTemperatureC)),
+                        new Readout("Purity", "%", s => s.methanolPurityPercent.ToString("F2")),
+                        new Readout("Energy", "%", s => F0(s.distillationEnergyPercent)),
+                    }
+                };
             case "storage":
-                return $"Stored methanol: {s.storedMethanolKg:F0} kg\nTank fill: {s.storageFillPercent:F0}%\nCurrent product rate: {s.methanolProductionKgH:F0} kg/h\nPurity: {s.methanolPurityPercent:F2}%";
+                return new ModuleInfo
+                {
+                    Subtitle = "Product storage", Icon = Icon.Tank, Color = UITheme.Hex("16A34A"), FocusIndex = 11,
+                    Description = "Refined methanol accumulates here. Near its limit the tank's capacity interlock holds back production upstream.",
+                    Readouts = new[]
+                    {
+                        new Readout("Stored", "kg", s => F0(s.storedMethanolKg)),
+                        new Readout("Fill", "%", s => F0(s.storageFillPercent)),
+                        new Readout("Rate", "kg/h", s => F0(s.methanolProductionKgH)),
+                        new Readout("Purity", "%", s => s.methanolPurityPercent.ToString("F2")),
+                    }
+                };
             case "co2tank":
-                return $"Captured CO2 inflow: {s.co2CapturedKgH:F0} kg/h\nCapture efficiency: {s.captureEfficiencyPercent:F0}%\nBuffers conditioned CO2 ahead of the synthesis gas mixing junction.";
+                return new ModuleInfo
+                {
+                    Subtitle = "CO₂ buffer", Icon = Icon.Tank, Color = UITheme.Hex("10B981"), FocusIndex = 1,
+                    Description = "Buffers conditioned CO₂ ahead of the synthesis-gas mixing junction.",
+                    Readouts = new[]
+                    {
+                        new Readout("CO₂ inflow", "kg/h", s => F0(s.co2CapturedKgH)),
+                        new Readout("Capture", "%", s => F0(s.captureEfficiencyPercent)),
+                    }
+                };
             case "h2tank":
-                return $"Hydrogen inflow: {s.h2InputKgH:F0} kg/h\nElectrolyzer power: {s.electrolyzerPowerPercent:F0}%\nDecouples variable electrolyzer output from steady synthesis-loop demand.";
+                return new ModuleInfo
+                {
+                    Subtitle = "H₂ buffer", Icon = Icon.Tank, Color = UITheme.Hex("0EA5E9"), FocusIndex = 3,
+                    Description = "Decouples variable electrolyzer output from the steady synthesis-loop demand.",
+                    Readouts = new[]
+                    {
+                        new Readout("H₂ inflow", "kg/h", s => F0(s.h2InputKgH)),
+                        new Readout("Electrolyzer", "%", s => F0(s.electrolyzerPowerPercent)),
+                    }
+                };
             default:
-                return $"H2: {s.h2InputKgH:F0} kg/h\nCO2: {s.co2CapturedKgH:F0} kg/h\nMeOH: {s.methanolProductionKgH:F0} kg/h";
+                return new ModuleInfo
+                {
+                    Subtitle = "Process module", Icon = Icon.Info, Color = UITheme.Accent, FocusIndex = -1,
+                    Description = "",
+                    Readouts = new[]
+                    {
+                        new Readout("H₂", "kg/h", s => F0(s.h2InputKgH)),
+                        new Readout("CO₂", "kg/h", s => F0(s.co2CapturedKgH)),
+                        new Readout("Methanol", "kg/h", s => F0(s.methanolProductionKgH)),
+                    }
+                };
+        }
+    }
+
+    private void UpdateReadouts(ModuleAnchor anchor)
+    {
+        PlantProcessSimulator sim = Simulator();
+        if (sim == null || anchor.Info == null || anchor.ReadoutValues == null) return;
+        PlantProcessSimulator.ProcessSnapshot s = sim.Current;
+        for (int i = 0; i < anchor.ReadoutValues.Length; i++)
+        {
+            Readout r = anchor.Info.Readouts[i];
+            anchor.ReadoutValues[i].Set(r.Value(s), r.Unit);
+        }
+        if (anchor.StatusChip != null)
+        {
+            string status = BuildReactorStatus(s);
+            anchor.StatusChip.Set(status == "Normal" ? UIStatusChip.Kind.Success : UIStatusChip.Kind.Warning, status);
         }
     }
 
@@ -655,80 +966,10 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         return null;
     }
 
-    private Text CreateText(string name, Transform parent, string value, int size, TextAnchor anchor, Color color)
+    private static string Format(float value, int decimals, string unit)
     {
-        GameObject textObject = new GameObject(name);
-        textObject.transform.SetParent(parent, false);
-        Text text = textObject.AddComponent<Text>();
-        text.font = font;
-        text.text = value;
-        text.fontSize = size;
-        text.alignment = anchor;
-        text.color = color;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Truncate;
-        return text;
-    }
-
-    private Button CreateSmallButton(Transform parent, string label, Vector2 anchoredPosition, Vector2 size)
-    {
-        GameObject root = new GameObject("Close");
-        root.transform.SetParent(parent, false);
-        RectTransform rect = root.AddComponent<RectTransform>();
-        rect.anchorMin = new Vector2(1f, 1f);
-        rect.anchorMax = new Vector2(1f, 1f);
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = size;
-        root.AddComponent<Image>().color = new Color(0.85f, 0.18f, 0.18f, 0.9f);
-        Button button = root.AddComponent<Button>();
-        Text text = CreateText("Text", root.transform, label, 16, TextAnchor.MiddleCenter, Color.white);
-        Stretch(text.rectTransform);
-        return button;
-    }
-
-    private Button CreateWideButton(Transform parent, string label, Vector2 anchoredPosition, Vector2 size)
-    {
-        GameObject root = new GameObject(label);
-        root.transform.SetParent(parent, false);
-        RectTransform rect = root.AddComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0.5f, 0f);
-        rect.anchorMax = new Vector2(0.5f, 0f);
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = size;
-        root.AddComponent<Image>().color = new Color(0.08f, 0.34f, 0.48f, 0.95f);
-        Button button = root.AddComponent<Button>();
-        Text text = CreateText("Text", root.transform, label, 13, TextAnchor.MiddleCenter, Color.white);
-        Stretch(text.rectTransform);
-        return button;
-    }
-
-    private Image SliderImage(string name, Transform parent, Color color, Vector2 anchorMin, Vector2 anchorMax)
-    {
-        GameObject imageObject = new GameObject(name);
-        imageObject.transform.SetParent(parent, false);
-        RectTransform rect = imageObject.AddComponent<RectTransform>();
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
-        Image image = imageObject.AddComponent<Image>();
-        image.color = color;
-        return image;
-    }
-
-    private string Format(float value, int decimals, string unit)
-    {
-        return decimals <= 0 ? $"{value:F0}{unit}" : $"{value:F1}{unit}";
-    }
-
-    private void Stretch(RectTransform rect)
-    {
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
+        string number = decimals <= 0 ? value.ToString("F0") : value.ToString("F1");
+        return string.IsNullOrEmpty(unit) ? number : $"{number} {unit}";
     }
 
     private void DestroyObject(UnityEngine.Object target)
@@ -741,13 +982,15 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     private class ModuleAnchor : MonoBehaviour
     {
         public string ModuleId;
+        public string Title;
         public Transform Target;
         public Vector3 WorldOffset;
         public GameObject ButtonRoot;
         public RectTransform ButtonRect;
         public GameObject PanelRoot;
-        public RectTransform PanelRect;
-        public Text LiveText;
+        public ModuleInfo Info;
+        public UIValueText[] ReadoutValues;
+        public UIStatusChip StatusChip;
         public Vector3 CachedScreen;
         public bool IsInFrustum;
     }

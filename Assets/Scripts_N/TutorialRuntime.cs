@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using Icon = UITheme.Icon;
+using Kind = UITheme.ButtonKind;
+using W = UITheme.Weight;
 
 /// <summary>
 /// Step-by-step guided tour of the whole application.
@@ -19,17 +22,12 @@ public sealed class TutorialRuntime : MonoBehaviour
 {
     private const string RuntimeRootName = "Generated Tutorial Overlay";
 
-    private static readonly Color DimColor = new Color(0.012f, 0.035f, 0.05f, 0.78f);
-    private static readonly Color CardColor = new Color32(9, 29, 41, 252);
-    private static readonly Color HeaderColor = new Color32(10, 24, 34, 255);
-    private static readonly Color AccentColor = new Color32(20, 145, 205, 255);
-    private static readonly Color MutedTextColor = new Color32(174, 195, 206, 255);
-    private static readonly Color SkipColor = new Color32(90, 42, 42, 255);
+    private static readonly Color DimColor = new Color(0.06f, 0.09f, 0.16f, 0.62f);
 
-    private const float CardWidth = 600f;
-    private const float CardHeight = 280f;
+    private const float CardWidth = 580f;
+    private const float CardMinHeight = 220f;
     private const float HighlightPadding = 8f;
-    private const float FrameThickness = 2f;
+    private const float FrameThickness = 2.5f;
     private const float CardMargin = 22f;
 
     public static TutorialRuntime Instance { get; private set; }
@@ -70,24 +68,22 @@ public sealed class TutorialRuntime : MonoBehaviour
 
     private Canvas canvas;
     private CanvasGroup canvasGroup;
-    private Font font;
     private RectTransform root;
     private readonly RectTransform[] dimPanels = new RectTransform[4];
-    private readonly RectTransform[] frameEdges = new RectTransform[4];
-    private GameObject frameRoot;
+    private RectTransform frame;
     private Image blockerImage;
     private GameObject arrowRoot;
     private UIGraphLine arrowShaft;
     private TutorialArrowHead arrowHead;
+    private RectTransform arrowPill;
     private Text arrowLabel;
     private RectTransform card;
     private Text cardTitle;
     private Text cardBody;
     private Text cardCounter;
-    private RectTransform progressFill;
+    private UIProgressBar progress;
     private Button previousButton;
     private Button nextButton;
-    private Text nextButtonLabel;
 
     private RectTransform currentTarget;
     // Steps run their Apply() before the target is looked up, but a panel can still take a
@@ -113,8 +109,6 @@ public sealed class TutorialRuntime : MonoBehaviour
 
     private void Start()
     {
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         BuildSteps(ExternalAnalyticsWindow.IsSupported);
         BuildOverlay();
         // With the welcome screen up, its START button opens the tour instead.
@@ -192,164 +186,168 @@ public sealed class TutorialRuntime : MonoBehaviour
     /// the explanation card still fits below it instead of being pushed over the spotlight.</summary>
     private static readonly Rect PlantArea = new Rect(0.21f, 0.42f, 0.58f, 0.32f);
 
+    /// <summary>A UI label named in the step text, drawn in the accent colour.</summary>
+    private static string UI(string label) => $"<color=#1D4ED8>{label}</color>";
+
     private void BuildSteps(bool separateAnalyticsWindow)
     {
-        Add("WELCOME TO THE POWER-TO-METHANOL DIGITAL TWIN",
-            "This short tour walks through every part of the application: the 3D plant, the six sections in the top bar, the Flow Lab, the equipment controls, the analytics window and the footer tools.\n\n" +
-            "It opens every time the application starts. Use NEXT and PREVIOUS to move through it, or SKIP TUTORIAL to jump straight in. You can reopen it at any time from HELP -> START TUTORIAL.\n\n" +
+        Add("Welcome to the Power-to-Methanol Digital Twin",
+            "This short tour walks through every part of the application: the 3D plant, the six sections in the navigation bar, the Flow lab, the equipment controls, the analytics window and the dock of tools along the bottom.\n\n" +
+            $"It opens every time the application starts. Use {UI("Next")} and {UI("Previous")} to move through it, or {UI("Skip tutorial")} to jump straight in. You can replay it at any time from the {UI("?")} button → {UI("Start tutorial")}.\n\n" +
             "Keyboard: Enter or Space = next, Backspace = previous, Esc = skip.",
             apply: () => Dashboard(d => d.TutorialRestoreDefaults()));
 
-        Add("THE MAIN NAVIGATION",
-            "Six sections live in the header: OVERVIEW, PROCESS MAP, FLOW LAB, REACTOR LAB, ANALYTICS and SIMULATION. Selecting one opens its panel and moves the camera to a matching view, and the highlighted button always shows where you are.\n\n" +
-            "HELP on the far right opens the about box, which is also where you can replay this tour.",
+        Add("The main navigation",
+            $"Six sections live in the navigation bar: {UI("Overview")}, {UI("Process map")}, {UI("Flow lab")}, {UI("Reactor lab")}, {UI("Analytics")} and {UI("Simulation")}. Selecting one opens its card and moves the camera to a matching view; the highlighted pill always shows where you are.\n\n" +
+            $"The round {UI("?")} button on the far right opens the about box, which is also where you can replay this tour. Next to it, the status capsule shows whether the simulation is running or paused.",
             "Header");
 
-        Add("OVERVIEW - THE HOME VIEW",
-            "OVERVIEW is the landing view: the full plant in 3D with the live status, the KPI strip and the stream legend arranged around it.\n\n" +
+        Add("Overview — the home view",
+            $"{UI("Overview")} is the landing view: the full plant in 3D, with the plant status, the four process tiles and the stream legend arranged around it.\n\n" +
             "From any other section, clicking empty space in the 3D scene brings you straight back here.",
             "OVERVIEW",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
-        Add("PLANT STATUS",
-            "The panel on the right summarises the whole plant: a status light (normal operation, operating caution, attention required or paused), overall efficiency, methanol production in kg/h, CO2 utilisation, and the product-tank level with an estimate of how long it has left before it is full.",
+        Add("Plant status",
+            "The card on the right summarises the whole plant: a status badge (normal operation, operating caution, attention required or paused), the overall-efficiency ring, methanol production in kg/h, CO₂ utilisation, and the product-tank level with an estimate of how long it has left before it is full.",
             "Plant Status",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
-        Add("ONE-CLICK BEST CASE",
-            "SET MAXIMUM EFFICIENCY drives every module slider to the setpoint combination that gives the highest overall efficiency in this educational model, and resumes the run.\n\n" +
+        Add("One-click best case",
+            $"{UI("Set maximum efficiency")} drives every module slider to the setpoint combination that gives the highest overall efficiency in this educational model, and resumes the run.\n\n" +
             "It is the quickest way to see the plant at its best before you start experimenting with the controls yourself.",
             "Set Maximum Efficiency",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
-        Add("LIVE KPI STRIP",
-            "The strip across the bottom of the scene reports the four process stages live:\n\n" +
-            "ELECTROLYZER - power, hydrogen, water and oxygen\n" +
-            "CO2 CAPTURE - capture efficiency, captured CO2, amine flow, regenerator temperature\n" +
-            "REACTOR - temperature, pressure, H2/CO2 ratio, yield\n" +
-            "SEPARATION - recycle, purity, storage, product rate",
+        Add("Live process tiles",
+            "The four tiles along the bottom report the process stages live:\n\n" +
+            $"{UI("Electrolyzer")} — power, hydrogen, water and oxygen\n" +
+            $"{UI("CO₂ capture")} — capture efficiency, captured CO₂, amine flow, regenerator temperature\n" +
+            $"{UI("Reactor")} — temperature, pressure, H₂/CO₂ ratio, yield\n" +
+            $"{UI("Separation")} — recycle, purity, storage, product rate\n\n" +
+            $"{UI("Open")} on a tile opens that module's controls.",
             "Process KPI Strip",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
-        Add("STREAM LEGEND",
-            "The legend lists what the pipes carry and the colour each stream is drawn in: water and hydrogen, amine and captured CO2, compressed syngas, hot reactor effluent, crude methanol, refined methanol, and the dashed gas recycle loop.\n\n" +
-            "Those colours come alive in the FLOW LAB, covered in a moment: open it and every pipe shows its stream moving in exactly these legend colours.",
+        Add("Stream legend",
+            "The legend lists what the pipes carry and the colour each stream is drawn in: water and hydrogen, amine and captured CO₂, compressed syngas, hot reactor effluent, crude methanol, refined methanol, and the dashed gas recycle loop.\n\n" +
+            $"Those colours come alive in the {UI("Flow lab")}, covered in a moment: open it and every pipe shows its stream moving in exactly these legend colours.",
             "Process Flow Legend",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
-        Add("THE 3D PLANT AND THE CAMERA",
+        Add("The 3D plant and the camera",
             "The plant itself is fully navigable with the mouse:\n\n" +
-            "Hold the left button and drag - turn the view in any direction: up, down, left or right.\n" +
-            "Hold Shift, then hold the left button and drag - pan the view horizontally or vertically.\n" +
-            "Scroll the wheel - zoom in and out, towards whatever the cursor is pointing at.\n\n" +
+            "Hold the left button and drag — turn the view in any direction.\n" +
+            "Hold Shift, then drag — pan the view horizontally or vertically.\n" +
+            "Scroll the wheel — zoom in and out, towards whatever the cursor is pointing at.\n\n" +
             "Try it now: the highlighted area is live while this step is open.",
             null, PlantArea,
             () => Dashboard(d => d.TutorialShowPage("overview")),
             allowInteraction: true);
 
-        Add("EQUIPMENT INFO AND CONTROLS",
-            "Hover over any piece of equipment and a small 'i' button appears on it. Click that button to open the module's own panel with live readings and its operating sliders.\n\n" +
-            "Those sliders are the real inputs to the process model: moving one updates the KPIs, the warnings, the tank level and the pipe animation together.",
+        Add("Equipment controls",
+            $"Hover over any piece of equipment and a small label with an {UI("i")} appears on it. Click the label to open that module's control drawer on the right: live read-outs, its operating sliders, {UI("Focus camera")} and {UI("Reset module")}.\n\n" +
+            "Those sliders are the real inputs to the process model: moving one updates the tiles, the warnings, the tank level and the pipe animation together.",
             null, PlantArea,
             () => Dashboard(d => d.TutorialShowPage("overview")));
 
-        Add("PROCESS MAP",
-            "PROCESS MAP is a guided ten-step walkthrough, from renewable power and water all the way to methanol storage.\n\n" +
-            "NEXT STEP and PREVIOUS STEP move through it, the panel explains each stage and lists the streams involved, and the camera flies to the matching equipment automatically.",
+        Add("Process map",
+            $"{UI("Process map")} is a guided ten-step walkthrough, from renewable power and water all the way to methanol storage.\n\n" +
+            $"{UI("Next step")} and {UI("Previous")} move through it; the card explains each stage and lists the streams involved, and the camera flies to the matching equipment automatically.",
             "Guided Process",
             apply: () => Dashboard(d => d.TutorialShowPage("process")));
 
-        Add("FLOW LAB - SWITCHING THE FLOW ON",
-            "FLOW LAB is an on/off switch for the animated process flow. While it is on, the pipes turn see-through and show the stream inside them moving from source to destination; while it is off, the pipes are the normal solid plant pipework.\n\n" +
-            "Click FLOW LAB (or SHOW STREAMS in the footer) to switch it on; its panel opens with it. The flow stays on until you click FLOW LAB again, which switches it straight back to the normal pipes. It is on right now for this part of the tour.",
+        Add("Flow lab — switching the flow on",
+            $"{UI("Flow lab")} is an on/off switch for the animated process flow. While it is on, the pipes turn see-through and show the stream inside them moving from source to destination; while it is off, the pipes are the normal solid plant pipework.\n\n" +
+            $"Click {UI("Flow lab")} (or {UI("Show streams")} in the dock) to switch it on; its card opens with it. The flow stays on until you click {UI("Flow lab")} again. It is on right now for this part of the tour.",
             "FLOW LAB",
             apply: () => Dashboard(d => d.TutorialShowPage("flow")),
-            arrowToTarget: true, arrowLabel: "CLICK TO TURN THE FLOW ON / OFF");
+            arrowToTarget: true, arrowLabel: "Click to turn the flow on or off");
 
-        Add("FLOW LAB - READING THE STREAMS",
-            "Every stream is drawn in its legend colour. Gases - hydrogen, CO2, syngas and the hot reactor effluent - move as turbulent eddies. Liquids - the amine loop and methanol - fill the bore and flow more slowly. Crude methanol shows liquid along the bottom with vapour above it, and the recycle loop runs in dashes, just like its legend swatch.\n\n" +
+        Add("Flow lab — reading the streams",
+            "Every stream is drawn in its legend colour. Gases — hydrogen, CO₂, syngas and the hot reactor effluent — move as turbulent eddies. Liquids — the amine loop and methanol — fill the bore and flow more slowly. Crude methanol shows liquid along the bottom with vapour above it, and the recycle loop runs in dashes, just like its legend swatch.\n\n" +
             "Speed and brightness follow the calculated mass flow, so moving a slider visibly changes the stream. The plant is live here: drag to orbit and scroll to zoom.",
             null, PlantArea,
             () => Dashboard(d => d.TutorialShowPage("flow")),
             allowInteraction: true);
 
-        Add("FLOW LAB - FILTERS AND CLOSING",
-            "The panel filters the network by subsystem: ALL STREAMS, FEED GASES, CAPTURE LOOP, SYNTHESIS LOOP or PRODUCT PATH. Only the selected routes keep flowing, which makes one loop easy to follow through the plant.\n\n" +
-            "The X in the panel's top-right corner only closes this panel - the flow keeps running, so you can orbit and zoom around the plant with it on. HIDE STREAM VISUALS pauses the effect without leaving the lab.",
+        Add("Flow lab — filters and closing",
+            $"The card filters the network by subsystem: {UI("All streams")}, {UI("Feed gases")}, {UI("Capture loop")}, {UI("Synthesis loop")} or {UI("Product path")}. Only the selected routes keep flowing, which makes one loop easy to follow through the plant.\n\n" +
+            $"The close button in the card's corner only closes the card — the flow keeps running, so you can orbit and zoom around the plant with it on. {UI("Hide stream visuals")} pauses the effect without leaving the lab.",
             "Flow Lab",
             apply: () => Dashboard(d => d.TutorialShowPage("flow")));
 
-        Add("REACTOR LAB",
-            "REACTOR LAB focuses the transparent fixed-bed methanol reactor. FOCUS REACTOR re-frames the camera on it and OPEN REACTOR CONTROLS brings up its sliders.\n\n" +
-            "The panel shows live temperature, pressure, H2/CO2 ratio and yield. Inside the reactor, the catalyst-bed colour tracks the operating state and the moving particles represent the species and the conversion.",
+        Add("Reactor lab",
+            $"{UI("Reactor lab")} focuses the transparent fixed-bed methanol reactor. {UI("Focus reactor")} re-frames the camera on it and {UI("Open reactor controls")} opens its control drawer.\n\n" +
+            "The card shows live temperature, pressure, H₂/CO₂ ratio and yield. Inside the reactor, the catalyst-bed colour tracks the operating state and the moving particles represent the species and the conversion.",
             "Reactor Lab",
             apply: () => Dashboard(d => d.TutorialShowPage("reactor")));
 
-        Add("SIMULATION",
-            "SIMULATION summarises plant load, syngas feed, methanol output and storage, and tells you when the storage interlock is throttling production upstream.\n\n" +
-            "Use it alongside the module sliders - those remain the single source of truth for the calculation, and this panel reports what they add up to.",
+        Add("Simulation",
+            $"{UI("Simulation")} summarises plant load, syngas feed, methanol output and storage, and tells you when the storage interlock is holding production back.\n\n" +
+            "Its buttons open any module's control drawer and fly the camera to it — those sliders remain the single source of truth for the calculation.",
             "Simulation",
             apply: () => Dashboard(d => d.TutorialShowPage("simulation")));
 
         if (separateAnalyticsWindow)
         {
-            Add("ANALYTICS - ITS OWN WINDOW",
-                "ANALYTICS opens in a separate window of its own, next to this one. Like any other application window you can move it, resize it, minimise or maximise it, or put it on a second monitor - and it keeps showing this plant's live data the whole time.\n\n" +
-                "Only one analytics window can be open at a time: while it is open this button is greyed out, and it becomes clickable again as soon as you close the window with its X.",
+            Add("Analytics — its own window",
+                $"{UI("Analytics")} opens in a separate window of its own, next to this one. Like any other application window you can move it, resize it, minimise or maximise it, or put it on a second monitor — and it keeps showing this plant's live data the whole time.\n\n" +
+                "Only one analytics window can be open at a time: while it is open this button is greyed out, and it becomes clickable again as soon as you close the window.",
                 "ANALYTICS",
                 apply: () => Dashboard(d => d.TutorialShowPage("overview")),
-                arrowToTarget: true, arrowLabel: "OPENS A SEPARATE WINDOW");
+                arrowToTarget: true, arrowLabel: "Opens a separate window");
 
-            Add("INSIDE THE ANALYTICS WINDOW",
-                "PAUSE and RESET sit in the window's own title bar, so you can control the run from there.\n\n" +
-                "STATS shows five headline metrics as bars - hover one for its exact live value. VISUALISE holds four graph views: REACTOR YIELD and EFFICIENCY plot the response against one reactor parameter (picking a parameter locks the other reactor sliders for a clean one-factor-at-a-time scan), OFAT TIMELINE records a guided study against time with EXPORT, and LIVE PROGRESS strip-charts the run as it happens.",
+            Add("Inside the analytics window",
+                $"{UI("Pause")} and {UI("Reset")} sit in the window's own title bar, so you can control the run from there.\n\n" +
+                $"{UI("Stats")} shows throughput and the five headline metrics with their live values. {UI("Visualise")} holds four graph views: {UI("Reactor yield")} and {UI("Efficiency")} plot the response against one reactor parameter (picking a parameter locks the other reactor sliders for a clean one-factor-at-a-time scan), {UI("OFAT timeline")} records a guided study against time, and {UI("Live progress")} strip-charts the run as it happens. Every graph can {UI("Export")} its data.",
                 "ANALYTICS",
                 apply: () => Dashboard(d => d.TutorialShowPage("overview")));
         }
         else
         {
-            Add("ANALYTICS - STATS",
-                "ANALYTICS opens a window you can drag anywhere by its title bar. PAUSE and RESET sit in that title bar, so you can control the run without closing the window.\n\n" +
-                "The STATS tab shows the five headline metrics as bars: overall efficiency, CO2 capture, reactor yield, methanol purity and storage fill. Hover any bar to read its exact live value.",
+            Add("Analytics — stats",
+                $"{UI("Analytics")} opens a window you can drag anywhere by its title bar. {UI("Pause")} and {UI("Reset")} sit in that title bar, so you can control the run without closing the window.\n\n" +
+                $"The {UI("Stats")} tab shows throughput and the five headline metrics — overall efficiency, CO₂ capture, reactor yield, methanol purity and storage fill — each with its live value, plus a short set of insights.",
                 "Analytics Window",
                 apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, null)));
 
-            Add("ANALYTICS - VISUALISE",
-                "The VISUALISE tab holds four graph views:\n\n" +
-                "REACTOR YIELD - yield against one reactor parameter\n" +
-                "EFFICIENCY - overall efficiency against one reactor parameter\n" +
-                "OFAT TIMELINE - a guided one-factor-at-a-time study\n" +
-                "LIVE PROGRESS - strip charts of the run as it happens",
+            Add("Analytics — visualise",
+                $"The {UI("Visualise")} tab holds four graph views:\n\n" +
+                $"{UI("Reactor yield")} — yield against one reactor parameter\n" +
+                $"{UI("Efficiency")} — overall efficiency against one reactor parameter\n" +
+                $"{UI("OFAT timeline")} — a guided one-factor-at-a-time study\n" +
+                $"{UI("Live progress")} — strip charts of the run as it happens",
                 "Visualise Sub Tabs",
                 apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "yield")));
 
-            Add("CORRELATION GRAPHS AND THE VARIABLE LOCK",
-                "REACTOR YIELD and EFFICIENCY plot the response against one reactor parameter at a time: Temp, Pressure, H2:CO2, GHSV or Feed.\n\n" +
-                "Picking a parameter here locks every other reactor slider in place. That way the curve you build up is a clean one-factor-at-a-time scan instead of a tangle of several variables moving at once.",
+            Add("Correlation graphs and the variable lock",
+                $"{UI("Reactor yield")} and {UI("Efficiency")} plot the response against one reactor parameter at a time: {UI("Temp")}, {UI("Pressure")}, {UI("H₂:CO₂")}, {UI("GHSV")} or {UI("Feed")}.\n\n" +
+                "Every point is numbered in the order it was recorded and coloured by the module you changed. Picking a parameter locks every other reactor slider, so the curve you build is a clean one-factor-at-a-time scan.",
                 "Reactor Yield Param Row",
                 apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "yield")));
 
-            Add("OFAT TIMELINE",
-                "OFAT TIMELINE records a guided one-factor-at-a-time study against time. Pick the variable to vary under VARY ONE, choose the response under SHOW (YIELD, EFFICIENCY or METHANOL), then move that slider while the rest stay locked.\n\n" +
-                "LINE ONLY and WITH POINTS change the plot style, PREV / NEXT / LIVE page through the recorded timeline, and EXPORT writes the series out to a file.",
+            Add("OFAT timeline",
+                $"{UI("OFAT timeline")} records a guided one-factor-at-a-time study against time. Pick the variable under {UI("Vary one")}, choose the response under {UI("Show")}, then move that slider while the rest stay locked.\n\n" +
+                $"{UI("Line only")} and {UI("With points")} change the plot style, {UI("Previous")}, {UI("Next")} and {UI("Live")} page through the recorded timeline, and {UI("Export")} writes the series to a file.",
                 "OFAT Timeline Sub Panel",
                 apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "ofat")));
 
-            Add("LIVE PROGRESS",
-                "LIVE PROGRESS strip-charts the run as it happens. EFFICIENCY and METHANOL OUTPUT switch between the two charts, and both keep recording in the background so switching never loses history.\n\n" +
+            Add("Live progress",
+                $"{UI("Live progress")} strip-charts the run as it happens. {UI("Efficiency")} and {UI("Methanol output")} switch between the two charts, and both keep recording in the background so switching never loses history.\n\n" +
                 "The output chart also reports the cumulative amount already in the tank when you hover it.",
                 "Live Sub Panel",
                 apply: () => Dashboard(d => d.TutorialSetAnalyticsView(true, "live")));
         }
 
-        Add("FOOTER TOOLS",
-            "The footer is available from every section:\n\n" +
-            "PAUSE / RESUME and RESET control the run\n" +
-            "VIEW INFORMATION opens the about box\n" +
-            "SHOW STREAMS switches the Flow Lab's animated pipe flow on and off\n" +
-            "MASS FLOW TOOL turns the cursor into a crosshair - point it at any pipe to read its mass flow, velocity and conditions\n" +
-            "PREVIOUS MODULE and NEXT MODULE step the camera through the equipment\n" +
-            "RESET VIEW returns to the full plant overview",
+        Add("The dock",
+            "The dock along the bottom is available from every section:\n\n" +
+            $"{UI("Pause")} / {UI("Resume")} and {UI("Reset")} control the run\n" +
+            $"{UI("View information")} opens the about box\n" +
+            $"{UI("Show streams")} switches the Flow lab's animated pipe flow on and off\n" +
+            $"{UI("Mass flow tool")} turns the cursor into a crosshair — point it at any pipe to read its mass flow, velocity and conditions\n" +
+            $"{UI("Previous module")} and {UI("Next module")} step the camera through the equipment\n" +
+            $"{UI("Reset view")} returns to the full plant overview",
             "Footer",
             apply: () => Dashboard(d =>
             {
@@ -357,23 +355,23 @@ public sealed class TutorialRuntime : MonoBehaviour
                 d.TutorialShowPage("overview");
             }));
 
-        Add("SAFETY AND EFFICIENCY WARNINGS",
-            "The arrow points at the strip just below the OVERVIEW button, along the top-left of the screen. That is where a red warning band appears when an operating condition drifts out of the safe or sensible range - reactor temperature or pressure too high, storage nearly full, capture efficiency too low - listing the active alarms and cautions.\n\n" +
-            "Nothing is showing there right now because the plant is running cleanly. The band clears itself again as soon as conditions recover, so it is worth watching while you experiment with the sliders.",
+        Add("Safety and efficiency warnings",
+            "The arrow points at the space just below the navigation bar. That is where a red or amber warning banner appears when an operating condition drifts out of the safe or sensible range — reactor temperature or pressure too high, storage nearly full, capture efficiency too low — listing the active alarms and cautions.\n\n" +
+            "Nothing is showing there right now because the plant is running cleanly. The banner clears itself as soon as conditions recover, so it is worth watching while you experiment with the sliders.",
             "Warning Panel",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")),
-            spotlightWhenHidden: true, arrowToTarget: true, arrowLabel: "WARNINGS APPEAR HERE");
+            spotlightWhenHidden: true, arrowToTarget: true, arrowLabel: "Warnings appear here");
 
-        Add("HELP AND THIS TOUR",
-            "HELP opens the about box, with a summary of the controls and the educational disclaimer.\n\n" +
-            "START TUTORIAL in that box replays this tour whenever you want it, so nothing here is a one-time explanation.",
+        Add("Help and this tour",
+            $"The round {UI("?")} button opens the about box, with a summary of the controls and the educational disclaimer.\n\n" +
+            $"{UI("Start tutorial")} in that box replays this tour whenever you want it, so nothing here is a one-time explanation.",
             "Help",
             apply: () => Dashboard(d => d.TutorialShowPage("overview")));
 
-        Add("YOU ARE READY",
-            "That is the whole application: the 3D plant and its camera, the six header sections, the Flow Lab, the equipment sliders, the analytics window and the footer tools.\n\n" +
+        Add("You are ready",
+            "That is the whole application: the 3D plant and its camera, the six sections, the Flow lab, the equipment controls, the analytics window and the dock.\n\n" +
             "One reminder before you start: every number and animation here is a simplified educational representation. This is not CFD, Aspen, industrial control software, or a validated process model.\n\n" +
-            "Press FINISH to start exploring.");
+            $"Press {UI("Finish")} to start exploring.");
     }
 
     // ---- navigation ---------------------------------------------------------
@@ -390,15 +388,18 @@ public sealed class TutorialRuntime : MonoBehaviour
 
         cardTitle.text = step.Title;
         cardBody.text = step.Body;
-        cardCounter.text = $"STEP {index + 1} OF {steps.Count}";
-        progressFill.anchorMax = new Vector2((index + 1) / (float)steps.Count, 1f);
-        progressFill.offsetMax = Vector2.zero;
+        cardCounter.text = $"Step {index + 1} of {steps.Count}";
+        progress.Set((index + 1) / (float)steps.Count);
+
+        // The card grows with its text.
+        float bodyHeight = Mathf.Ceil(cardBody.preferredHeight);
+        card.sizeDelta = new Vector2(CardWidth, Mathf.Max(CardMinHeight, 82f + bodyHeight + 86f));
 
         bool first = index == 0;
         previousButton.interactable = !first;
-        previousButton.GetComponent<Image>().color = first ? new Color32(24, 44, 56, 255) : HeaderColor;
         bool last = index == steps.Count - 1;
-        nextButtonLabel.text = last ? "FINISH" : "NEXT";
+        UITheme.SetLabel(nextButton, last ? "Finish" : "Next");
+        UITheme.SetIcon(nextButton, last ? Icon.Check : Icon.ChevronRight);
 
         // Steps that invite the user to try something drop the full-screen blocker; the dim
         // panels still cover every pixel outside the spotlight, so only the scene is reachable.
@@ -454,12 +455,8 @@ public sealed class TutorialRuntime : MonoBehaviour
             SetLocalRect(dimPanels[1], Rect.MinMaxRect(area.xMin, area.yMin, area.xMax, spot.yMin));
             SetLocalRect(dimPanels[2], Rect.MinMaxRect(area.xMin, spot.yMin, spot.xMin, spot.yMax));
             SetLocalRect(dimPanels[3], Rect.MinMaxRect(spot.xMax, spot.yMin, area.xMax, spot.yMax));
-
             float t = FrameThickness;
-            SetLocalRect(frameEdges[0], Rect.MinMaxRect(spot.xMin - t, spot.yMax, spot.xMax + t, spot.yMax + t));
-            SetLocalRect(frameEdges[1], Rect.MinMaxRect(spot.xMin - t, spot.yMin - t, spot.xMax + t, spot.yMin));
-            SetLocalRect(frameEdges[2], Rect.MinMaxRect(spot.xMin - t, spot.yMin, spot.xMin, spot.yMax));
-            SetLocalRect(frameEdges[3], Rect.MinMaxRect(spot.xMax, spot.yMin, spot.xMax + t, spot.yMax));
+            SetLocalRect(frame, Rect.MinMaxRect(spot.xMin - t, spot.yMin - t, spot.xMax + t, spot.yMax + t));
         }
         else
         {
@@ -467,7 +464,7 @@ public sealed class TutorialRuntime : MonoBehaviour
             for (int i = 1; i < dimPanels.Length; i++) SetLocalRect(dimPanels[i], Rect.zero);
         }
 
-        if (frameRoot.activeSelf != highlighted) frameRoot.SetActive(highlighted);
+        if (frame.gameObject.activeSelf != highlighted) frame.gameObject.SetActive(highlighted);
         PlaceCard(area, highlighted, spot);
         UpdateArrow(area, highlighted, spot);
     }
@@ -505,14 +502,14 @@ public sealed class TutorialRuntime : MonoBehaviour
         arrowHead.SetArrow(tip, headDirection, ArrowHeadLength);
 
         bool hasLabel = !string.IsNullOrEmpty(step.ArrowLabel);
-        if (arrowLabel.gameObject.activeSelf != hasLabel) arrowLabel.gameObject.SetActive(hasLabel);
+        if (arrowPill.gameObject.activeSelf != hasLabel) arrowPill.gameObject.SetActive(hasLabel);
         if (!hasLabel) return;
         arrowLabel.text = step.ArrowLabel;
-        const float labelWidth = 240f;
+        float labelWidth = Mathf.Ceil(arrowLabel.preferredWidth) + 28f;
         // Beside the middle of the shaft, in the gap the arrow run opened up.
         Vector2 mid = (start + tip) * 0.5f;
         float labelX = Mathf.Min(mid.x + 14f, area.xMax - labelWidth - 8f);
-        SetLocalRect(arrowLabel.rectTransform, new Rect(labelX, mid.y - 11f, labelWidth, 22f));
+        SetLocalRect(arrowPill, new Rect(labelX, mid.y - 15f, labelWidth, 30f));
     }
 
     private bool TryGetHighlight(Rect area, out Rect result)
@@ -657,47 +654,33 @@ public sealed class TutorialRuntime : MonoBehaviour
         canvasObject.transform.SetParent(transform, false);
         canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        // Above the dashboard (90), the module panels (75) and the warning band (72) so the
-        // tour always sits on top of whatever it is explaining.
+        // Above the dashboard (90), the module drawers (95), the probe (140) and the about box
+        // (200) so the tour always sits on top of whatever it is explaining.
         canvas.sortingOrder = 300;
-        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1536f, 1024f);
-        scaler.matchWidthOrHeight = 0.5f;
+        UITheme.ConfigureScaler(canvasObject.AddComponent<CanvasScaler>());
         canvasObject.AddComponent<GraphicRaycaster>();
 
-        GameObject rootObject = new GameObject("Tutorial Root");
-        rootObject.transform.SetParent(canvasObject.transform, false);
-        root = rootObject.AddComponent<RectTransform>();
-        Pin(root, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-        canvasGroup = rootObject.AddComponent<CanvasGroup>();
+        root = UITheme.NewRect("Tutorial Root", canvasObject.transform);
+        UITheme.Fill(root);
+        canvasGroup = root.gameObject.AddComponent<CanvasGroup>();
         canvasGroup.alpha = 0f;
 
         // A full-screen, almost invisible blocker keeps the tour modal: the application
         // underneath cannot be clicked out from under the step that is describing it.
-        RectTransform blocker = CreatePanel("Input Blocker", root, new Color(0f, 0f, 0f, 0.004f));
-        Pin(blocker, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-        blockerImage = blocker.GetComponent<Image>();
+        blockerImage = UITheme.Panel("Input Blocker", root, new Color(0f, 0f, 0f, 0.004f), 0f, true);
+        UITheme.Fill(blockerImage.rectTransform);
 
         for (int i = 0; i < dimPanels.Length; i++)
-        {
-            dimPanels[i] = CreatePanel("Dim " + i, root, DimColor);
-            dimPanels[i].GetComponent<Image>().raycastTarget = true;
-        }
+            dimPanels[i] = UITheme.Panel("Dim " + i, root, DimColor, 0f, true).rectTransform;
 
-        frameRoot = new GameObject("Highlight Frame", typeof(RectTransform));
-        frameRoot.transform.SetParent(root, false);
-        RectTransform frameRect = frameRoot.GetComponent<RectTransform>();
-        Pin(frameRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-        for (int i = 0; i < frameEdges.Length; i++)
-        {
-            frameEdges[i] = CreatePanel("Edge " + i, frameRect, AccentColor);
-            frameEdges[i].GetComponent<Image>().raycastTarget = false;
-        }
+        Image frameImage = UITheme.Panel("Highlight Frame", root, UITheme.Hex("3B82F6"));
+        frameImage.sprite = UITheme.RoundedOutline(10f, FrameThickness);
+        frameImage.type = Image.Type.Sliced;
+        frame = frameImage.rectTransform;
 
         BuildArrow();
         BuildCard();
-        rootObject.SetActive(false);
+        root.gameObject.SetActive(false);
     }
 
     private void BuildArrow()
@@ -705,79 +688,68 @@ public sealed class TutorialRuntime : MonoBehaviour
         arrowRoot = new GameObject("Annotation Arrow", typeof(RectTransform));
         arrowRoot.transform.SetParent(root, false);
         RectTransform arrowRect = arrowRoot.GetComponent<RectTransform>();
-        Pin(arrowRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        UITheme.Fill(arrowRect);
 
         // Shaft and head live in their own full-screen rects so their vertex coordinates are
         // the same root-local space the spotlight geometry is computed in.
         GameObject shaft = new GameObject("Arrow Shaft", typeof(RectTransform));
         shaft.transform.SetParent(arrowRect, false);
-        Pin(shaft.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        UITheme.Fill(shaft.GetComponent<RectTransform>());
         arrowShaft = shaft.AddComponent<UIGraphLine>();
         arrowShaft.Thickness = 3.2f;
-        arrowShaft.color = AccentColor;
+        arrowShaft.color = UITheme.Hex("60A5FA");
         arrowShaft.raycastTarget = false;
 
         GameObject head = new GameObject("Arrow Head", typeof(RectTransform));
         head.transform.SetParent(arrowRect, false);
-        Pin(head.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        UITheme.Fill(head.GetComponent<RectTransform>());
         arrowHead = head.AddComponent<TutorialArrowHead>();
-        arrowHead.color = AccentColor;
+        arrowHead.color = UITheme.Hex("60A5FA");
         arrowHead.raycastTarget = false;
 
-        arrowLabel = CreateText("Arrow Label", arrowRect, "", 12, FontStyle.Bold, TextAnchor.MiddleLeft, AccentColor);
-        arrowLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        // Caption as a white pill so it stays readable over the dimmed scene.
+        Image pill = UITheme.Panel("Arrow Label", arrowRect, Color.white, 15f);
+        arrowPill = pill.rectTransform;
+        arrowLabel = UITheme.Label("Text", pill.transform, "", 13f, W.ExtraBold, UITheme.Accent, TextAnchor.MiddleCenter);
+        UITheme.Fill(arrowLabel.rectTransform);
 
         arrowRoot.SetActive(false);
     }
 
     private void BuildCard()
     {
-        card = CreatePanel("Tutorial Card", root, CardColor);
+        card = UITheme.Card("Tutorial Card", root, 18f, Color.white, 48f, 18f, 0.35f);
         card.anchorMin = card.anchorMax = card.pivot = new Vector2(0.5f, 0.5f);
-        card.sizeDelta = new Vector2(CardWidth, CardHeight);
-        Outline outline = card.gameObject.AddComponent<Outline>();
-        outline.effectColor = AccentColor;
-        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        card.sizeDelta = new Vector2(CardWidth, 300f);
 
-        cardTitle = CreateText("Card Title", card, "", 15, FontStyle.Bold, TextAnchor.UpperLeft, Color.white);
-        Pin(cardTitle.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(22f, -48f), new Vector2(-150f, -16f));
+        Image logo = UITheme.Panel("Logo", card, UITheme.Accent, 9f);
+        UITheme.TopLeft(logo.rectTransform, 24f, 22f, 30f, 30f);
+        Image logoIcon = UITheme.IconImage("Icon", logo.transform, Icon.Logo, 18f, Color.white);
+        UITheme.Center(logoIcon.rectTransform, 18f, 18f);
 
-        cardCounter = CreateText("Card Counter", card, "", 11, FontStyle.Bold, TextAnchor.UpperRight, MutedTextColor);
-        Pin(cardCounter.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-142f, -34f), new Vector2(-22f, -16f));
+        cardCounter = UITheme.Label("Card Counter", card, "", 12f, W.ExtraBold, UITheme.Accent);
+        UITheme.TopLeft(cardCounter.rectTransform, 64f, 20f, 200f, 16f);
+        cardTitle = UITheme.Label("Card Title", card, "", 17f, W.ExtraBold, UITheme.Ink);
+        UITheme.TopBand(cardTitle.rectTransform, 64f, 36f, 24f, 22f);
 
-        RectTransform track = CreatePanel("Progress Track", card, new Color32(28, 54, 68, 255));
-        Pin(track, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(22f, -58f), new Vector2(-22f, -54f));
-        progressFill = CreatePanel("Progress Fill", track, AccentColor);
-        progressFill.anchorMin = Vector2.zero;
-        progressFill.anchorMax = new Vector2(0f, 1f);
-        progressFill.offsetMin = Vector2.zero;
-        progressFill.offsetMax = Vector2.zero;
-        progressFill.GetComponent<Image>().raycastTarget = false;
+        progress = UITheme.ProgressBar("Progress", card, UITheme.Accent, 4f);
+        UITheme.TopBand((RectTransform)progress.transform, 24f, 68f, 24f, 4f);
 
-        cardBody = CreateText("Card Body", card, "", 13, FontStyle.Normal, TextAnchor.UpperLeft, Color.white);
-        cardBody.verticalOverflow = VerticalWrapMode.Overflow;
-        Pin(cardBody.rectTransform, Vector2.zero, Vector2.one, new Vector2(22f, 62f), new Vector2(-22f, -66f));
+        cardBody = UITheme.Label("Card Body", card, "", 13.5f, W.Medium, UITheme.Ink2, TextAnchor.UpperLeft, true);
+        cardBody.lineSpacing = 1.15f;
+        UITheme.TopBand(cardBody.rectTransform, 24f, 86f, 24f, 160f);
 
-        Button skip = CreateButton("Skip Tutorial", card, "SKIP TUTORIAL", SkipColor, 11);
-        RectTransform skipRect = skip.GetComponent<RectTransform>();
-        skipRect.anchorMin = skipRect.anchorMax = skipRect.pivot = Vector2.zero;
-        skipRect.anchoredPosition = new Vector2(22f, 18f);
-        skipRect.sizeDelta = new Vector2(160f, 34f);
+        Button skip = UITheme.MakeButton("Skip Tutorial", card, "Skip tutorial", Kind.Ghost, 13.5f, null, 10f);
+        float sw = UITheme.PreferredWidth(skip);
+        UITheme.BottomLeft((RectTransform)skip.transform, 16f, 20f, sw, 42f);
         skip.onClick.AddListener(EndTutorial);
 
-        nextButton = CreateButton("Next Step", card, "NEXT", AccentColor, 11);
-        RectTransform nextRect = nextButton.GetComponent<RectTransform>();
-        nextRect.anchorMin = nextRect.anchorMax = nextRect.pivot = new Vector2(1f, 0f);
-        nextRect.anchoredPosition = new Vector2(-22f, 18f);
-        nextRect.sizeDelta = new Vector2(132f, 34f);
+        nextButton = UITheme.MakeButton("Next Step", card, "Next", Kind.Primary, 14f, Icon.ChevronRight, 10f, true);
+        UITheme.BottomRight((RectTransform)nextButton.transform, 24f, 20f, 124f, 42f);
         nextButton.onClick.AddListener(Next);
-        nextButtonLabel = nextButton.GetComponentInChildren<Text>();
 
-        previousButton = CreateButton("Previous Step", card, "PREVIOUS", HeaderColor, 11);
-        RectTransform prevRect = previousButton.GetComponent<RectTransform>();
-        prevRect.anchorMin = prevRect.anchorMax = prevRect.pivot = new Vector2(1f, 0f);
-        prevRect.anchoredPosition = new Vector2(-162f, 18f);
-        prevRect.sizeDelta = new Vector2(132f, 34f);
+        previousButton = UITheme.MakeButton("Previous Step", card, "Previous", Kind.Secondary, 14f, Icon.ChevronLeft, 10f);
+        UITheme.BottomRight((RectTransform)previousButton.transform, 158f, 20f, 124f, 42f);
         previousButton.onClick.AddListener(Previous);
     }
 
@@ -797,57 +769,6 @@ public sealed class TutorialRuntime : MonoBehaviour
         canvasGroup.alpha = to;
         if (!visible) root.gameObject.SetActive(false);
         fade = null;
-    }
-
-    // ---- small UI helpers ---------------------------------------------------
-
-    private RectTransform CreatePanel(string name, Transform parent, Color color)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        RectTransform rect = go.AddComponent<RectTransform>();
-        go.AddComponent<Image>().color = color;
-        return rect;
-    }
-
-    private Text CreateText(string name, Transform parent, string value, int size, FontStyle style, TextAnchor alignment, Color color)
-    {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        Text text = go.AddComponent<Text>();
-        text.font = font;
-        text.text = value;
-        text.fontSize = size;
-        text.fontStyle = style;
-        text.alignment = alignment;
-        text.color = color;
-        text.lineSpacing = 1.05f;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Truncate;
-        text.raycastTarget = false;
-        return text;
-    }
-
-    private Button CreateButton(string name, Transform parent, string label, Color color, int fontSize)
-    {
-        RectTransform rect = CreatePanel(name, parent, color);
-        Button button = rect.gameObject.AddComponent<Button>();
-        ColorBlock colors = button.colors;
-        colors.highlightedColor = Color.Lerp(color, Color.white, 0.16f);
-        colors.pressedColor = Color.Lerp(color, Color.black, 0.18f);
-        colors.disabledColor = new Color(1f, 1f, 1f, 0.5f);
-        button.colors = colors;
-        Text text = CreateText("Label", rect, label, fontSize, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white);
-        Pin(text.rectTransform, Vector2.zero, Vector2.one, new Vector2(5f, 4f), new Vector2(-5f, -4f));
-        return button;
-    }
-
-    private static void Pin(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
-    {
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.offsetMin = offsetMin;
-        rect.offsetMax = offsetMax;
     }
 }
 
