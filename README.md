@@ -12,7 +12,6 @@ lightweight steady-state process model.
 
 ## Current integrated version
 
-- Branch: `codex-icodos-final-flow-integration`
 - Unity: `6000.4.7f1`
 - Render pipeline: URP `17.4.0`
 - Startup scene: `Assets/Scenes/SampleScene.unity`
@@ -24,8 +23,6 @@ lightweight steady-state process model.
 
 - [Final project report](docs/FINAL_PROJECT_REPORT.md)
 - [Implementation and equation reference](docs/IMPLEMENTATION_REFERENCE.md)
-- [Unity project context](docs/AI/UnityProjectContext.md)
-- [Project health and validation status](docs/AI/UnityProjectHealth.md)
 - [Progress screenshots](docs/progress-screenshots.md)
 
 ## Main systems
@@ -76,8 +73,7 @@ Assets/
 `-- legacy/support scripts      # Earlier panels and prototype utilities
 docs/
 |-- FINAL_PROJECT_REPORT.md
-|-- IMPLEMENTATION_REFERENCE.md
-`-- AI/                         # Persistent Unity context and health report
+`-- IMPLEMENTATION_REFERENCE.md
 Packages/
 ProjectSettings/
 ```

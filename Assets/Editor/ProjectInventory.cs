@@ -8,11 +8,11 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public static class CodexDeepProjectInventory
+public static class ProjectInventory
 {
     private const string OutputPath = "Logs/deep-project-inventory.tsv";
 
-    [MenuItem("Tools/Codex/Export Deep Project Inventory")]
+    [MenuItem("Tools/Power-to-Methanol/Export Project Inventory")]
     public static void Export()
     {
         Directory.CreateDirectory("Logs");

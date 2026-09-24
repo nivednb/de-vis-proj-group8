@@ -54,3 +54,6 @@ sysinfo.txt
 # Ad-hoc screenshots dropped at project root
 /Screenshot */
 /Screenshot 20*.png
+
+# Local editor-assistant settings
+.claude/

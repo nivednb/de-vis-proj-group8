@@ -6,11 +6,11 @@ using UnityEditor.Build.Reporting;
 using UnityEngine;
 
 /// <summary>Repeatable Windows build entry point for the educational digital twin.</summary>
-public static class CodexWindowsBuild
+public static class WindowsBuild
 {
     private const string DefaultOutput = "Builds/Windows/PtMeOH-DigitalTwin.exe";
 
-    [MenuItem("Tools/Nived/Build Windows Application")]
+    [MenuItem("Tools/Power-to-Methanol/Build Windows Application")]
     public static void BuildFromMenu()
     {
         BuildWindows();

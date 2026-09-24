@@ -169,8 +169,8 @@ public class SafetyWarningRuntime : MonoBehaviour
         if (s.waterFeedPercent < 45f && s.electrolyzerPowerPercent > 65f)
             cautions.Add("ELECTROLYZER: water feed limits H2 production");
 
-        if (s.electrolyzerPowerPercent > 92f)
-            cautions.Add("ELECTROLYZER: high power increases H2/O2 generation");
+        if (s.electrolyzerPowerPercent > 92f && s.waterFeedPercent < 90f)
+            cautions.Add("ELECTROLYZER: high power requires adequate water feed");
     }
 
     private void AddAbsorberWarnings(PlantProcessSimulator.ProcessSnapshot s, List<string> cautions)
@@ -244,7 +244,7 @@ public class SafetyWarningRuntime : MonoBehaviour
 
         if (s.recycleRatioPercent < 25f)
             cautions.Add("SEPARATOR: low recycle reduces overall conversion");
-        else if (s.recycleRatioPercent > 90f)
+        else if (s.recycleRatioPercent > 97f)
             cautions.Add("RECYCLE LOOP: very high recycle increases compressor load");
     }
 

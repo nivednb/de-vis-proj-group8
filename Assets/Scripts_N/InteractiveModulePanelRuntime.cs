@@ -527,6 +527,10 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
 
     private void CreateSlider(Transform parent, string label, float min, float max, float value, int decimals, string unit, Action<float> onChanged, float y, string moduleTitle)
     {
+        PlantProcessSimulator simulator = Simulator();
+        if (simulator != null)
+            value = simulator.GetControlValue(label, value);
+
         string display = SliderDisplayNames.TryGetValue(label, out string pretty) ? pretty : label;
         Text labelText = UITheme.Label(label + " Label", parent, display, 13.5f, W.Bold, UITheme.Ink2);
         UITheme.TopLeft(labelText.rectTransform, 20f, y, 200f, 22f);

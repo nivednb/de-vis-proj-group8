@@ -960,7 +960,13 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         UITheme.TopRight((RectTransform)windowRun.transform, right, 14f, runW, 36f);
         windowRun.onClick.AddListener(ToggleRunning);
         runToggleButtons.Add(windowRun);
-        right += runW + 12f;
+        right += runW + 8f;
+
+        Button exportBalance = UITheme.MakeButton("Export Mass Balance", titleBar, "Mass balance", Kind.Outline, 13f, Icon.Download, 10f, false, 15f, W.Bold, 12f);
+        float ew = UITheme.PreferredWidth(exportBalance);
+        UITheme.TopRight((RectTransform)exportBalance.transform, right, 14f, ew, 36f);
+        exportBalance.onClick.AddListener(ExportMassBalanceCsv);
+        right += ew + 12f;
 
         Image sep = UITheme.Panel("Divider", titleBar, UITheme.Line);
         UITheme.TopRight(sep.rectTransform, right, 20f, 1f, 24f);
@@ -1268,6 +1274,23 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         if (sim == null) return;
         if (sim.IsRunning) sim.Pause(); else sim.Play();
         Refresh();
+    }
+
+    private void ExportMassBalanceCsv()
+    {
+        PlantProcessSimulator sim = PlantProcessSimulator.Instance;
+        Canvas toastCanvas = analyticsCanvas != null ? analyticsCanvas : canvas;
+        if (sim == null || sim.MassBalance == null)
+        {
+            GraphExportUtil.ShowToast(toastCanvas, font, "Mass balance: simulator not ready.");
+            return;
+        }
+
+        string baseName = GraphExportUtil.Sanitize($"MassBalance_{DateTime.Now:yyyyMMdd_HHmmss}");
+        string path = GraphExportUtil.WriteText(baseName, "csv", MassBalanceCsvExporter.BuildCsv(sim));
+        GraphExportUtil.ShowToast(toastCanvas, font, path != null
+            ? $"Exported {baseName}.csv to {GraphExportUtil.ExportDirectory}"
+            : "Export failed — see console.");
     }
 
     private void ResetSimulation()

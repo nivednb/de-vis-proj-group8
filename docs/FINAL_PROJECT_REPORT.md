@@ -68,7 +68,7 @@ the dashboard as “EDUCATIONAL VISUALIZATION • SIMPLIFIED PROCESS VALUES.”
 | Platform | Windows desktop |
 | Scene | `Assets/Scenes/SampleScene.unity` |
 | Version control | Git / GitHub |
-| Integrated branch | `codex-icodos-final-flow-integration` |
+| Integrated branch | `main` |
 
 The project contains no first-party assembly-definition files. Runtime scripts
 therefore compile into `Assembly-CSharp`, while scripts in `Assets/Editor`
@@ -380,7 +380,7 @@ views, and animated process state provide the primary visual sophistication.
 
 The editor release validator recorded:
 
-`CODEX_RELEASE_VALIDATION_OK scene=Assets/Scenes/SampleScene.unity objects=480 processSegments=35 catalyst=runtime-animated shell=present cameraPan=enabled`
+`RELEASE_VALIDATION_OK scene=Assets/Scenes/SampleScene.unity objects=480 processSegments=35 catalyst=runtime-animated shell=present cameraPan=enabled`
 
 The Windows build log recorded:
 
