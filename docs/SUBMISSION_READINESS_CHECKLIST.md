@@ -27,10 +27,10 @@ Consult SUBMISSION_STATUS.md and release-manifest.json for the exact build and e
 | Measured learning effectiveness | NOT PERFORMED; excluded claim |
 | Final commit/build identity/checksums | External release manifest and ZIP checksum |
 | Clean-clone reproduction | Actual result in SUBMISSION_STATUS.md |
-| University/module/supervisor/rubric | TEAM INPUT REQUIRED |
-| Individual contributions and oral-defense ownership | TEAM INPUT REQUIRED |
-| Original model/icon rights | TEAM INPUT REQUIRED; asset hashes inventoried |
+| University/module/supervisor/rubric | TEAM CONFIRMATION REQUIRED |
+| Individual contributions and oral-defense ownership | TEAM CONFIRMATION REQUIRED |
+| Original model/icon rights | TEAM CONFIRMATION REQUIRED; asset hashes inventoried |
 | Font/package notices | Installed notices inventoried; preserve with distribution |
-| Institutional AI declaration | TEAM INPUT REQUIRED; draft disclosure supplied |
+| Institutional AI declaration | TEAM CONFIRMATION REQUIRED; draft disclosure supplied |
 
-Automated engineering verification does not replace the team's information and sign-off.
+Automated engineering verification covers the recorded software checks. The remaining team details and manual presentation checks should still be confirmed before submission.
