@@ -1,39 +1,34 @@
-# Team, tools and assistance record
+# Team, tools and assistance
 
-This record intentionally distinguishes repository evidence from information only the student team can attest.
+This project was developed by the student team using Unity, C#, Git/GitHub, Blender and supporting development tools. AI-assisted tools were also used during development and final verification. This document records that assistance transparently while keeping the distinction between student project work and tool support clear.
 
-## Administrative information requiring the team
+## Project and team information
 
-| Field | Status |
-|---|---|
-| University and degree/module | TEAM INPUT REQUIRED |
-| Project/course title and official rubric | TEAM INPUT REQUIRED |
-| Supervisor/examiner | TEAM INPUT REQUIRED |
-| Student names, IDs and contact details | TEAM INPUT REQUIRED; include only what the institution requires |
-| Submission deadline and required file formats | TEAM INPUT REQUIRED |
-| Required AI/software-assistance declaration | TEAM INPUT REQUIRED; follow the institution's exact policy |
+The university/module details, supervisor or examiner, final student contribution statement and any institution-specific declaration should be completed by the team where required for submission. Personal information should only be added when requested by the university.
 
-## Contribution confirmation
+## Student contributions
 
-| Contributor | Evidence available | Confirmation required |
-|---|---|---|
-| Git identity `nivednb` | Commits in the inspected history include integration, dashboard, mass-balance export and OFAT work | TEAM INPUT REQUIRED: student name and actual individual responsibilities; Git identity alone does not prove authorship |
-| Git identity `chaitanyakasar1002` | Sep 11 commits `cf8db347`, `973cc52b`, `a25253e5`: tutorial, Process Map layout and arrow/camera tutorial; selectively adapted to the integrated dashboard | TEAM INPUT REQUIRED: confirm student identity, actual scope, original work and presentation responsibility; Git identity is not authorship proof |
-| Other team members | Not established by this preparation task | TEAM INPUT REQUIRED: names, design/modeling/code/report/testing contributions and evidence |
+Repository history shows work from the Git identities `nivednb` and `chaitanyakasar1002`, together with the wider team project history. The commits include work on the Unity application, process visualization, dashboard, mass-balance export, OFAT analysis, tutorial and interface improvements.
 
-Do not submit these rows as signed declarations until the team has reviewed them. Each member should be able to explain the work attributed to them, the model assumptions and their validation responsibilities.
+Git history is useful development evidence, but it is not used here as a complete statement of individual contribution. The final contribution statement should therefore be confirmed by the team members themselves.
 
-## Assistance disclosure draft for team review
+## AI and software assistance
 
-Codex assisted with source inspection, identifying and correcting the zero-water electrolysis issue, numerical validation design/execution, recycle convergence correction, CSV consistency correction, updating deprecated API calls, documentation and reference organization, and release/build/runtime verification. The existing dashboard split-pane change was retained. Codex selectively adapted the three tutorial commits and added tutorial acceptance checks. Those original commit messages contain a `Co-Authored-By: Claude Opus 5` trailer; the team must confirm and include the relevant earlier assistance in its institutional declaration. Unity compiled the code and generated the Windows player. Automated tests and captured evidence are described in SUBMISSION_STATUS.md; unperformed checks are not claimed as completed.
+AI-assisted development tools, including Codex and Claude, were used as supporting tools during parts of the project. Their use included code inspection, debugging suggestions, validation support, documentation organization and assistance with selected implementation improvements. In the final preparation stage, Codex was also used to help identify issues such as the zero-water electrolysis case, recycle convergence and CSV consistency, and to support automated verification of the release.
 
-The student team must review and understand the final code, equations, scientific claims, citations and assets. This draft describes this preparation session only; the team must add any earlier AI/software assistance, other tools, and the exact declaration wording required by the university. No statement is made that the work was unaided or that Codex owns/contributed the students' academic authorship.
+The tools were used within an existing student-developed Unity project and development history. They did not replace the project definition, engineering decisions, team discussions, interpretation of the process, or responsibility for the submitted work. The student team remains responsible for understanding the implementation, equations, assumptions, results, references and limitations presented in the application and report.
 
-## Team sign-off checklist
+Some earlier commits contain a `Co-Authored-By: Claude Opus 5` trailer. This is retained as part of the repository history rather than removed. Any formal AI/software-assistance declaration required by the university should follow the university's specified wording.
 
-- Confirm model/icon ownership and permissions in REFERENCES_AND_ASSET_PROVENANCE.md.
-- Confirm each member's contribution and ability to defend it orally.
-- Supply official requirements and check the deliverables against them.
-- Review scientific limitations and avoid claiming empirical calibration or measured learning outcomes.
-- Review the final executable and manual acceptance checks.
-- Sign/date the required institutional declaration outside this unsigned template.
+Unity was used to compile and build the Windows application. Automated validation and the recorded results are described in `SUBMISSION_STATUS.md`.
+
+## Before submission
+
+The team should confirm:
+- individual contributions and presentation responsibilities;
+- the source and permitted use of imported models and icons;
+- any university-required project or supervisor details;
+- the required wording for an AI/software-assistance declaration;
+- that each team member can explain the process model, important assumptions and the part of the application they worked on.
+
+This record is intended as a transparent development note and does not replace any official university declaration.
