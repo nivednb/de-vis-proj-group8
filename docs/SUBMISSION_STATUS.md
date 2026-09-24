@@ -55,6 +55,6 @@ Distributable: `Release/PtMeOH-FinalSubmission-Windows-x64.zip`, with `.zip.sha2
 - Launch the complete package on a second Windows machine; verify permissions and user-facing export destinations.
 - Empirical model calibration and measured learning effectiveness were not performed and are not claimed. This educational model is numerically verified, not an industrial predictive model.
 
-## TEAM INPUT REQUIRED
+## Team details to confirm before submission
 
-University/degree/module, supervisor/examiner, official rubric/deadline/formats, student identities and individual contribution confirmation, original model/icon source/ownership/redistribution permissions, any copied visual-reference permissions, and the institution's exact AI/software-assistance declaration and signatures. See TOOLS_AND_ASSISTANCE.md and REFERENCES_AND_ASSET_PROVENANCE.md. Do not replace these unknowns with inferred identities or permissions.
+Before submission, the team should confirm the university/module and supervisor details, final student contribution statement, original model/icon sources and permissions, any copied visual references, and the required institutional wording for AI/software assistance. See TOOLS_AND_ASSISTANCE.md and REFERENCES_AND_ASSET_PROVENANCE.md.
