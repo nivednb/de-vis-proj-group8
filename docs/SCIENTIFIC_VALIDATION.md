@@ -1,71 +1,82 @@
 # Scientific basis and validation
 
-Release branch: `final-submission`. This document distinguishes numerical verification from empirical validation. The application is an educational steady-state process simulator with a 3D visualization; there is no live plant-data connection.
+The application is an educational steady-state process simulator with a 3D visualization. It has no live plant-data connection. This document separates numerical verification of the implemented model from empirical validation against real process data.
 
 ## Research question and contribution
 
-Can a shared, lightweight process model make the relationships between operating inputs, material streams, recycle and product recovery inspectable in an interactive whole-plant teaching application? The contribution is the coupling of deterministic calculations, species-aware visualization, controllable inputs, and reproducible one-factor-at-a-time (OFAT) experiments. No learning-effectiveness study was conducted, so improved student learning is a hypothesis, not a measured result.
+The project investigates whether a shared, lightweight process model can make relationships between operating inputs, material streams, recycle and product recovery easier to inspect in an interactive whole-plant application. The main contribution is the combination of deterministic calculations, species-aware visualization, controllable inputs and reproducible one-factor-at-a-time (OFAT) experiments.
+
+No user study was conducted. Improved learning is therefore an intended educational benefit rather than a measured result.
 
 ## Electrolysis
 
-Water electrolysis follows `2 H2O -> 2 H2 + O2` [S1]. Using the same mass basis as the synthesis model, hydrogen production is the minimum of electrical capacity and water mass times `2.01588/18.01528`. Oxygen is hydrogen times `(18.01528-2.01588)/2.01588`; unused water remains an unreacted feed remainder. This is a stoichiometric capacity calculation, not an electrical-efficiency model. The previous nonzero water-response intercept incorrectly permitted production with no water and was removed.
+Water electrolysis follows `2 H2O -> 2 H2 + O2` [S1]. On the mass basis used by the synthesis model, hydrogen production is limited by both electrical capacity and the available water. The water limit is calculated from the mass ratio `2.01588/18.01528`. Oxygen production is calculated from the corresponding stoichiometric balance, and unused water remains as unreacted feed.
+
+This is a stoichiometric capacity calculation rather than a detailed electrical-efficiency model. During final verification, an earlier non-zero response at zero water was identified and corrected so that zero water or zero power produces zero electrolytic hydrogen.
 
 ## Independent synthesis-loop benchmark
 
-Let fresh molar feeds be F_C (CO2) and F_H (H2), per-pass conversion x, recycled fraction r, and reaction extent e in kmol/h. Products are perfectly removed before recycle, both gas species have the same split, and there are no inerts or side reactions.
+For the independent recycle check, fresh molar feeds are represented by F_C for CO2 and F_H for H2. The per-pass conversion is x, the recycled fraction is r, and the reaction extent is e in kmol/h. Products are assumed to be removed before recycle, both gas species use the same recycle split, and inerts and side reactions are omitted.
 
-At steady state, the reactor feeds are:
+At steady state:
 
 `C_in = (F_C - r e)/(1-r)`
 
 `H_in = (F_H - 3 r e)/(1-r)`
 
-Substitution into `e = min(x C_in, H_in/3)` independently gives:
+Substitution into `e = min(x C_in, H_in/3)` gives:
 
 `e = min(x F_C/[1-r(1-x)], F_H/3)`.
 
-The production code uses fixed-point iteration; the validator uses this closed-form expression. Methanol and water are `32.04186 e` and `18.01528 e` kg/h. External purge is `F_C-e` and `F_H-3e` kmol/h. Carbon, hydrogen and total external mass must close. Internal recycle must not be counted as an external input/output.
+The application uses fixed-point iteration, while the validator uses this closed-form expression as an independent comparison. Methanol and water are calculated as `32.04186 e` and `18.01528 e` kg/h. External purge is `F_C-e` and `F_H-3e` kmol/h. Carbon, hydrogen and total external mass are checked for closure. Internal recycle is not counted as an external input or output.
 
-For 1,152 kg/h CO2, 158 kg/h H2, x=0.20 and r=0.95, the CO2 conversion is approximately 83.3333% and methanol is approximately 698.94 kg/h before downstream recovery. This is an analytical test case, NOT a measured plant case.
+For a test case with 1,152 kg/h CO2, 158 kg/h H2, x = 0.20 and r = 0.95, the calculated overall CO2 conversion is approximately 83.3333% and methanol production is approximately 698.94 kg/h before downstream recovery. This is an analytical verification case, not a measured plant operating point.
 
-`SubmissionValidation.Run` compares 240 cases across zero reactants, zero conversion, zero recycle, H2-limited feed and recycle up to 0.999. It checks production against the analytical solution, atom balances, nonnegative purge, solver convergence and external closure below 0.001%. The first expanded run failed external closure; its stopping criterion was scaled to the large internal recycle rather than fresh feed. The corrected solver uses fresh-feed scaling, relative tolerance 1e-10 and a 32,768-iteration cap. `r=1` is singular and is internally bounded to 0.999; the UI's 100% endpoint is therefore an approximation and must not be described as a sealed no-purge steady state.
+`SubmissionValidation.Run` evaluates 240 cases including zero reactants, zero conversion, zero recycle, H2-limited feed and recycle values up to 0.999. It compares the production calculation with the analytical solution and checks atom balances, non-negative purge, solver convergence and external mass closure below 0.001%.
+
+An expanded validation run exposed a convergence problem at high recycle because the stopping criterion was scaled to the large internal recycle flow. The corrected solver uses fresh-feed scaling, a relative tolerance of 1e-10 and a 32,768-iteration limit. A recycle fraction of exactly 1 is singular, so the model internally limits it to 0.999. The UI endpoint of 100% should therefore be interpreted as an approximation rather than a sealed no-purge steady state.
 
 ## Empirical context and limits
 
-[S2] reports experiments at 240-280 C, 40-80 bar and H2/CO2=3.0-3.4, supporting the use of these variables as educational controls. It does NOT validate our uncalibrated response formula. Its reported improvement with increased hydrogen ratio also cautions against treating our symmetric penalty around ratio 3 as universal kinetics.
+Reference [S2] reports experiments at 240–280 °C, 40–80 bar and H2/CO2 ratios of 3.0–3.4. These ranges support the use of temperature, pressure and feed ratio as meaningful educational controls, but they do not validate the application's uncalibrated response equation. The reported influence of hydrogen ratio also shows why the simplified symmetric penalty around a ratio of 3 should not be interpreted as universal reaction kinetics.
 
-[S3], section 3.2/Table 2, reports 17.8% CO2 conversion for its CZ-2 catalyst at 240 C and 30 bar, H2/CO2=3. These are useful external context, but the catalyst, space-velocity basis, CO side-product and selectivity differ from this application's assumptions. We cannot honestly calculate a matched-case validation error from those data. We do not fit the application to that single point or claim that numerical agreement would establish physical validity.
+Reference [S3], Section 3.2 and Table 2, reports 17.8% CO2 conversion for its CZ-2 catalyst at 240 °C, 30 bar and H2/CO2 = 3. The catalyst, space-velocity basis, CO side-product and selectivity differ from the assumptions used in this project. A direct matched-case validation error would therefore not be meaningful, and the application is not fitted to this single literature point.
 
-A rigorous quantitative validation remains a separate research task: obtain the original experimental dataset or a reproducible DWSIM/Aspen case, align catalyst, feed, residence-time basis and separation boundaries, account for CO/selectivity, predefine tolerances, and report residuals over multiple operating points. No such calibrated dataset was provided or generated here.
+A quantitative predictive validation would require a consistent experimental dataset or reproducible process-simulation case with matching catalyst, feed composition, residence-time basis and separation boundaries. CO formation and selectivity would also need to be included. Such calibration is outside the scope of this project.
 
 ## Sensitivity methodology
 
-`docs/evidence/nominal-inputs.json` records the complete baseline. The actual Unity `Simulate` method produces 13 points each for temperature, pressure, ratio, feed and recycle (65 points), varying only the named field. `sensitivity.csv` stores units, single-pass conversion, refined methanol rate and recovery index. The validator also proves the input baseline is not mutated.
+`docs/evidence/nominal-inputs.json` records the baseline operating point. The Unity `Simulate` method generates 13 points for each of five factors: temperature, pressure, H2/CO2 ratio, feed and recycle. This gives 65 sensitivity points in total. Only the selected factor is changed during each sweep, and the validator checks that the original input state is not modified.
 
-Temperature peaks near the model's specified 240 C optimum; pressure raises the conversion correlation; ratio affects both a heuristic penalty and feed availability; feed changes throughput but not the single-pass correlation; recycle changes overall utilization, not per-pass conversion. These are consequences of the implemented assumptions, not experimentally discovered laws. The graphs are deterministic model experiments, not measured plant data or statistical causal inference.
+`sensitivity.csv` stores the units, single-pass conversion, refined methanol rate and recovery index. In the implemented model, temperature peaks near the specified 240 °C optimum, pressure increases the conversion correlation, the H2/CO2 ratio affects both feed availability and a simplified response penalty, feed changes throughput without changing the single-pass correlation, and recycle changes overall utilization rather than per-pass conversion.
 
-See [Executed numerical results](NUMERICAL_RESULTS.md) for the measured numerical residuals and sensitivity ranges.
+These trends describe the behaviour of the implemented educational model. They should not be interpreted as experimentally discovered process laws or statistical causal relationships.
 
 ## Model boundaries
 
-- The dashboard's legacy `overallEfficiencyPercent` is refined methanol divided by stoichiometric potential, not energy efficiency. Electricity, compressor work and heat duties are not calculated.
-- Capture, condenser recovery, purity and distillation energy are educational correlations. Their coefficients and design capacities are project assumptions, not values validated by the cited papers.
-- The 1,250 kg/h methanol design value is a cap, not a guaranteed nominal result.
-- The plant-load schedule gives 95% ramp at timeline=100; this is preserved existing behavior.
-- Storage evolves on an accelerated clock; process streams otherwise represent steady states. Display smoothing is not a dynamic process model.
-- Reactor color and packet animations communicate state; they are not molecular trajectories, CFD, literal catalyst color or certified safety instrumentation.
-- No life-cycle emissions, economics, equipment sizing, thermal safety or user-study claims are established.
+- The dashboard value `overallEfficiencyPercent` represents refined methanol divided by stoichiometric potential. It is a material-recovery index, not an energy-efficiency calculation.
+- Electricity consumption, compressor work and heat duties are not calculated.
+- Capture, condenser recovery, purity and distillation-energy relationships are educational correlations and have not been calibrated using the cited papers.
+- The 1,250 kg/h methanol design value is a model cap rather than a guaranteed nominal production rate.
+- The plant-load schedule reaches 95% at timeline = 100 as part of the existing visualization behaviour.
+- Storage changes on an accelerated time scale, while the process streams otherwise represent steady-state values. Display smoothing should not be interpreted as a dynamic process model.
+- Reactor colour and particle animations are visual explanations of process state. They do not represent molecular trajectories, CFD results, literal catalyst colour or certified safety instrumentation.
+- Life-cycle emissions, economics, detailed equipment sizing, thermal safety analysis and measured learning effectiveness are outside the project scope.
 
 ## Sources (accessed 2026-09-22)
 
 [S1] US Department of Energy, *Hydrogen Production: Electrolysis*, reaction description. https://www.energy.gov/cmei/fuels/hydrogen-production-electrolysis
 
-[S2] Che Yifei, Li Tao, Zhang Haitao (2020), *Intrinsic Kinetics of Hydrogenation of CO2 towards Methanol on a Cu/ZnO/Al2O3 Modified Catalyst*, 46(3), 326-333. DOI: 10.14135/j.cnki.1006-3080.20190227001. Publisher abstract consulted: https://journal.ecust.edu.cn/en/article/doi/10.14135/j.cnki.1006-3080.20190227001
+[S2] Che Yifei, Li Tao, Zhang Haitao (2020), *Intrinsic Kinetics of Hydrogenation of CO2 towards Methanol on a Cu/ZnO/Al2O3 Modified Catalyst*, 46(3), 326-333. DOI: 10.14135/j.cnki.1006-3080.20190227001.
 
-[S3] Lei, Zheng and Liu (2019), *Cylindrical shaped ZnO combined Cu catalysts for the hydrogenation of CO2 to methanol*, RSC Advances 9, 13696-13704. DOI: 10.1039/C9RA00658C. Publisher indexed section 3.2 consulted: https://pubs.rsc.org/en/content/articlehtml/2019/ra/c9ra00658c
+[S3] Lei, Zheng and Liu (2019), *Cylindrical shaped ZnO combined Cu catalysts for the hydrogenation of CO2 to methanol*, RSC Advances 9, 13696-13704. DOI: 10.1039/C9RA00658C.
 
-[S4] European Commission JRC (2016), *Techno-economic and environmental evaluation of CO2 utilisation for fuel production. Synthesis of methanol and formic acid*, JRC99380. Used only to contextualize system boundaries; no cost/emission results are transferred into this model. https://publications.jrc.ec.europa.eu/repository/handle/JRC99380
+[S4] European Commission JRC (2016), *Techno-economic and environmental evaluation of CO2 utilisation for fuel production. Synthesis of methanol and formic acid*, JRC99380. This source is used only to provide context for the system boundary; cost and emission results are not transferred to the model.
 
-## Frozen-source evidence
+## Final numerical verification
 
-The final clean-clone suite executed 1,586 assertions on source `9e3ea9c192d506e33e4227586efdd5cd5da994bd`. Editor CSV closure was 1.13699e-09%; player CSV closure was 4.25878532e-09%. These are numerical residuals for their respective operating points. Re-summing rounded exported stream values can produce a larger residual (0.0002 kg/h in the 25%-recycle regression), so the CSV's rounded zero must not be described as exact physical closure. Full logs/results and empirical-validation limitations are separated in SUBMISSION_STATUS.md.
+The final clean-clone suite executed **1,586 assertions** on application source `9e3ea9c192d506e33e4227586efdd5cd5da994bd`. The editor CSV external mass-closure error was **1.13699e-09%**, and the player CSV closure error was **4.25878532e-09%** at its tested operating point.
+
+Re-summing rounded exported stream values can produce a slightly larger residual. In the 25% recycle regression case this was 0.0002 kg/h. These values demonstrate numerical consistency of the implemented calculations; they are not evidence that the simplified model has been empirically validated as an industrial predictive model.
+
+Detailed execution results are recorded in `SUBMISSION_STATUS.md` and `NUMERICAL_RESULTS.md`.
