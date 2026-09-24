@@ -15,4 +15,4 @@ Keyboard controls: arrows orbit, A/D pan, W/S zoom, Shift+arrows change focus, H
 
 The legacy efficiency label is a material-recovery index, not energy efficiency. MAX is a predefined high-recovery preset, not a demonstrated global optimum. See IMPLEMENTATION_REFERENCE.md for the exact formulas and warning thresholds.
 
-The release manifest identifies the source commit and file hashes. Team/institution and asset-permission confirmations remain in TOOLS_AND_ASSISTANCE.md and REFERENCES_AND_ASSET_PROVENANCE.md until signed off by the team.
+The release manifest identifies the source commit and file hashes. Team/institution details, asset provenance and the assistance disclosure are recorded separately in TOOLS_AND_ASSISTANCE.md and REFERENCES_AND_ASSET_PROVENANCE.md.
