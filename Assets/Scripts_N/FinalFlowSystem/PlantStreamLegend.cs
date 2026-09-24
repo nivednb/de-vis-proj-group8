@@ -25,7 +25,8 @@ public static class PlantStreamLegend
     }
 
     public static readonly Color WaterHydrogen = Hex("38BDF8");
-    public static readonly Color AmineCapturedCo2 = Hex("10B981");
+    // Pink rather than a green/teal, so the amine loop can't be mistaken for refined methanol.
+    public static readonly Color AmineCapturedCo2 = Hex("EC4899");
     public static readonly Color CompressedSyngas = Hex("F59E0B");
     public static readonly Color HotReactorEffluent = Hex("EF4444");
     public static readonly Color CrudeMethanol = Hex("A855F7");

@@ -8,7 +8,8 @@ using UnityEngine.UI;
 /// <summary>
 /// Step-by-step guided tour of the whole application.
 ///
-/// It runs automatically every time the app is launched and can be replayed at any time
+/// It opens every time the app is launched (straight after the welcome screen's START, see
+/// <see cref="WelcomeScreenRuntime"/>) and can be replayed at any time
 /// from HELP -> START TUTORIAL. Each step dims the screen except the part of the UI being
 /// explained, and drives the dashboard into the matching state first, so the tour points at
 /// the real controls rather than at a description of them.
@@ -116,7 +117,8 @@ public sealed class TutorialRuntime : MonoBehaviour
         if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         BuildSteps(ExternalAnalyticsWindow.IsSupported);
         BuildOverlay();
-        StartCoroutine(AutoStartWhenReady());
+        // With the welcome screen up, its START button opens the tour instead.
+        if (!WelcomeScreenRuntime.IsShowing) StartCoroutine(AutoStartWhenReady());
     }
 
     /// <summary>The tour opens on every launch. The dashboard builds itself in its own

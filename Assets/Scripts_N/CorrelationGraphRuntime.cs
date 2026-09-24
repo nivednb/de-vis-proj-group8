@@ -196,7 +196,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
             Point p = points[i];
             bool seed = string.IsNullOrEmpty(p.Module);
             sb.AppendLine(string.Join(",",
-                i.ToString(),
+                (i + 1).ToString(),
                 p.X.ToString("0.#####"),
                 p.Y.ToString("0.#####"),
                 GraphExportUtil.Csv(p.Module),
@@ -353,6 +353,20 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
                 newestDotSpawnTime = Time.unscaledTime;
                 dot.localScale = new Vector3(0.3f, 0.3f, 1f);
             }
+
+            // Sequence number, so the order the points were recorded in can be read straight
+            // off the plot even when later points land left of earlier ones.
+            Text number = MakeText("Point Number " + (i + 1), pointsLayer, (i + 1).ToString(), 10, FontStyle.Bold, TextAnchor.LowerCenter, Color.white);
+            number.horizontalOverflow = HorizontalWrapMode.Overflow;
+            number.verticalOverflow = VerticalWrapMode.Overflow;
+            RectTransform numberRect = number.rectTransform;
+            numberRect.anchorMin = numberRect.anchorMax = new Vector2(0.5f, 0.5f);
+            numberRect.pivot = new Vector2(0.5f, 0f);
+            numberRect.sizeDelta = new Vector2(24f, 12f);
+            numberRect.anchoredPosition = anchored[i] + new Vector2(0f, 4f);
+            Outline numberOutline = number.gameObject.AddComponent<Outline>();
+            numberOutline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+            numberOutline.effectDistance = new Vector2(1f, -1f);
         }
     }
 
@@ -472,7 +486,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         string changeLine = !string.IsNullOrEmpty(p.Module)
             ? $"\n{p.Parameter}: {GraphVisualUtils.FormatValue(p.FromValue, cu)} → {GraphVisualUtils.FormatValue(p.ToValue, cu)}  ({p.Module})"
             : "\n(starting point)";
-        tooltipText.text = $"{LabelWithoutUnit(XLabel)}: {GraphVisualUtils.FormatValue(p.X, xu, "0.#")}\n{LabelWithoutUnit(YLabel)}: {GraphVisualUtils.FormatValue(p.Y, yu, "0.#")}" + changeLine;
+        tooltipText.text = $"Point {nearest + 1}\n{LabelWithoutUnit(XLabel)}: {GraphVisualUtils.FormatValue(p.X, xu, "0.#")}\n{LabelWithoutUnit(YLabel)}: {GraphVisualUtils.FormatValue(p.Y, yu, "0.#")}" + changeLine;
         tooltip.SetActive(true);
 
         if (hoverDot != null)
@@ -517,7 +531,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         tooltipRect.SetParent(root, false);
         tooltipRect.anchorMin = tooltipRect.anchorMax = new Vector2(0.5f, 0.5f);
         tooltipRect.pivot = Vector2.zero;
-        tooltipRect.sizeDelta = new Vector2(200f, 92f);
+        tooltipRect.sizeDelta = new Vector2(200f, 106f);
         Image bg = tooltip.AddComponent<Image>();
         bg.color = new Color(0.02f, 0.05f, 0.07f, 0.96f);
         bg.raycastTarget = false;
