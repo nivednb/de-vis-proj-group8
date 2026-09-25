@@ -3,7 +3,7 @@
 [Tt]emp/
 [Oo]bj/
 [Bb]uild/
-[Bb]uilds/
+[Bb]uilds/*
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
 Assets/_Recovery/
@@ -47,6 +47,9 @@ sysinfo.txt
 *.mdb
 *.opendb
 *.VC.db
+
+# The shared Windows build, zipped and stored with Git LFS (see .gitattributes)
+!/Builds/PtM-Digital-Twin-Daylight.zip
 
 # Analytics graph exports (CSV/PNG written at runtime by the OFAT sweep / correlation graphs)
 /Analytics Exports/
