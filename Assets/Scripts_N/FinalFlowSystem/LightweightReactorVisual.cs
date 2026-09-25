@@ -3,13 +3,53 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Low-cost reactor cutaway: transparent vessel wall plus bounded feed,
-/// conversion and product tracers. It deliberately stays below 260 live
-/// particles and exists only in Play mode.
+/// Reactor cutaway: a translucent vessel and catalyst bed with rising feed bubbles.
+///
+/// Feed bubbles (H2, CO2 and recycle gas) enter at the bottom, rise through the catalyst bed
+/// and leave through the top outlet. A share of them equal to the live single-pass conversion
+/// reacts inside the bed and turns into crude methanol / water. Every bubble is placed
+/// analytically each frame from its own spawn radius, wobble and height, so it can never
+/// leave the catalyst-bed radius or the vessel height. Exists only in Play mode.
 /// </summary>
 public sealed class LightweightReactorVisual : MonoBehaviour
 {
     const string RootName = "Lightweight Reactor Cutaway";
+    const int MaxBubbles = 150;
+    const float MinSize = .11f;
+    const float MaxSize = .2f;
+    const float MaxWobble = .1f;
+    // Converted bubbles briefly swell as they react, so the containment margin allows for it.
+    const float ReactionSwell = 1.3f;
+
+    // Render order: bed, then the glass shell, then the bubbles so the glass never veils them.
+    const int BedQueue = 3000;
+    const int ShellQueue = 3010;
+    const int BubbleQueue = 3020;
+
+    struct Bubble
+    {
+        public bool Alive;
+        public float Progress;      // 0 at the inlet, 1 at the outlet
+        public float Speed;         // progress per second at nominal flow
+        public float Radius;        // distance from the axis at spawn
+        public float Angle;
+        public float WobbleAmp;
+        public float WobbleFreq;
+        public float Phase;
+        public float Size;
+        public Color Feed;
+        public bool Reacts;
+        public float ReactAt;       // progress at which it reacts
+    }
+
+    readonly Bubble[] bubbles = new Bubble[MaxBubbles];
+    ParticleSystem.Particle[] particles;
+    ParticleSystem system;
+    Vector3 axis;
+    float yStart, yEnd, bedStart, bedEnd, spawnRadius;
+    float clock;
+
+    Color h2, co2, syngas, product, reacting;
 
     public static void Configure(GameObject owner)
     {
@@ -24,56 +64,244 @@ public sealed class LightweightReactorVisual : MonoBehaviour
             else if (obj.name.Equals("Catalyst_Bed", StringComparison.OrdinalIgnoreCase)) catalyst = obj.GetComponent<Renderer>();
         }
         if (shell == null || catalyst == null) return;
-        MakeTransparent(shell, .16f);
-        MakeTransparent(top, .18f);
-        MakeTransparent(bottom, .18f);
+        MakeTransparent(shell, .14f, ShellQueue, .55f);
+        MakeTransparent(top, .16f, ShellQueue, .55f);
+        MakeTransparent(bottom, .16f, ShellQueue, .55f);
+        // Translucent packed bed; CatalystBedColorAnimator keeps this alpha while it recolours it.
+        MakeTransparent(catalyst, .5f, BedQueue, .15f);
 
         GameObject existing = GameObject.Find(RootName);
-        if (existing != null) UnityEngine.Object.Destroy(existing);
+        if (existing != null) Destroy(existing);
+        // Kept outside the imported reactor hierarchy so its 3x model scale does not apply.
         GameObject root = new(RootName);
-        // Bounds below are already measured in world space. Keeping this root
-        // outside the imported reactor hierarchy prevents its 3x model scale
-        // from multiplying the particle volume and displacing it below the bed.
-        root.transform.SetParent(null, false);
-        root.transform.position = catalyst.bounds.center;
+        root.AddComponent<LightweightReactorVisual>().Build(shell.bounds, catalyst.bounds);
+    }
 
-        Bounds bed = catalyst.bounds;
-        float radius = Mathf.Min(bed.extents.x, bed.extents.z) * .92f;
-        // Half-height of the catalyst bed, measured from the root at its centre. Every tracer
-        // is defined by where it starts and ends *within* this span, and the lifetime is then
-        // derived from that distance. The previous version derived lifetime from the full bed
-        // height regardless of where a stream started, so streams that began part-way up flew
-        // out through the top of the vessel.
-        float half = bed.extents.y;
-        Color h2 = PlantStreamLegend.WaterHydrogen;
-        Color co2 = PlantStreamLegend.AmineCapturedCo2;
-        Color syngas = PlantStreamLegend.CompressedSyngas;
-        Color crude = PlantStreamLegend.CrudeMethanol;
-        Color hot = PlantStreamLegend.HotReactorEffluent;
+    void Build(Bounds shellBounds, Bounds bedBounds)
+    {
+        axis = new Vector3(bedBounds.center.x, 0f, bedBounds.center.z);
+        float bedRadius = Mathf.Min(bedBounds.extents.x, bedBounds.extents.z);
+        // Largest spawn radius for which spawn radius + wobble + swollen half-size stays at 94%
+        // of the bed radius: the containment guarantee for every bubble.
+        spawnRadius = Mathf.Max(.05f, bedRadius * .94f - MaxWobble - MaxSize * ReactionSwell * .5f);
 
-        // This model's feed nozzle enters the lower/side region and its product
-        // nozzle is at the top, so it is represented as an upflow packed bed.
-        CreateStream(root.transform, "H2 from side inlet", Fade(h2, .95f),
-            new Vector2(-radius*.34f, 0f), radius*.34f, -half*.90f, -half*.20f, 22f, .064f, 1.05f);
-        CreateStream(root.transform, "CO2 from side inlet", Fade(co2, .95f),
-            new Vector2(radius*.34f, 0f), radius*.34f, -half*.90f, -half*.20f, 19f, .066f, 1.0f);
-        CreateStream(root.transform, "Recycle from side inlet", Fade(syngas, .88f),
-            new Vector2(0f, radius*.22f), radius*.30f, -half*.86f, -half*.24f, 10f, .061f, .96f);
-        // Leaves room for the noise module's lateral wander (12% of the radius) so the
-        // conversion tracers stay inside the catalyst bed, not just inside the shell.
-        CreateStream(root.transform, "Catalyst conversion", Fade(hot, .92f),
-            new Vector2(0f, 0f), radius*.96f, -half*.62f, half*.62f, 48f, .080f, .72f);
-        CreateStream(root.transform, "Methanol vapour to top outlet", Fade(crude, .95f),
-            new Vector2(-radius*.20f, 0f), radius*.44f, half*.16f, half*.90f, 18f, .073f, .90f);
-        CreateStream(root.transform, "Water vapour to top outlet", Fade(h2, .92f),
-            new Vector2(radius*.20f, 0f), radius*.44f, half*.16f, half*.90f, 14f, .069f, .86f);
-        CreateStream(root.transform, "Unreacted gas to top outlet", Fade(syngas, .62f),
-            new Vector2(0f, -radius*.18f), radius*.36f, half*.20f, half*.88f, 8f, .057f, .94f);
+        // Straight cylindrical part of the shell only, never into the domed caps.
+        float margin = MaxSize * ReactionSwell;
+        yStart = shellBounds.min.y + margin;
+        yEnd = shellBounds.max.y - margin;
+        bedStart = Mathf.InverseLerp(yStart, yEnd, bedBounds.min.y);
+        bedEnd = Mathf.InverseLerp(yStart, yEnd, bedBounds.max.y);
+        transform.position = new Vector3(axis.x, (yStart + yEnd) * .5f, axis.z);
+
+        h2 = Fade(PlantStreamLegend.WaterHydrogen, 1f);
+        co2 = Fade(PlantStreamLegend.AmineCapturedCo2, 1f);
+        syngas = Fade(PlantStreamLegend.CompressedSyngas, 1f);
+        product = Fade(PlantStreamLegend.CrudeMethanol, 1f);
+        reacting = Fade(Color.Lerp(PlantStreamLegend.HotReactorEffluent, Color.white, .35f), 1f);
+
+        system = CreateRenderer();
+        particles = new ParticleSystem.Particle[MaxBubbles];
+
+        // Start with the vessel already populated rather than a wave rising from the inlet.
+        float conversion = CurrentConversion();
+        for (int i = 0; i < MaxBubbles; i++)
+        {
+            Spawn(ref bubbles[i], conversion);
+            bubbles[i].Progress = UnityEngine.Random.value;
+        }
+    }
+
+    void LateUpdate()
+    {
+        if (system == null) return;
+        PlantProcessSimulator sim = PlantProcessSimulator.Instance;
+        bool running = sim == null || sim.IsRunning;
+        float flow = 1f, density = 1f, conversion = CurrentConversion();
+        if (sim != null)
+        {
+            PlantProcessSimulator.ProcessSnapshot s = sim.Current;
+            float feed = Mathf.Clamp01(s.syngasFeedKgH / 1725f);
+            density = feed < .01f ? 0f : Mathf.Lerp(.3f, 1f, feed);
+            float ghsv = Mathf.Clamp(Mathf.Sqrt(Mathf.Max(1000f, s.ghsv) / 8000f), .6f, 1.6f);
+            flow = Mathf.Lerp(.45f, 1f, Mathf.Clamp01(s.reactorFeedFlowPercent / 100f)) * ghsv;
+        }
+
+        float dt = running ? Time.deltaTime : 0f;
+        clock += dt;
+        int activeTarget = Mathf.RoundToInt(MaxBubbles * density);
+        int count = 0;
+        for (int i = 0; i < MaxBubbles; i++)
+        {
+            ref Bubble b = ref bubbles[i];
+            if (!b.Alive)
+            {
+                // Stagger respawns so bubbles keep arriving evenly instead of in waves.
+                if (running && i < activeTarget && UnityEngine.Random.value < dt * 1.5f) Spawn(ref b, conversion);
+                if (!b.Alive) continue;
+            }
+
+            b.Progress += b.Speed * flow * dt;
+            if (b.Progress >= 1f)
+            {
+                b.Alive = false;
+                continue;
+            }
+            particles[count++] = Place(b);
+        }
+        system.SetParticles(particles, count);
+    }
+
+    void Spawn(ref Bubble b, float conversion)
+    {
+        b.Alive = true;
+        b.Progress = 0f;
+        b.Speed = UnityEngine.Random.Range(.075f, .11f);
+        b.Radius = spawnRadius * Mathf.Sqrt(UnityEngine.Random.value);  // uniform over the disc
+        b.Angle = UnityEngine.Random.value * Mathf.PI * 2f;
+        b.WobbleAmp = UnityEngine.Random.Range(.03f, MaxWobble);
+        b.WobbleFreq = UnityEngine.Random.Range(1.2f, 2.4f);
+        b.Phase = UnityEngine.Random.value * Mathf.PI * 2f;
+        b.Size = UnityEngine.Random.Range(MinSize, MaxSize);
+
+        // Fresh feed is H2:CO2 = 3:1 by mole; recycle gas is shown as its own colour.
+        float pick = UnityEngine.Random.value;
+        b.Feed = pick < .15f ? syngas : pick < .79f ? h2 : co2;
+        b.Reacts = UnityEngine.Random.value < conversion;
+        b.ReactAt = Mathf.Lerp(bedStart, bedEnd, UnityEngine.Random.Range(.08f, .92f));
+    }
+
+    ParticleSystem.Particle Place(in Bubble b)
+    {
+        float p = b.Progress;
+        float t = clock * b.WobbleFreq + b.Phase;
+
+        // Past the bed the flow gathers toward the top outlet on the axis.
+        float gather = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(bedEnd, 1f, p));
+        float radius = b.Radius * Mathf.Lerp(1f, .35f, gather);
+        float angle = b.Angle + t * .15f;
+        Vector3 offset = new(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+        offset += new Vector3(Mathf.Sin(t), 0f, Mathf.Cos(t * .83f)) * b.WobbleAmp;
+
+        float y = Mathf.Lerp(yStart, yEnd, p);
+        Color color = b.Feed;
+        float size = b.Size * (.9f + .1f * Mathf.Sin(t * 1.7f));
+        if (b.Reacts)
+        {
+            // Reaction: a short bright swell at ReactAt, then the product colour.
+            float k = Mathf.InverseLerp(b.ReactAt - .015f, b.ReactAt + .05f, p);
+            if (k > 0f)
+            {
+                float flash = Mathf.Sin(Mathf.Clamp01(k) * Mathf.PI);
+                color = Color.Lerp(Color.Lerp(b.Feed, product, k), reacting, flash * .8f);
+                size *= 1f + (ReactionSwell - 1f) * flash;
+            }
+        }
+
+        // Fade in at the inlet and out at the outlet so nothing pops.
+        color.a *= Mathf.SmoothStep(0f, 1f, p / .06f) * Mathf.SmoothStep(0f, 1f, (1f - p) / .08f);
+
+        return new ParticleSystem.Particle
+        {
+            position = axis + offset + Vector3.up * y,
+            startSize = size,
+            startColor = color,
+            startLifetime = 1000f,
+            remainingLifetime = 1000f
+        };
+    }
+
+    float CurrentConversion()
+    {
+        PlantProcessSimulator sim = PlantProcessSimulator.Instance;
+        return sim != null ? Mathf.Clamp01(sim.Current.reactorYieldPercent / 100f) : .25f;
+    }
+
+    ParticleSystem CreateRenderer()
+    {
+        GameObject child = new("Reactor Bubbles");
+        child.transform.SetParent(transform, false);
+        ParticleSystem ps = child.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        var main = ps.main;
+        main.loop = true;
+        main.playOnAwake = false;
+        main.maxParticles = MaxBubbles;
+        main.startSpeed = 0f;
+        main.startLifetime = 1000f;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.cullingMode = ParticleSystemCullingMode.AlwaysSimulate;
+        var emission = ps.emission;
+        emission.enabled = false;
+        var shape = ps.shape;
+        shape.enabled = false;
+
+        ParticleSystemRenderer renderer = ps.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Billboard;
+        renderer.alignment = ParticleSystemRenderSpace.View;
+        renderer.shadowCastingMode = ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        renderer.sortMode = ParticleSystemSortMode.Distance;
+        renderer.sharedMaterial = CreateBubbleMaterial();
+        ps.Play();
+        return ps;
+    }
+
+    static Material CreateBubbleMaterial()
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
+        Material material = new(shader) { name = "ReactorBubble" };
+        Texture2D texture = CreateBubbleTexture(64);
+        if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
+        if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+        if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
+        if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
+        if (material.HasProperty("_Blend")) material.SetFloat("_Blend", 0f);
+        if (material.HasProperty("_SrcBlend")) material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+        if (material.HasProperty("_DstBlend")) material.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+        if (material.HasProperty("_SrcBlendAlpha")) material.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
+        if (material.HasProperty("_DstBlendAlpha")) material.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
+        if (material.HasProperty("_ZWrite")) material.SetFloat("_ZWrite", 0f);
+        material.SetOverrideTag("RenderType", "Transparent");
+        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        material.renderQueue = BubbleQueue;
+        return material;
+    }
+
+    /// <summary>Soft sphere: translucent body, brighter rim and a small specular highlight.</summary>
+    static Texture2D CreateBubbleTexture(int size)
+    {
+        Texture2D texture = new(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "ReactorBubble",
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+        Color[] pixels = new Color[size * size];
+        float half = size * .5f;
+        Vector2 highlight = new(-.32f, .34f);
+        for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+        {
+            Vector2 uv = new((x + .5f - half) / half, (y + .5f - half) / half);
+            float r = uv.magnitude;
+            float edge = Mathf.Clamp01((1f - r) * half * .5f);          // anti-aliased outline
+            float body = Mathf.Lerp(.86f, 1f, Mathf.SmoothStep(.55f, .98f, r));
+            float spec = Mathf.Clamp01(1f - (uv - highlight).magnitude / .28f);
+            spec *= spec;
+            float shade = Mathf.Lerp(.82f, 1f, Mathf.Clamp01(.5f + .5f * uv.y));
+            Color c = new(shade, shade, shade, body * edge);
+            c = Color.Lerp(c, new Color(1f, 1f, 1f, edge), spec * .85f);
+            pixels[y * size + x] = c;
+        }
+        texture.SetPixels(pixels);
+        texture.Apply(false, true);
+        return texture;
     }
 
     static Color Fade(Color color, float alpha) => new(color.r, color.g, color.b, alpha);
 
-    static void MakeTransparent(Renderer renderer, float alpha)
+    static void MakeTransparent(Renderer renderer, float alpha, int queue, float smoothness)
     {
         if (renderer == null) return;
         Material source = renderer.sharedMaterial;
@@ -86,73 +314,21 @@ public sealed class LightweightReactorVisual : MonoBehaviour
         if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
         if (material.HasProperty("_SrcBlend")) material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
         if (material.HasProperty("_DstBlend")) material.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+        if (material.HasProperty("_SrcBlendAlpha")) material.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
+        if (material.HasProperty("_DstBlendAlpha")) material.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
         if (material.HasProperty("_ZWrite")) material.SetFloat("_ZWrite", 0f);
+        // The imported materials are tagged Opaque; left that way URP still treats the glass as
+        // a solid surface in some passes and it renders as a milky white column.
+        material.SetOverrideTag("RenderType", "Transparent");
+        // URP keeps full-strength reflections on transparent surfaces by default, which turns
+        // the stacked shell and bed into a milky white film over the interior.
+        if (material.HasProperty("_BlendModePreserveSpecular")) material.SetFloat("_BlendModePreserveSpecular", 0f);
+        material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+        if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", smoothness);
         material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        material.renderQueue = (int)RenderQueue.Transparent;
+        material.renderQueue = queue;
         renderer.sharedMaterial = material;
         renderer.shadowCastingMode = ShadowCastingMode.Off;
         renderer.receiveShadows = false;
-    }
-
-    /// <summary>
-    /// One tracer stream rising from <paramref name="startY"/> to <paramref name="endY"/>, both
-    /// measured from the catalyst-bed centre. Lifetime is derived from that actual travel
-    /// distance, which is what keeps every particle inside the vessel.
-    /// </summary>
-    static void CreateStream(Transform parent, string name, Color color, Vector2 lateralOffset,
-        float radius, float startY, float endY, float rate, float size, float velocity)
-    {
-        float travel = Mathf.Abs(endY - startY);
-        float emitterThickness = Mathf.Min(travel * .12f, Mathf.Max(.05f, travel * .12f));
-        // The emitter has thickness, so a particle born at its top edge must still finish
-        // inside the span: shorten the travel by half the emitter to stay bounded.
-        float usableTravel = Mathf.Max(.05f, travel - emitterThickness * .5f);
-
-        GameObject child = new(name);
-        child.transform.SetParent(parent, false);
-        child.transform.localPosition = new Vector3(lateralOffset.x, startY, lateralOffset.y);
-        ParticleSystem ps = child.AddComponent<ParticleSystem>();
-        var main = ps.main;
-        main.loop = true;
-        main.playOnAwake = true;
-        main.startLifetime = Mathf.Max(.5f, usableTravel / Mathf.Abs(velocity));
-        main.startSpeed = 0f;
-        main.startSize = new ParticleSystem.MinMaxCurve(size*.72f, size*1.35f);
-        main.startColor = color;
-        main.maxParticles = 90;
-        main.simulationSpace = ParticleSystemSimulationSpace.World;
-        var emission = ps.emission;
-        emission.rateOverTime = rate;
-        var shape = ps.shape;
-        shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(radius*2f, emitterThickness, radius*2f);
-        var velocityModule = ps.velocityOverLifetime;
-        velocityModule.enabled = true;
-        velocityModule.space = ParticleSystemSimulationSpace.World;
-        // All three axes must use the same curve mode or Unity emits a warning
-        // every frame. Noise supplies the small lateral dispersion instead.
-        velocityModule.x = 0f;
-        velocityModule.y = velocity;
-        velocityModule.z = 0f;
-        var noise = ps.noise;
-        noise.enabled = true;
-        // Proportional to the stream's own radius so the lateral wander never pushes tracers
-        // through the vessel wall on this model's scale.
-        noise.strength = Mathf.Max(.02f, radius * .12f);
-        noise.frequency = .45f;
-        ParticleSystemRenderer renderer = ps.GetComponent<ParticleSystemRenderer>();
-        Shader particleShader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (particleShader == null) particleShader = Shader.Find("Particles/Standard Unlit");
-        if (particleShader != null)
-        {
-            Material material = new(particleShader) { name = $"ReactorTracer_{name}" };
-            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
-            if (material.HasProperty("_Color")) material.SetColor("_Color", color);
-            renderer.sharedMaterial = material;
-        }
-        renderer.renderMode = ParticleSystemRenderMode.Billboard;
-        renderer.alignment = ParticleSystemRenderSpace.View;
-        renderer.shadowCastingMode = ShadowCastingMode.Off;
-        ps.Play();
     }
 }

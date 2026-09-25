@@ -90,6 +90,7 @@ public readonly struct PipeStreamState
             PlantFlowKind.CrudeMethanolVapourLiquid => 52.5f,                   // DN50
         PlantFlowKind.LiquidCrudeMethanol => 26.6f,                             // DN25
         PlantFlowKind.MethanolProduct => 21.7f,                                 // DN20
+        PlantFlowKind.Water => 26.6f,                                           // DN25
         _ => 52.5f
     };
 
@@ -119,6 +120,7 @@ public readonly struct PipeStreamState
         PlantFlowKind.CrudeMethanolVapourLiquid => "Condensed effluent to separator",
         PlantFlowKind.LiquidCrudeMethanol => "Crude methanol to distillation",
         PlantFlowKind.MethanolProduct => "Refined methanol product",
+        PlantFlowKind.Water => "Demineralised water to electrolyzer",
         _ => kind.ToString()
     };
 
@@ -285,6 +287,14 @@ public readonly struct PipeStreamState
                     rho, 0f, InnerDiameterMm(kind), $"CH3OH {purity:F2} wt%");
             }
 
+            case PlantFlowKind.Water:
+            {
+                // Treated water from the RO skid, pumped to the electrolyzer feed.
+                const float t = 20f, p = 4f;
+                return new PipeStreamState(kind, DisplayName(kind), StreamPhase.Liquid, s.waterFeedKgH, t, p,
+                    WaterDensity(t), 0f, InnerDiameterMm(kind), "Demineralised H2O, conductivity < 1 µS/cm");
+            }
+
             default:
                 return new PipeStreamState(kind, DisplayName(kind), StreamPhase.Gas, 0f, 25f, 1f,
                     1.2f, 28.96f, InnerDiameterMm(kind), "—");
@@ -304,6 +314,7 @@ public readonly struct PipeStreamState
             PlantFlowKind.CrudeMethanolVapourLiquid => 2175f,
         PlantFlowKind.LiquidCrudeMethanol => 1953f,
         PlantFlowKind.MethanolProduct => 1250f,
+        PlantFlowKind.Water => 1935f,
         _ => 1000f
     };
 }

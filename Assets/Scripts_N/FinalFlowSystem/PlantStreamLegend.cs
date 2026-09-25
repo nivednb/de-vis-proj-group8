@@ -48,7 +48,7 @@ public static class PlantStreamLegend
     /// <summary>The legend colour a given pipe route must be drawn in.</summary>
     public static Color ColorFor(PlantFlowKind kind) => kind switch
     {
-        PlantFlowKind.Hydrogen or PlantFlowKind.HydrogenFromStorage => WaterHydrogen,
+        PlantFlowKind.Water or PlantFlowKind.Hydrogen or PlantFlowKind.HydrogenFromStorage => WaterHydrogen,
         PlantFlowKind.CarbonDioxide or PlantFlowKind.RichAmine or PlantFlowKind.LeanAmine => AmineCapturedCo2,
         PlantFlowKind.MixedFeed or PlantFlowKind.SyngasCold or PlantFlowKind.SyngasHeated or
             PlantFlowKind.RecycleGas => CompressedSyngas,

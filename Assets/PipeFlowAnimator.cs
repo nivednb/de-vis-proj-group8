@@ -94,7 +94,8 @@ public sealed class PipeFlowAnimator : MonoBehaviour
             case PlantFlowKind.RichAmine:
             case PlantFlowKind.LeanAmine:
             case PlantFlowKind.LiquidCrudeMethanol:
-            case PlantFlowKind.MethanolProduct: liquid = 1f; break;
+            case PlantFlowKind.MethanolProduct:
+            case PlantFlowKind.Water: liquid = 1f; break;
         }
         target.GetPropertyBlock(block);
         block.SetColor(FlowColor, flowColor);

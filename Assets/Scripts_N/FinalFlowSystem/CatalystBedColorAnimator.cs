@@ -11,6 +11,8 @@ public sealed class CatalystBedColorAnimator : MonoBehaviour
     Renderer target;
     Material materialInstance;
     PlantProcessSimulator simulator;
+    // Opacity set by the reactor cutaway (translucent bed); recolouring must not reset it.
+    float baseAlpha = 1f;
 
     void Start()
     {
@@ -19,6 +21,8 @@ public sealed class CatalystBedColorAnimator : MonoBehaviour
         if (target == null) return;
         target.enabled = true;
         materialInstance = target.material;
+        if (materialInstance.HasProperty("_BaseColor")) baseAlpha = materialInstance.GetColor("_BaseColor").a;
+        else if (materialInstance.HasProperty("_Color")) baseAlpha = materialInstance.GetColor("_Color").a;
         simulator = PlantProcessSimulator.Instance;
         if (simulator != null)
         {
@@ -42,6 +46,7 @@ public sealed class CatalystBedColorAnimator : MonoBehaviour
         Color color = Color.Lerp(idle, operating, load);
         if (snapshot.reactorTemperatureC > 275f)
             color = Color.Lerp(color, overTemperature, Mathf.InverseLerp(275f, 300f, snapshot.reactorTemperatureC));
+        color.a = baseAlpha;
         if (materialInstance.HasProperty("_BaseColor")) materialInstance.SetColor("_BaseColor", color);
         if (materialInstance.HasProperty("_Color")) materialInstance.SetColor("_Color", color);
         if (materialInstance.HasProperty("_EmissionColor"))

@@ -20,7 +20,10 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [SerializeField] private bool rebuildOnStart = true;
     [SerializeField] private float minimumSiteWidth = 78f;
     [SerializeField] private float minimumSiteDepth = 46f;
-    [SerializeField] private float maximumSiteWidth = 118f;
+    // Wide enough for the full process train (water treatment at the west end through the
+    // methanol tank at the east end) plus padding; a smaller cap ran the perimeter fence
+    // through the end equipment.
+    [SerializeField] private float maximumSiteWidth = 190f;
     [SerializeField] private float maximumSiteDepth = 72f;
     [SerializeField] private float sitePadding = 16f;
     [SerializeField] private float groundThickness = 0.25f;
@@ -685,6 +688,25 @@ public class PlantEnvironmentBuilder : MonoBehaviour
         float wallY = baseY + 0.32f;
         float width = siteWidth * 0.23f;
         float depth = siteDepth * 0.25f;
+
+        // A storage bund belongs around the product tank itself, with a walkway margin
+        // inside the wall; the site-fraction placement above is only a fallback.
+        GameObject tank = GameObject.Find("methanol tank");
+        Renderer[] tankRenderers = tank != null ? tank.GetComponentsInChildren<Renderer>() : new Renderer[0];
+        if (tankRenderers.Length > 0)
+        {
+            const float bundMargin = 3.5f;
+            Bounds tankBounds = tankRenderers[0].bounds;
+            foreach (Renderer tankRenderer in tankRenderers)
+            {
+                tankBounds.Encapsulate(tankRenderer.bounds);
+            }
+
+            bundX = tankBounds.center.x;
+            bundZ = tankBounds.center.z;
+            width = tankBounds.size.x + bundMargin * 2f;
+            depth = tankBounds.size.z + bundMargin * 2f;
+        }
 
         CreateCube("Storage Containment Floor", root, new Vector3(bundX, baseY + 0.06f, bundZ),
             new Vector3(width, 0.08f, depth), concreteMaterial);

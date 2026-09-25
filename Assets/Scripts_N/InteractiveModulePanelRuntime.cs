@@ -23,9 +23,16 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     private const string RuntimeRootName = "Generated Interactive Module Panels";
     private const float DrawerWidth = 388f;
     private const float DrawerInner = DrawerWidth - 40f;
+    private const float DrawerTop = 92f;
+    // Clears the bottom module-card strip (IcodosDashboardRuntime.BuildKpiStrip: 92 + 104) plus a gap.
+    private const float DrawerBottom = 208f;
+    private const float DrawerHeaderHeight = 76f;
+    private const float DrawerFooterHeight = 85f;
 
     private Canvas canvas;
     private Camera mainCamera;
+    private ReactorReactionCard reactionCard;
+    private ModuleAnchor reactorAnchor;
     private List<ModuleAnchor> allAnchors = new List<ModuleAnchor>();
     private readonly List<RegisteredSlider> registeredSliders = new List<RegisteredSlider>();
 
@@ -137,6 +144,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             {
                 if (blockedAnchor != null && blockedAnchor.ButtonRoot != null) blockedAnchor.ButtonRoot.SetActive(false);
             }
+            reactionCard?.Track(null);
             return;
         }
 
@@ -170,6 +178,10 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             anchor.ButtonRoot.SetActive(anchor.IsInFrustum && isHovered);
             if (anchor.IsInFrustum) anchor.ButtonRect.position = new Vector3(screenPos.x, screenPos.y, 0f);
         }
+
+        // Hovering the reactor also explains the chemistry happening inside it.
+        bool reactorHovered = reactorAnchor != null && reactorAnchor.ButtonRoot.activeSelf;
+        reactionCard?.Track(reactorHovered ? reactorAnchor.ButtonRect : null);
     }
 
     // Padded hit test around a button's screen rect, so a cursor moving toward the pill does
@@ -208,6 +220,9 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         AddModule("storage", "Methanol Storage", new[] { "methanol tank", "Methanol Storage" }, new Vector3(0f, 3.2f, 0f));
         AddModule("co2tank", "CO2 Buffer Tank", new[] { "co2 tank" }, new Vector3(0f, 2.6f, 0f));
         AddModule("h2tank", "H2 Buffer Tank", new[] { "h2 tank" }, new Vector3(0f, 2.6f, 0f));
+
+        reactorAnchor = allAnchors.Find(a => a != null && a.ModuleId == "reactor");
+        reactionCard = reactorAnchor != null ? ReactorReactionCard.Create(canvas, Info("reactor").Color) : null;
     }
 
     [ContextMenu("Clear Interactive Module Panels")]
@@ -215,6 +230,8 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
     {
         allAnchors.Clear();
         registeredSliders.Clear();
+        reactorAnchor = null;
+        reactionCard = null;
         if (canvas != null)
         {
             DestroyObject(canvas.gameObject);
@@ -389,7 +406,11 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         GameObject root = drawer.gameObject;
         close.onClick.AddListener(() => root.SetActive(false));
 
-        float y = 76f;
+        // Everything between the header and the footer buttons scrolls, so the sheet can stop
+        // above the bottom module cards on any screen height.
+        RectTransform body = CreateScrollBody(drawer);
+
+        float y = 0f;
         // Read-out tiles
         int n = info.Readouts.Length;
         anchor.ReadoutValues = new UIValueText[n];
@@ -398,7 +419,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             float tileW = (DrawerInner - (n - 1) * 8f) / n;
             for (int r = 0; r < n; r++)
             {
-                Image tile = UITheme.Panel(info.Readouts[r].Label, drawer, UITheme.Sunken2, 12f);
+                Image tile = UITheme.Panel(info.Readouts[r].Label, body, UITheme.Sunken2, 12f);
                 UITheme.TopLeft(tile.rectTransform, 20f + r * (tileW + 8f), y, tileW, 58f);
                 UITheme.Border(tile.rectTransform, UITheme.Line, 12f);
                 Text cap = UITheme.Label("Caption", tile.transform, info.Readouts[r].Label, 11.5f, W.Bold, UITheme.Subtle);
@@ -411,7 +432,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         }
 
         // Description
-        Text desc = UITheme.Label("Description", drawer, info.Description, 12.5f, W.Medium, UITheme.Muted, TextAnchor.UpperLeft, true);
+        Text desc = UITheme.Label("Description", body, info.Description, 12.5f, W.Medium, UITheme.Muted, TextAnchor.UpperLeft, true);
         desc.lineSpacing = 1.1f;
         UITheme.TopLeft(desc.rectTransform, 20f, y, DrawerInner, 40f);
         float descH = Mathf.Ceil(desc.preferredHeight) + 2f;
@@ -421,19 +442,19 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
         // Sliders
         int before = registeredSliders.Count;
         float slidersTop = y + 34f;
-        float afterSliders = CreateControls(drawer, id, title, slidersTop);
+        float afterSliders = CreateControls(body, id, title, slidersTop);
         bool hasSliders = registeredSliders.Count > before;
         if (hasSliders)
         {
-            Text section = UITheme.Label("Section", drawer, "Operating conditions", 14f, W.ExtraBold, UITheme.Ink);
+            Text section = UITheme.Label("Section", body, "Operating conditions", 14f, W.ExtraBold, UITheme.Ink);
             UITheme.TopLeft(section.rectTransform, 20f, y, 200f, 20f);
-            Text hint = UITheme.Label("Hint", drawer, "Each release adds a graph point", 12f, W.SemiBold, UITheme.Subtle, TextAnchor.MiddleRight);
+            Text hint = UITheme.Label("Hint", body, "Each release adds a graph point", 12f, W.SemiBold, UITheme.Subtle, TextAnchor.MiddleRight);
             UITheme.TopRight(hint.rectTransform, 20f, y, 200f, 20f);
             y = afterSliders + 18f;
         }
         else if (id == "storage")
         {
-            Button reset = UITheme.MakeButton("Reset stored methanol", drawer, "Reset stored methanol", Kind.Secondary, 14f, Icon.Reset, 10f);
+            Button reset = UITheme.MakeButton("Reset stored methanol", body, "Reset stored methanol", Kind.Secondary, 14f, Icon.Reset, 10f);
             UITheme.TopLeft((RectTransform)reset.transform, 20f, y, DrawerInner, 42f);
             reset.onClick.AddListener(() => Simulator()?.ResetStoredMethanol());
             y += 42f + 14f;
@@ -459,11 +480,60 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
             UITheme.BottomLeft((RectTransform)focus.transform, 20f, 20f, DrawerInner, 44f);
             focus.onClick.AddListener(() => FocusCamera(moduleId));
         }
-        y += 84f + 4f;
+        body.sizeDelta = new Vector2(0f, y + 8f);
 
-        // Full-height side sheet: the same frame as the analytics window, whatever the module.
-        UITheme.TopRight(drawer, 16f, 92f, DrawerWidth, Mathf.Max(626f, y));
+        // Side sheet from below the header down to just above the bottom module cards.
+        drawer.anchorMin = new Vector2(1f, 0f);
+        drawer.anchorMax = Vector2.one;
+        drawer.pivot = new Vector2(1f, 1f);
+        drawer.offsetMin = new Vector2(-16f - DrawerWidth, DrawerBottom);
+        drawer.offsetMax = new Vector2(-16f, -DrawerTop);
         return root;
+    }
+
+    /// <summary>Scrollable region between the drawer header and its footer buttons. Returns the
+    /// content rect; its children are laid out top-down and its height is set by the caller.</summary>
+    private static RectTransform CreateScrollBody(RectTransform drawer)
+    {
+        RectTransform viewport = UITheme.NewRect("Scroll Viewport", drawer);
+        UITheme.Fill(viewport, 0f, DrawerHeaderHeight, 0f, DrawerFooterHeight);
+        viewport.gameObject.AddComponent<UIRaycastTarget>();
+        viewport.gameObject.AddComponent<RectMask2D>();
+
+        RectTransform content = UITheme.NewRect("Scroll Content", viewport);
+        content.anchorMin = new Vector2(0f, 1f);
+        content.anchorMax = Vector2.one;
+        content.pivot = new Vector2(0.5f, 1f);
+        content.offsetMin = content.offsetMax = Vector2.zero;
+
+        Image track = UITheme.Panel("Scrollbar", drawer, UITheme.Sunken, 3f, true);
+        RectTransform trackRect = track.rectTransform;
+        trackRect.anchorMin = new Vector2(1f, 0f);
+        trackRect.anchorMax = Vector2.one;
+        trackRect.pivot = new Vector2(1f, 0.5f);
+        trackRect.offsetMin = new Vector2(-10f, DrawerFooterHeight + 6f);
+        trackRect.offsetMax = new Vector2(-5f, -DrawerHeaderHeight - 2f);
+
+        RectTransform slidingArea = UITheme.NewRect("Sliding Area", trackRect);
+        UITheme.Fill(slidingArea);
+        Image handle = UITheme.Panel("Handle", slidingArea, UITheme.LineStrong, 3f, true);
+        UITheme.Fill(handle.rectTransform);
+
+        Scrollbar scrollbar = trackRect.gameObject.AddComponent<Scrollbar>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.handleRect = handle.rectTransform;
+        scrollbar.targetGraphic = handle;
+
+        ScrollRect scroll = viewport.gameObject.AddComponent<ScrollRect>();
+        scroll.viewport = viewport;
+        scroll.content = content;
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 30f;
+        scroll.verticalScrollbar = scrollbar;
+        scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+        return content;
     }
 
     /// <summary>Builds the module's sliders from <paramref name="top"/> down; returns the y
@@ -779,7 +849,7 @@ public class InteractiveModulePanelRuntime : MonoBehaviour
                 {
                     // Short, so the live status chip fits beside it.
                     Subtitle = "R-201", Icon = Icon.Flask, Color = UITheme.Hex("EA580C"), FocusIndex = 7,
-                    Description = "Fixed-bed synthesis: conditioned H₂/CO₂ syngas is converted to methanol and water over the catalyst bed. In this model, yield peaks near 255 °C.",
+                    Description = "Fixed-bed synthesis: conditioned H₂/CO₂ syngas is converted to methanol and water over the catalyst bed. In this model, single-pass conversion peaks near 240 °C.",
                     Readouts = new[]
                     {
                         new Readout("Yield", "%", s => F1(s.reactorYieldPercent)),

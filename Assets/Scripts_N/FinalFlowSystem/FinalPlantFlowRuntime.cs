@@ -361,7 +361,7 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     {
         return kind switch
         {
-            PlantFlowKind.Hydrogen or PlantFlowKind.HydrogenFromStorage or
+            PlantFlowKind.Water or PlantFlowKind.Hydrogen or PlantFlowKind.HydrogenFromStorage or
                 PlantFlowKind.CarbonDioxide or PlantFlowKind.RichAmine or
                 PlantFlowKind.LeanAmine => 0,
             PlantFlowKind.MixedFeed => 1,
@@ -521,7 +521,8 @@ public sealed class FinalPlantFlowRuntime : MonoBehaviour
     {
         route = default;
         family = null;
-        if (Starts(name, "H2Storage_pipe_")) { route = Def(PlantFlowKind.HydrogenFromStorage, 1.05f, 17f); family = "H2Storage"; }
+        if (Starts(name, "Water_pipe_")) { route = Def(PlantFlowKind.Water, .6f, 12f); family = "Water"; }
+        else if (Starts(name, "H2Storage_pipe_")) { route = Def(PlantFlowKind.HydrogenFromStorage, 1.05f, 17f); family = "H2Storage"; }
         else if (Starts(name, "H2_pipe_")) { route = Def(PlantFlowKind.Hydrogen, 1.15f, 18f); family = "H2"; }
         else if (Starts(name, "CO2_pipe_")) { route = Def(PlantFlowKind.CarbonDioxide, .82f, 15f); family = "CO2"; }
         else if (Starts(name, "RichAmine_pipe_")) { route = Def(PlantFlowKind.RichAmine, .62f, 12f); family = "RichAmine"; }
