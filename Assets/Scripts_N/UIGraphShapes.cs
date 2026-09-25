@@ -64,6 +64,10 @@ public sealed class UIGraphLine : MaskableGraphic
         set { thickness = value; SetVerticesDirty(); }
     }
 
+    /// <summary>Dash and gap lengths along the line; a dash length of 0 draws it solid.</summary>
+    public float DashLength { get; set; }
+    public float GapLength { get; set; }
+
     public void SetPoints(List<Vector2> pts)
     {
         points.Clear();
@@ -84,6 +88,12 @@ public sealed class UIGraphLine : MaskableGraphic
         if (points.Count < 2) return;
 
         float half = Mathf.Max(0.4f, thickness * 0.5f);
+
+        if (DashLength > 0f)
+        {
+            PopulateDashed(vh, half);
+            return;
+        }
 
         for (int i = 0; i < points.Count - 1; i++)
         {
@@ -114,6 +124,45 @@ public sealed class UIGraphLine : MaskableGraphic
         }
         AddDisc(vh, points[0], half);
         AddDisc(vh, points[points.Count - 1], half);
+    }
+
+    /// <summary>Walks the polyline by arc length and emits only the "on" intervals, so the
+    /// dash pattern runs continuously across joints instead of restarting per segment.</summary>
+    private void PopulateDashed(VertexHelper vh, float half)
+    {
+        float period = DashLength + Mathf.Max(0f, GapLength);
+        float travelled = 0f;
+        for (int i = 0; i < points.Count - 1; i++)
+        {
+            Vector2 a = points[i];
+            Vector2 b = points[i + 1];
+            float length = Vector2.Distance(a, b);
+            if (length < 1e-4f) continue;
+            Vector2 dir = (b - a) / length;
+            Vector2 n = new Vector2(-dir.y, dir.x) * half;
+
+            float along = 0f;
+            while (along < length)
+            {
+                float phase = (travelled + along) % period;
+                bool on = phase < DashLength;
+                float step = Mathf.Min(length - along, on ? DashLength - phase : period - phase);
+                if (on)
+                {
+                    Vector2 p0 = a + dir * along;
+                    Vector2 p1 = a + dir * (along + step);
+                    int idx = vh.currentVertCount;
+                    AddVert(vh, p0 - n);
+                    AddVert(vh, p0 + n);
+                    AddVert(vh, p1 + n);
+                    AddVert(vh, p1 - n);
+                    vh.AddTriangle(idx, idx + 1, idx + 2);
+                    vh.AddTriangle(idx, idx + 2, idx + 3);
+                }
+                along += Mathf.Max(step, 1e-4f);
+            }
+            travelled += length;
+        }
     }
 
     private void AddDisc(VertexHelper vh, Vector2 center, float radius)

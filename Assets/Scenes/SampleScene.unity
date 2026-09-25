@@ -5204,8 +5204,9 @@ MonoBehaviour:
   scrollMaxDistance: 250
   panMouseSensitivity: 0.03
   panSmoothSpeed: 8
-  minElevation: -89
+  minElevation: 5
   maxElevation: 89
+  groundClearance: 2
   useOrthographic: 1
   orthographicSize: 45
   startAzimuth: 200

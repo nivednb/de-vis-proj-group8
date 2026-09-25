@@ -64,9 +64,14 @@ public class OrbitCameraController : MonoBehaviour
     public float panSmoothSpeed = 8f;
 
     [Header("Elevation clamp (degrees, avoids flipping over the poles)")]
+    [Tooltip("Lowest viewing angle above the horizon. Keep it positive so the camera always looks down on the plant and can never orbit underneath it.")]
+    public float minElevation = 5f;
     [Tooltip("Keep a degree or two short of 90 (e.g. 89) to avoid gimbal-flip at the exact pole.")]
-    public float minElevation = -89f;
     public float maxElevation = 89f;
+
+    [Header("Ground limit")]
+    [Tooltip("Minimum height of the camera above the ground under the plant.")]
+    public float groundClearance = 2f;
 
     [Header("Projection")]
     [Tooltip("True isometric/3D-scanner look: orthographic removes perspective foreshortening so the orbit reads as pure rotation around the object rather than depth-based movement.")]
@@ -111,6 +116,9 @@ public class OrbitCameraController : MonoBehaviour
     private float _homeDistance;
     private float _homeOrthoSize;
 
+    // Ground level under the plant: the orbit target and the camera are kept above it.
+    private float _floorY = float.NegativeInfinity;
+
     /// <summary>Fired on a plain left-click that lands on the 3D scene rather than any UI.</summary>
     public event System.Action BackgroundClicked;
 
@@ -132,6 +140,7 @@ public class OrbitCameraController : MonoBehaviour
         _homeElevation = startElevation;
         _homeDistance = distance;
         _homeOrthoSize = orthographicSize;
+        _floorY = ResolveFloorHeight();
 
         Vector3 initialTarget = pivot != null ? pivot.position : worldOrigin;
         _currentTarget = initialTarget;
@@ -269,8 +278,45 @@ public class OrbitCameraController : MonoBehaviour
         UpdateCameraPosition();
     }
 
+    /// <summary>
+    /// Top of the generated site slab when it exists, otherwise the lowest point of any
+    /// rendered geometry, so the limit holds with or without the site environment.
+    /// </summary>
+    static float ResolveFloorHeight()
+    {
+        GameObject slab = GameObject.Find("Main Concrete Plant Slab");
+        if (slab != null && slab.TryGetComponent(out Renderer slabRenderer)) return slabRenderer.bounds.max.y;
+
+        float lowest = float.PositiveInfinity;
+        foreach (Renderer r in FindObjectsByType<Renderer>(FindObjectsInactive.Exclude))
+            lowest = Mathf.Min(lowest, r.bounds.min.y);
+        return float.IsPositiveInfinity(lowest) ? float.NegativeInfinity : lowest;
+    }
+
+    /// <summary>
+    /// Single choke point for every camera move (orbit, pan, zoom-to-cursor and focus
+    /// glides): the view always looks down from above the horizon, the orbit target never
+    /// sinks below the ground, and the camera itself stays above it.
+    /// </summary>
+    void KeepAboveGround()
+    {
+        _elevation = Mathf.Clamp(_elevation, minElevation, maxElevation);
+        if (float.IsNegativeInfinity(_floorY)) return;
+
+        _currentTarget.y = Mathf.Max(_currentTarget.y, _floorY);
+        _targetFrom.y = Mathf.Max(_targetFrom.y, _floorY);
+        _targetTo.y = Mathf.Max(_targetTo.y, _floorY);
+
+        // Guard against a negative minElevation set in the Inspector: raise the viewing
+        // angle just enough to hold the camera at the clearance height.
+        float lift = _floorY + groundClearance - _currentTarget.y;
+        if (distance > 0.01f && distance * Mathf.Sin(_elevation * Mathf.Deg2Rad) < lift)
+            _elevation = Mathf.Asin(Mathf.Clamp(lift / distance, -1f, 1f)) * Mathf.Rad2Deg;
+    }
+
     void UpdateCameraPosition()
     {
+        KeepAboveGround();
         float azRad = _azimuth * Mathf.Deg2Rad;
         float elRad = _elevation * Mathf.Deg2Rad;
 

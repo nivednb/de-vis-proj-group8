@@ -1161,7 +1161,7 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
 
             CanvasGroup cg = BuildCorrelationGraph(graphHost, $"{display} vs {ReactorParamTitles[p]}",
                 ReactorParamAxisLabels[p], yLabel, ReactorParamSelectors[p], ySelector,
-                ReactorParamMin[p], ReactorParamMax[p], 0f, 100f);
+                ReactorParamMin[p], ReactorParamMax[p], 0f, 100f, p);
             graphGroups.Add(cg);
         }
 
@@ -1423,10 +1423,20 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
     private CanvasGroup BuildCorrelationGraph(RectTransform container, string title, string xLabel, string yLabel,
         Func<PlantProcessSimulator.ProcessSnapshot, float> xSelector,
         Func<PlantProcessSimulator.ProcessSnapshot, float> ySelector,
-        float xMin, float xMax, float yMin, float yMax)
+        float xMin, float xMax, float yMin, float yMax, int reactorParam)
     {
         GameObject go = new GameObject(title + " Graph", typeof(RectTransform));
         CorrelationGraphRuntime graph = go.AddComponent<CorrelationGraphRuntime>();
+        // Background model curves: constant temperature on every graph except the temperature
+        // graph itself, where constant-temperature curves would be vertical lines, so it holds
+        // pressure constant instead. ReactorParamNames order matches ReactorInput.
+        graph.ShowTrendCurves = true;
+        graph.XInput = (CorrelationGraphRuntime.ReactorInput)reactorParam;
+        bool temperatureAxis = graph.XInput == CorrelationGraphRuntime.ReactorInput.Temperature;
+        graph.FamilyInput = temperatureAxis ? CorrelationGraphRuntime.ReactorInput.Pressure : CorrelationGraphRuntime.ReactorInput.Temperature;
+        graph.FamilyValues = temperatureAxis ? new[] { 40f, 55f, 70f, 85f, 100f } : new[] { 200f, 220f, 240f, 260f, 280f };
+        graph.FamilyName = temperatureAxis ? "pressure" : "temperature";
+        graph.FamilyUnit = temperatureAxis ? "bar" : "°C";
         graph.Title = title;
         graph.XLabel = xLabel;
         graph.YLabel = yLabel;

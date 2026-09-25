@@ -29,6 +29,11 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     [SerializeField] private float groundThickness = 0.25f;
     [SerializeField] private float environmentYOffset = -0.08f;
 
+    // Rear row of background utility vessels, as a fraction of site depth behind the centre,
+    // and how far the grass apron extends past that row.
+    private const float BackgroundRowDepth = 0.78f;
+    private const float BackgroundRowApronMargin = 6f;
+
     [Header("Industrial Details")]
     [SerializeField] private bool createPerimeterFence = true;
     [SerializeField] private bool createPipeRack = true;
@@ -252,8 +257,13 @@ public class PlantEnvironmentBuilder : MonoBehaviour
 
     private void CreateGroundAndPads(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)
     {
-        CreateCube("Site Grass Apron", root, new Vector3(center.x, baseY - 0.18f, center.z),
-            new Vector3(siteWidth + 18f, groundThickness, siteDepth + 16f), grassMaterial);
+        // The apron runs 8 m past the slab at the front and far enough behind it to carry the
+        // background equipment row, so nothing generated stands beyond the grass.
+        float apronFront = center.z - siteDepth * 0.5f - 8f;
+        float apronRear = Mathf.Max(center.z + siteDepth * 0.5f + 8f,
+            center.z + siteDepth * BackgroundRowDepth + BackgroundRowApronMargin);
+        CreateCube("Site Grass Apron", root, new Vector3(center.x, baseY - 0.18f, (apronFront + apronRear) * 0.5f),
+            new Vector3(siteWidth + 18f, groundThickness, apronRear - apronFront), grassMaterial);
 
         CreateCube("Main Concrete Plant Slab", root, new Vector3(center.x, baseY, center.z),
             new Vector3(siteWidth, groundThickness, siteDepth), concreteMaterial);
@@ -275,7 +285,7 @@ public class PlantEnvironmentBuilder : MonoBehaviour
     private void CreateIndustrialBackground(Transform root, Vector3 center, float siteWidth, float siteDepth, float baseY)
     {
         float rearZ = center.z + siteDepth * 0.58f;
-        float farZ = center.z + siteDepth * 0.78f;
+        float farZ = center.z + siteDepth * BackgroundRowDepth;
         float midZ = center.z + siteDepth * 0.48f;
         float leftX = center.x - siteWidth * 0.42f;
         float rightX = center.x + siteWidth * 0.42f;
