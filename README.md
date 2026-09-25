@@ -1,131 +1,104 @@
-# Power-to-Methanol Digital Twin
+# Power-to-Methanol Digital Twin — Development Archive
 
-Interactive Unity 6 educational visualization of a complete Power-to-Methanol
-(PtM) plant. The application combines a full industrial plant layout, process
-dashboard, interactive operating controls, engineering stream visualization,
-reactor/catalyst visualization, warnings, equipment focus views, and a
-lightweight steady-state process model.
+> **Project status: completed and submitted (September 2026).**
+>
+> This repository is retained as the original team-development history for the
+> **Visualization of Process Engineering Applications** project at Otto von
+> Guericke University Magdeburg. Active development has ended.
 
-> This is a master's-project educational digital-twin demonstrator. It is not a
-> CFD model, a rigorous thermodynamic/kinetic simulator, a plant control system,
-> or certified process-safety software.
+## Final submitted project
 
-## Evaluated project baseline
+The cleaned, final project repository is:
 
-- Release branch: `release/power_to_methanol-submission-v1`
+**https://github.com/nivednb/PtMeOH-Digital-Twin**
+
+That repository should be used for the final Unity project, documentation,
+implementation reference and final screenshots. This older repository remains
+available so the development history and individual/team contributions are not
+lost.
+
+### Final submission baseline
+
+- Final repository: `nivednb/PtMeOH-Digital-Twin`
+- Final branch: `submission_final`
 - Unity: `6000.4.7f1`
 - Render pipeline: URP `17.4.0`
-- Startup scene: `Assets/Scenes/SampleScene.unity`
-- Default Windows build: `Builds/Windows/PtMeOH-DigitalTwin.exe`
-- Release status: run the validation steps below on the final submission commit;
-  recorded results must not be treated as a substitute for a fresh build.
+- Main scene: `Assets/Scenes/SampleScene.unity`
+- Platform: Windows desktop
+- Project submission: completed September 2026
+
+The final development cycle included the contained reactor-flow visualization,
+water-treatment integration, analytics and CSV exports, camera constraints,
+industrial surroundings, UI improvements and final build/runtime fixes.
+
+## Final screenshots
+
+The current final-build screenshots are maintained in the submitted repository:
+
+- [Final screenshot gallery](https://github.com/nivednb/PtMeOH-Digital-Twin/blob/main/docs/final-screenshots.md)
+- [Final screenshot files](https://github.com/nivednb/PtMeOH-Digital-Twin/tree/main/docs/screenshots/final)
+- [Development/progress screenshots](https://github.com/nivednb/PtMeOH-Digital-Twin/blob/main/docs/progress-screenshots.md)
+
+These supersede older screenshots and visual-validation material in this
+development repository.
+
+## Final project features
+
+The submitted application includes:
+
+- Complete explorable Power-to-Methanol plant
+- Water treatment and electrolysis
+- CO₂ capture and compression
+- Methanol synthesis, cooling, separation, recycle and distillation
+- Shared steady-state process model connected to the 3D visualization
+- Interactive process controls and live KPIs
+- Continuous stream-specific pipe-flow visualization
+- Mixed-gas and two-phase stream visualization
+- Transparent reactor and catalyst bed with contained internal flow
+- Equipment information, warnings and operating-state feedback
+- Analytics curves, recorded operating points and CSV export
+- Welcome/tutorial interface
+- Orbit, pan, zoom, overview and module-focus camera controls
+- Industrial surroundings around the plant
+
+The process calculations are intentionally simplified for educational
+visualization. The project is not a CFD model, rigorous process simulator,
+plant-control system or process-safety tool.
 
 ## Documentation
 
-- [Final project report](docs/FINAL_PROJECT_REPORT.md)
-- [Implementation and equation reference](docs/IMPLEMENTATION_REFERENCE.md)
-- [Unity project context](docs/DEVELOPMENT_NOTES/UnityProjectContext.md)
-- [Project health and validation status](docs/DEVELOPMENT_NOTES/UnityProjectHealth.md)
-- [Progress screenshots](docs/progress-screenshots.md)
-- [Professor evaluation guide](docs/PROFESSOR_EVALUATION_GUIDE.md)
-- [Submission readiness checklist](docs/SUBMISSION_READINESS_CHECKLIST.md)
-- [Reproducible build instructions](docs/REPRODUCIBILITY_AND_BUILD.md)
-- [Architecture and asset policy](docs/ARCHITECTURE_AND_ASSET_POLICY.md)
-- [References and asset provenance](docs/REFERENCES_AND_ASSET_PROVENANCE.md)
-- [Tool-use and provenance note](docs/TOOLS_AND_ASSISTANCE.md)
+For current documentation, use the final repository:
 
-## Main systems
+- [Final project report](https://github.com/nivednb/PtMeOH-Digital-Twin/blob/main/docs/FINAL_PROJECT_REPORT.md)
+- [Implementation and engineering reference](https://github.com/nivednb/PtMeOH-Digital-Twin/blob/main/docs/IMPLEMENTATION_REFERENCE.md)
+- [Final screenshot gallery](https://github.com/nivednb/PtMeOH-Digital-Twin/blob/main/docs/final-screenshots.md)
 
-- Central process model and live operating snapshot
-- Electrolyzer, CO2 capture, compression, methanol synthesis, condensation,
-  separation/distillation, recycle, and storage visualization
-- Flow speed, density, visibility, and stream composition coupled to process
-  controls
-- Discrete H2, CO2, and recycle packets in mixed-gas routes
-- Transparent process pipes with direction-aware shader animation
-- Transparent reactor shell, upflow reactor visualization, and
-  conversion-dependent catalyst-bed color
-- Industrial process dashboard, KPIs, module navigation, equipment controls, and
-  educational warnings
-- Orbit, pan, zoom, overview, and module-focus camera controls
-- Lightweight procedurally generated plant environment
+## This repository
 
-## Current implemented features
+`de-vis-proj-group8` is now a **development archive**. Its commit history is
+intentionally retained to preserve the evolution of the project and the work of
+the project team.
 
-- Complete explorable Power-to-Methanol plant covering electrolysis, CO2
-  capture, compression, synthesis, cooling, separation, recycle, and storage.
-- Six-page ICODOS-style interface with plant overview, process views,
-  educational information, stream visualization, analytics, and operating
-  controls.
-- Live steady-state process calculations for mass flow, conversion, recovery,
-  production, efficiency, CO2 utilization, storage inventory, and estimated
-  time to a full methanol tank.
-- Interactive process sliders coupled to both calculated KPIs and the visible
-  speed and density of material moving through the plant.
-- An additional `MAX` efficiency control that selects the best operating point
-  inside the demonstrator's defined simulation envelope while respecting the
-  storage safety interlock.
-- Continuous, direction-aware pipe animation with transparent pipe walls,
-  persistent packet movement across pipe segments, and distinct H2, CO2,
-  recycle-gas, methanol, and water representations.
-- Multi-species mixed-gas streams that retain the individual constituent
-  tracers instead of displaying the mixture as one arbitrary color.
-- Transparent methanol reactor with geometry-aligned upflow visualization,
-  visible catalyst bed, and conversion-dependent catalyst color animation.
-- Plant status, alarms, tank high-high shutdown behavior, reset handling, and
-  synchronized dashboard values.
-- Equipment selection, information overlays, module navigation, overview and
-  focus presets, plus orbit, pan, and zoom camera controls.
-- Windows standalone build tooling, release-scene validation, implementation
-  reference, reproducibility instructions, and final-project documentation.
+The retained historical branches are:
 
-## Open and run
+- `main` — archive landing branch
+- `final-submission` — earlier submission-ready development snapshot
+- `chaitanya-dev` — retained team-development snapshot
 
-1. Open Unity Hub.
-2. Add this repository folder.
-3. Open it with Unity `6000.4.7f1`.
-4. Open `Assets/Scenes/SampleScene.unity`.
-5. Enter Play Mode.
+Older files, screenshots and documentation found elsewhere in this repository
+may describe intermediate states and should not be treated as the final
+submitted implementation.
 
-Camera controls:
+## Team
 
-| Input | Action |
-| --- | --- |
-| Arrow keys | Orbit |
-| A / D | Pan left / right |
-| W / S | Zoom |
-| Shift + arrow keys | Cycle module focus |
-| Home | Return to plant overview |
+Developed as a group project by:
 
-## Repository structure
+- Nived
+- Jijileo
+- Aryan Rao
+- Chaitanya
+- Starlin
 
-```text
-Assets/
-|-- Editor/                     # Inventory, release validation, Windows build
-|-- Materials_N/                # Process-stream and equipment materials
-|-- Scenes/SampleScene.unity    # Integrated plant scene
-|-- Scripts_N/                  # Simulation, UI, flow, reactor, warnings
-|-- Settings/                   # URP configuration
-|-- *.fbx                       # Plant equipment and pipe assets
-|-- PipeFlow.shader             # Multi-species packet flow shader
-`-- legacy/support scripts      # Earlier panels and prototype utilities
-docs/
-|-- FINAL_PROJECT_REPORT.md
-|-- IMPLEMENTATION_REFERENCE.md
-`-- DEVELOPMENT_NOTES/          # Unity context and technical health notes
-Packages/
-ProjectSettings/
-```
+For the completed project, start here:
 
-Unity-generated folders (`Library`, `Temp`, `Logs`, `UserSettings`, `.vs`,
-`obj`) are excluded from Git.
-
-## Validate and build
-
-In Unity, use:
-
-1. `Tools > Power-to-Methanol > Validate Release Scene`.
-2. Confirm the Console contains `RELEASE_VALIDATION_OK` and no errors.
-3. `Tools > Power-to-Methanol > Build Windows Application`.
-4. Run the generated executable from `Builds/Windows` and complete the
-   evaluation checklist in `docs/SUBMISSION_READINESS_CHECKLIST.md`.
+**https://github.com/nivednb/PtMeOH-Digital-Twin**
