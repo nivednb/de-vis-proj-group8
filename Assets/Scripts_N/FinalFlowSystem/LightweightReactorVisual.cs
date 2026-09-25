@@ -26,6 +26,13 @@ public sealed class LightweightReactorVisual : MonoBehaviour
     const int ShellQueue = 3010;
     const int BubbleQueue = 3020;
 
+    // Template materials under Resources. Shaders looked up only by name are stripped from
+    // player builds, and so are the transparent variants nothing references; these assets
+    // keep both in every build.
+    const string BubbleTemplate = "ReactorVisual/ReactorBubble";
+    const string GlassTemplate = "ReactorVisual/ReactorGlass";
+    const string CatalystTemplate = "ReactorVisual/ReactorCatalyst";
+
     struct Bubble
     {
         public bool Alive;
@@ -64,11 +71,11 @@ public sealed class LightweightReactorVisual : MonoBehaviour
             else if (obj.name.Equals("Catalyst_Bed", StringComparison.OrdinalIgnoreCase)) catalyst = obj.GetComponent<Renderer>();
         }
         if (shell == null || catalyst == null) return;
-        MakeTransparent(shell, .14f, ShellQueue, .55f);
-        MakeTransparent(top, .16f, ShellQueue, .55f);
-        MakeTransparent(bottom, .16f, ShellQueue, .55f);
+        MakeTransparent(shell, .14f, ShellQueue, .55f, GlassTemplate);
+        MakeTransparent(top, .16f, ShellQueue, .55f, GlassTemplate);
+        MakeTransparent(bottom, .16f, ShellQueue, .55f, GlassTemplate);
         // Translucent packed bed; CatalystBedColorAnimator keeps this alpha while it recolours it.
-        MakeTransparent(catalyst, .5f, BedQueue, .15f);
+        MakeTransparent(catalyst, .5f, BedQueue, .15f, CatalystTemplate);
 
         GameObject existing = GameObject.Find(RootName);
         if (existing != null) Destroy(existing);
@@ -241,16 +248,34 @@ public sealed class LightweightReactorVisual : MonoBehaviour
         renderer.shadowCastingMode = ShadowCastingMode.Off;
         renderer.receiveShadows = false;
         renderer.sortMode = ParticleSystemSortMode.Distance;
-        renderer.sharedMaterial = CreateBubbleMaterial();
+        Material material = CreateBubbleMaterial();
+        if (material == null)
+        {
+            Debug.LogWarning("LightweightReactorVisual: no particle shader in this build; reactor bubbles disabled.");
+            Destroy(child);
+            return null;
+        }
+        renderer.sharedMaterial = material;
         ps.Play();
         return ps;
     }
 
     static Material CreateBubbleMaterial()
     {
-        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
-        Material material = new(shader) { name = "ReactorBubble" };
+        Material template = Resources.Load<Material>(BubbleTemplate);
+        Material material;
+        if (template != null)
+        {
+            material = new Material(template);
+        }
+        else
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
+            if (shader == null) return null;
+            material = new Material(shader);
+        }
+        material.name = "ReactorBubble";
         Texture2D texture = CreateBubbleTexture(64);
         if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
         if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
@@ -301,12 +326,14 @@ public sealed class LightweightReactorVisual : MonoBehaviour
 
     static Color Fade(Color color, float alpha) => new(color.r, color.g, color.b, alpha);
 
-    static void MakeTransparent(Renderer renderer, float alpha, int queue, float smoothness)
+    static void MakeTransparent(Renderer renderer, float alpha, int queue, float smoothness, string templatePath)
     {
         if (renderer == null) return;
+        Material template = Resources.Load<Material>(templatePath);
         Material source = renderer.sharedMaterial;
-        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-        Material material = source != null ? new Material(source) : new Material(shader);
+        Material material = template != null ? new Material(template)
+            : source != null ? new Material(source)
+            : new Material(Shader.Find("Universal Render Pipeline/Lit"));
         material.name = "ReactorCutaway_Transparent";
         Color color = new(.70f, .88f, 1f, alpha);
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
