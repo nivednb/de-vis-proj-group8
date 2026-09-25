@@ -307,11 +307,15 @@ public sealed class RecycleMassBalanceEngine : MonoBehaviour
     {
         float tempKelvin = tempCelsius + 273.15f;
         const float optimumTemperatureKelvin = 513.15f;
-        float temperatureFactor = Mathf.Exp(-0.0005f * Mathf.Pow(tempKelvin - optimumTemperatureKelvin, 2f));
+        // CO2 hydrogenation is exothermic: below the optimum the rate is kinetically limited
+        // and falls off gently, above it the equilibrium limit pulls conversion down faster.
+        // The asymmetry also keeps every temperature on its own response curve.
+        float deltaT = tempKelvin - optimumTemperatureKelvin;
+        float temperatureFactor = Mathf.Exp(-(deltaT < 0f ? 0.0004f : 0.0006f) * deltaT * deltaT);
         float pressureFactor = Mathf.Pow(Mathf.Max(1f, pressureBar) / 70f, 0.35f);
         float velocityFactor = Mathf.Pow(8000f / Mathf.Max(1000f, ghsv), 0.2f);
         float ratioFactor = 1f - Mathf.Clamp01(Mathf.Abs(molarRatio - 3f) / 3f) * 0.42f;
-        return Mathf.Clamp(0.25f * temperatureFactor * pressureFactor * velocityFactor * ratioFactor, 0.05f, 0.35f);
+        return Mathf.Clamp(0.25f * temperatureFactor * pressureFactor * velocityFactor * ratioFactor, 0.02f, 0.35f);
     }
 
     public bool IsHotspotAlarmActive(float tempCelsius) => tempCelsius > 260f;

@@ -94,11 +94,22 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
     private Button exportButton;
     private bool layoutDirty;
 
+    /// <summary>A curve label: text on a light plate so it stays readable over lines.</summary>
+    private sealed class CurveLabel
+    {
+        public RectTransform Plate;
+        public Text Text;
+    }
+
+    private const float LabelHeight = 15f;
+    private const float LabelPadding = 4f;
+
     private RectTransform trendLayer;
+    private RectTransform labelLayer;
     private readonly List<UIGraphLine> familyLines = new List<UIGraphLine>();
-    private readonly List<Text> familyLabels = new List<Text>();
+    private readonly List<CurveLabel> familyLabels = new List<CurveLabel>();
     private UIGraphLine tracedLine;
-    private Text tracedLabel;
+    private CurveLabel tracedLabel;
     private RectTransform selectionRing;
     private int selectedIndex = -1;
     private bool trendDirty = true;
@@ -180,6 +191,11 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         lineGraphic.color = LineColor;
         lineGraphic.Thickness = 2.4f;
         lineGraphic.raycastTarget = false;
+
+        // Curve labels sit above every line but below the point bubbles, and are placed
+        // clear of the bubbles (see PlaceLabel).
+        labelLayer = UITheme.NewRect("Curve Labels", plotArea);
+        UITheme.Fill(labelLayer);
 
         pointsLayer = new GameObject("Points", typeof(RectTransform)).GetComponent<RectTransform>();
         pointsLayer.SetParent(plotArea, false);
@@ -630,8 +646,8 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
             PlantProcessSimulator.ProcessInputs inputs = trendBasis;
             SetInput(ref inputs, FamilyInput, FamilyValues[k]);
             List<Vector2> curve = SampleCurve(sim, inputs);
-            // Curves that coincide (the conversion model is symmetric about its optimum
-            // temperature) are drawn once with a combined label rather than stacked.
+            // Curves that coincide exactly (e.g. both pinned at the model's conversion floor)
+            // are drawn once with a combined label rather than stacked.
             int same = family.FindIndex(c => SameCurve(c, curve));
             if (same >= 0)
             {
@@ -672,41 +688,68 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         Color faint = UITheme.WithAlpha(UITheme.Faint, 0.7f);
         var anchoredFamily = new List<List<Vector2>>(family.Count);
         foreach (List<Vector2> c in family) anchoredFamily.Add(ToAnchoredCurve(c));
-        int labelAt = WidestSpreadIndex(anchoredFamily);
         for (int k = 0; k < family.Count; k++)
         {
-            List<Vector2> anchored = anchoredFamily[k];
             UIGraphLine line = FamilyLine(k);
             line.color = faint;
-            line.SetPoints(anchored);
+            line.SetPoints(anchoredFamily[k]);
             line.gameObject.SetActive(true);
-            if (labelAt >= 0) PlaceLabel(familyLabels[k], anchored[labelAt] + new Vector2(-4f, 3f), false, familyText[k], UITheme.Subtle);
-            else PlaceCurveLabel(familyLabels[k], anchored, familyText[k], UITheme.Subtle);
         }
         for (int k = family.Count; k < familyLines.Count; k++)
         {
             familyLines[k].gameObject.SetActive(false);
-            familyLabels[k].gameObject.SetActive(false);
+            familyLabels[k].Plate.gameObject.SetActive(false);
         }
 
+        List<Vector2> anchoredTraced = null;
+        Color tracedColor = UITheme.Accent;
         if (traced != null)
         {
-            Color color = string.IsNullOrEmpty(tracedPoint.Module) ? UITheme.Accent : GraphVisualUtils.GetModuleColor(tracedPoint.Module);
-            List<Vector2> anchored = ToAnchoredCurve(traced);
+            if (!string.IsNullOrEmpty(tracedPoint.Module)) tracedColor = GraphVisualUtils.GetModuleColor(tracedPoint.Module);
+            anchoredTraced = ToAnchoredCurve(traced);
             UIGraphLine line = TracedLine();
-            line.color = color;
-            line.SetPoints(anchored);
+            line.color = tracedColor;
+            line.SetPoints(anchoredTraced);
             line.gameObject.SetActive(true);
-            // Beside its own point: the family labels sit at the curve peaks.
-            PlaceLabel(TracedLabel(), ToAnchored(tracedPoint) + new Vector2(14f, -24f), true,
-                $"Point {selectedIndex + 1} at {FormatFamily(GetInput(tracedPoint.Inputs, FamilyInput))}", color);
         }
         else
         {
             if (tracedLine != null) tracedLine.gameObject.SetActive(false);
-            if (tracedLabel != null) tracedLabel.gameObject.SetActive(false);
+            if (tracedLabel != null) tracedLabel.Plate.gameObject.SetActive(false);
         }
-        SeparateLabels();
+
+        // Labels go on once every line is drawn, so each can be steered clear of the point
+        // bubbles, the other labels and (where possible) the lines themselves.
+        var blocked = new List<Rect>();
+        const float bubbleHalf = BubbleSize * 0.5f + 5f;
+        foreach (Vector2 p in pointScreenPositions)
+            blocked.Add(new Rect(p.x - bubbleHalf, p.y - bubbleHalf, 2f * bubbleHalf, 2f * bubbleHalf));
+        var lines = new List<List<Vector2>>(anchoredFamily) { pointScreenPositions };
+        if (anchoredTraced != null) lines.Add(anchoredTraced);
+
+        if (anchoredTraced != null)
+        {
+            // The selected point's label is placed first, next to its own point.
+            Vector2 at = ToAnchored(tracedPoint);
+            PlaceLabel(TracedLabel(), $"Point {selectedIndex + 1} at {FormatFamily(GetInput(tracedPoint.Inputs, FamilyInput))}",
+                tracedColor, size => PointCandidates(at, size, anchoredTraced), blocked, lines, anchoredTraced, 0.3f);
+        }
+
+        // Family labels sit on their own curve, breaking it like a contour label so there is
+        // no doubt which curve they name. They prefer one column where the curves are
+        // furthest apart, so they read as a key, and slide along the curve when it is taken.
+        int column = WidestSpreadIndex(anchoredFamily);
+        for (int k = 0; k < family.Count; k++)
+        {
+            List<Vector2> curve = anchoredFamily[k];
+            int preferred = column >= 0 ? column : PeakIndex(curve);
+            if (preferred < 0)
+            {
+                familyLabels[k].Plate.gameObject.SetActive(false);
+                continue;
+            }
+            PlaceLabel(familyLabels[k], familyText[k], UITheme.Muted, size => CurveCandidates(curve, preferred, size), blocked, lines, curve, 0.03f);
+        }
     }
 
     /// <summary>Sample index where the family curves are furthest apart while all of them
@@ -737,46 +780,146 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         return best;
     }
 
-    /// <summary>Nudges overlapping curve labels apart vertically; curves that run close
-    /// together (e.g. neighbouring pressures near the temperature optimum) would otherwise
-    /// print their labels on top of each other.</summary>
-    private void SeparateLabels()
+    /// <summary>Highest sample inside the plot — where a lone curve is easiest to label.</summary>
+    private int PeakIndex(List<Vector2> curve)
     {
-        const float gap = 13f;
-        var active = new List<RectTransform>();
-        foreach (Text label in familyLabels)
-            if (label.gameObject.activeSelf) active.Add(label.rectTransform);
-        if (tracedLabel != null && tracedLabel.gameObject.activeSelf) active.Add(tracedLabel.rectTransform);
-        active.Sort((a, b) => a.anchoredPosition.y.CompareTo(b.anchoredPosition.y));
-
         Rect r = plotArea.rect;
-        float top = r.yMax - 16f;
-        float bottom = r.yMin + 2f;
-        // Upward pass spreads the stack; if that runs into the top edge, a downward pass
-        // shifts the crowded labels back down instead of piling them on the edge.
-        for (int i = 1; i < active.Count; i++)
-            for (int j = 0; j < i; j++)
-                if (Overlaps(active[j], active[i], gap))
-                    SetY(active[i], active[j].anchoredPosition.y + gap);
-        for (int i = active.Count - 1; i >= 0; i--)
-        {
-            float limit = top;
-            for (int j = i + 1; j < active.Count; j++)
-                if (XOverlap(active[i], active[j])) limit = Mathf.Min(limit, active[j].anchoredPosition.y - gap);
-            SetY(active[i], Mathf.Max(bottom, Mathf.Min(active[i].anchoredPosition.y, limit)));
-        }
+        int at = -1;
+        for (int i = 0; i < curve.Count; i++)
+            if (r.Contains(curve[i]) && (at < 0 || curve[i].y >= curve[at].y - 0.5f)) at = i;
+        return at;
     }
 
-    // Labels pivot at their bottom-right corner, so each spans [x - width, x].
-    private static bool XOverlap(RectTransform a, RectTransform b) =>
-        a.anchoredPosition.x - a.sizeDelta.x < b.anchoredPosition.x &&
-        b.anchoredPosition.x - b.sizeDelta.x < a.anchoredPosition.x;
+    /// <summary>Label spots (bottom-left corners) around a point, nearest first, then along
+    /// the curve through it.</summary>
+    private List<Vector2> PointCandidates(Vector2 p, Vector2 size, List<Vector2> curve)
+    {
+        float g = BubbleSize * 0.5f + 7f;
+        float d = g * 0.75f;
+        var spots = new List<Vector2>
+        {
+            new Vector2(p.x + g, p.y - size.y * 0.5f),
+            new Vector2(p.x - g - size.x, p.y - size.y * 0.5f),
+            new Vector2(p.x - size.x * 0.5f, p.y + g),
+            new Vector2(p.x - size.x * 0.5f, p.y - g - size.y),
+            new Vector2(p.x + d, p.y + d),
+            new Vector2(p.x + d, p.y - d - size.y),
+            new Vector2(p.x - d - size.x, p.y + d),
+            new Vector2(p.x - d - size.x, p.y - d - size.y),
+        };
+        int nearest = 0;
+        for (int i = 1; i < curve.Count; i++)
+            if (Mathf.Abs(curve[i].x - p.x) < Mathf.Abs(curve[nearest].x - p.x)) nearest = i;
+        spots.AddRange(CurveCandidates(curve, nearest, size));
+        return spots;
+    }
 
-    private static bool Overlaps(RectTransform lower, RectTransform upper, float gap) =>
-        XOverlap(lower, upper) && upper.anchoredPosition.y - lower.anchoredPosition.y < gap;
+    /// <summary>Label spots centred on each sample of a curve, working outward from
+    /// <paramref name="preferred"/>.</summary>
+    private List<Vector2> CurveCandidates(List<Vector2> curve, int preferred, Vector2 size)
+    {
+        Rect r = plotArea.rect;
+        var spots = new List<Vector2>();
+        for (int step = 0; step < curve.Count; step++)
+        {
+            for (int sign = 1; sign >= -1; sign -= 2)
+            {
+                if (step == 0 && sign < 0) continue;
+                int j = preferred + sign * step;
+                if (j < 0 || j >= curve.Count || !r.Contains(curve[j])) continue;
+                spots.Add(curve[j] - size * 0.5f);
+            }
+        }
+        return spots;
+    }
 
-    private static void SetY(RectTransform rt, float y) =>
-        rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+    /// <summary>
+    /// Puts a label at the candidate spot that collides least: overlapping a point bubble or
+    /// another label is ruled out wherever possible, and crossing a line other than the
+    /// label's <paramref name="own"/> curve is traded off against moving
+    /// <paramref name="distanceWeight"/> further per candidate. The label is clamped inside
+    /// the plot so it is never cropped, and its rect is added to <paramref name="blocked"/>.
+    /// </summary>
+    private void PlaceLabel(CurveLabel label, string text, Color color, Func<Vector2, List<Vector2>> candidates,
+        List<Rect> blocked, List<List<Vector2>> lines, List<Vector2> own, float distanceWeight)
+    {
+        label.Text.text = text;
+        label.Text.color = color;
+        label.Plate.gameObject.SetActive(true);
+        Rect plot = plotArea.rect;
+        Vector2 size = new Vector2(Mathf.Ceil(label.Text.preferredWidth) + 2f * LabelPadding, LabelHeight);
+        size.x = Mathf.Min(size.x, plot.width - 4f);
+
+        List<Vector2> spots = candidates(size);
+        if (spots.Count == 0)
+        {
+            label.Plate.gameObject.SetActive(false);
+            return;
+        }
+
+        Rect best = default;
+        float bestCost = float.MaxValue;
+        for (int i = 0; i < spots.Count; i++)
+        {
+            Vector2 at = new Vector2(
+                Mathf.Clamp(spots[i].x, plot.xMin + 2f, plot.xMax - 2f - size.x),
+                Mathf.Clamp(spots[i].y, plot.yMin + 2f, plot.yMax - 2f - size.y));
+            var rect = new Rect(at, size);
+            float collisions = LabelCollisions(rect, blocked, lines, own);
+            float cost = collisions + i * distanceWeight;
+            if (cost < bestCost)
+            {
+                bestCost = cost;
+                best = rect;
+            }
+            // Nothing later can beat a collision-free spot: they only add distance.
+            if (collisions <= 0f) break;
+        }
+
+        label.Plate.anchoredPosition = best.position;
+        label.Plate.sizeDelta = size;
+        blocked.Add(best);
+    }
+
+    private static float LabelCollisions(Rect rect, List<Rect> blocked, List<List<Vector2>> lines, List<Vector2> own)
+    {
+        float cost = 0f;
+        foreach (Rect b in blocked)
+            if (b.Overlaps(rect)) cost += 100f;
+        foreach (List<Vector2> line in lines)
+            if (!ReferenceEquals(line, own))
+                for (int i = 1; i < line.Count; i++)
+                if (SegmentHitsRect(line[i - 1], line[i], rect)) cost += 1f;
+        return cost;
+    }
+
+    /// <summary>Liang–Barsky segment/rectangle intersection.</summary>
+    private static bool SegmentHitsRect(Vector2 a, Vector2 b, Rect r)
+    {
+        if (Mathf.Max(a.x, b.x) < r.xMin || Mathf.Min(a.x, b.x) > r.xMax ||
+            Mathf.Max(a.y, b.y) < r.yMin || Mathf.Min(a.y, b.y) > r.yMax) return false;
+        float t0 = 0f, t1 = 1f;
+        Vector2 d = b - a;
+        return Clip(-d.x, a.x - r.xMin, ref t0, ref t1) && Clip(d.x, r.xMax - a.x, ref t0, ref t1) &&
+               Clip(-d.y, a.y - r.yMin, ref t0, ref t1) && Clip(d.y, r.yMax - a.y, ref t0, ref t1);
+    }
+
+    private static bool Clip(float p, float q, ref float t0, ref float t1)
+    {
+        if (Mathf.Abs(p) < 1e-6f) return q >= 0f;
+        float t = q / p;
+        if (p < 0f)
+        {
+            if (t > t1) return false;
+            if (t > t0) t0 = t;
+        }
+        else
+        {
+            if (t < t0) return false;
+            if (t < t1) t1 = t;
+        }
+        return true;
+    }
 
     /// <summary>Response across the full X range with only the X condition varying.</summary>
     private List<Vector2> SampleCurve(PlantProcessSimulator sim, PlantProcessSimulator.ProcessInputs inputs)
@@ -806,50 +949,12 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         return true;
     }
 
-    /// <summary>
-    /// Labels a curve at its highest point inside the plot. Curves are furthest apart
-    /// there (peaks for the temperature bell, the high end for monotonic responses), while
-    /// they tend to converge at the ends, where labels would stack.
-    /// </summary>
-    private void PlaceCurveLabel(Text label, List<Vector2> curve, string text, Color color)
-    {
-        Rect r = plotArea.rect;
-        int at = -1;
-        for (int i = 0; i < curve.Count; i++)
-        {
-            if (!r.Contains(curve[i])) continue;
-            if (at < 0 || curve[i].y >= curve[at].y - 0.5f) at = i;
-        }
-        if (at < 0)
-        {
-            label.gameObject.SetActive(false);
-            return;
-        }
-        PlaceLabel(label, curve[at] + new Vector2(-4f, 3f), false, text, color);
-    }
-
-    /// <summary>Positions a label inside the plot; <paramref name="leftAligned"/> puts the
-    /// text to the right of <paramref name="at"/>, otherwise it ends there.</summary>
-    private void PlaceLabel(Text label, Vector2 at, bool leftAligned, string text, Color color)
-    {
-        Rect r = plotArea.rect;
-        label.text = text;
-        label.color = color;
-        label.gameObject.SetActive(true);
-        RectTransform lr = label.rectTransform;
-        lr.sizeDelta = new Vector2(Mathf.Ceil(label.preferredWidth) + 2f, 14f);
-        float right = leftAligned ? at.x + lr.sizeDelta.x : at.x;
-        float x = Mathf.Clamp(right, r.xMin + lr.sizeDelta.x, r.xMax - 2f);
-        float y = Mathf.Clamp(at.y, r.yMin + 2f, r.yMax - 16f);
-        lr.anchoredPosition = new Vector2(x, y);
-    }
-
     private void HideTrendCurves()
     {
         foreach (UIGraphLine line in familyLines) line.gameObject.SetActive(false);
-        foreach (Text label in familyLabels) label.gameObject.SetActive(false);
+        foreach (CurveLabel label in familyLabels) label.Plate.gameObject.SetActive(false);
         if (tracedLine != null) tracedLine.gameObject.SetActive(false);
-        if (tracedLabel != null) tracedLabel.gameObject.SetActive(false);
+        if (tracedLabel != null) tracedLabel.Plate.gameObject.SetActive(false);
     }
 
     private UIGraphLine FamilyLine(int k)
@@ -873,7 +978,7 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         return tracedLine;
     }
 
-    private Text TracedLabel()
+    private CurveLabel TracedLabel()
     {
         if (tracedLabel == null) tracedLabel = NewTrendLabel("Traced Curve Label", W.ExtraBold);
         return tracedLabel;
@@ -889,13 +994,16 @@ public sealed class CorrelationGraphRuntime : MonoBehaviour, IPointerMoveHandler
         return line;
     }
 
-    private Text NewTrendLabel(string name, W weight)
+    private CurveLabel NewTrendLabel(string name, W weight)
     {
-        Text label = UITheme.Label(name, trendLayer, "", 10.5f, weight, UITheme.Subtle, TextAnchor.LowerRight);
-        RectTransform lr = label.rectTransform;
-        lr.anchorMin = lr.anchorMax = new Vector2(0.5f, 0.5f);
-        lr.pivot = new Vector2(1f, 0f);
-        return label;
+        Image plate = UITheme.Panel(name, labelLayer, UITheme.WithAlpha(UITheme.Surface, 0.9f), 4f);
+        RectTransform pr = plate.rectTransform;
+        pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
+        pr.pivot = Vector2.zero;
+        Text text = UITheme.Label("Text", pr, "", 10.5f, weight, UITheme.Muted, TextAnchor.MiddleCenter);
+        UITheme.Fill(text.rectTransform);
+        plate.gameObject.SetActive(false);
+        return new CurveLabel { Plate = pr, Text = text };
     }
 
     private string FormatFamily(float value) =>

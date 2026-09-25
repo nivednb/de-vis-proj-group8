@@ -1434,7 +1434,8 @@ public sealed class IcodosDashboardRuntime : MonoBehaviour
         graph.XInput = (CorrelationGraphRuntime.ReactorInput)reactorParam;
         bool temperatureAxis = graph.XInput == CorrelationGraphRuntime.ReactorInput.Temperature;
         graph.FamilyInput = temperatureAxis ? CorrelationGraphRuntime.ReactorInput.Pressure : CorrelationGraphRuntime.ReactorInput.Temperature;
-        graph.FamilyValues = temperatureAxis ? new[] { 40f, 55f, 70f, 85f, 100f } : new[] { 200f, 220f, 240f, 260f, 280f };
+        // Steps span each slider's full range.
+        graph.FamilyValues = temperatureAxis ? new[] { 40f, 55f, 70f, 85f, 100f } : new[] { 180f, 200f, 220f, 240f, 260f, 280f, 300f };
         graph.FamilyName = temperatureAxis ? "pressure" : "temperature";
         graph.FamilyUnit = temperatureAxis ? "bar" : "°C";
         graph.Title = title;
